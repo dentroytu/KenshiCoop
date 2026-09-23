@@ -13,6 +13,7 @@
 // (see resources/CODE_MAP.md).
 
 #include "EngineInternal.h"
+#include <kenshi/ModInfo.h>        // ModInfo::file / header.version (protocol 56 mod list)
 
 namespace coop {
 namespace engine {
@@ -1791,6 +1792,48 @@ int probeVendorBuy(GameWorld* gw, const unsigned int vHand[5],
     }
 }
 
+
+// ---- Active-mod list (protocol 56) ---------------------------------------------
+
+bool activeModList(char* text, unsigned int cap, unsigned int* textLen,
+                   unsigned int* count, bool* truncated) {
+    if (!text || cap == 0) return false;
+    text[0] = '\0';
+    if (textLen) *textLen = 0;
+    if (count) *count = 0;
+    if (truncated) *truncated = false;
+    __try {
+        GameWorld* w = ::ou;
+        if (!w) return false;
+        ModInfo* const* mods = w->activeMods.stuff;
+        unsigned int n = w->activeMods.count;
+        if (!mods || n > 4096u) return false; // bound a garbage count
+        unsigned int used = 0, written = 0;
+        for (unsigned int i = 0; i < n; ++i) {
+            const ModInfo* m = mods[i];
+            if (!m) continue;
+            const char* f = m->file.c_str();
+            unsigned int fl = (unsigned int)m->file.size();
+            char vb[16];
+            int vl = _snprintf(vb, sizeof(vb) - 1, "%d", m->header.version);
+            if (vl < 0) vl = 0;
+            unsigned int need = fl + 1 + (unsigned int)vl + 1;
+            if (used + need >= cap) { if (truncated) *truncated = true; break; }
+            memcpy(text + used, f, fl);             used += fl;
+            text[used++] = '|';
+            memcpy(text + used, vb, (size_t)vl);    used += (unsigned int)vl;
+            text[used++] = '\n';
+            ++written;
+        }
+        text[used] = '\0';
+        if (textLen) *textLen = used;
+        if (count) *count = written;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        text[0] = '\0';
+        return false;
+    }
+}
 
 } // namespace engine
 } // namespace coop

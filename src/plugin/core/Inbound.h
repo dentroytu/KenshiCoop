@@ -339,6 +339,14 @@ struct InboundLoadNack {
     LoadNackPacket pkt;
 };
 
+// One received active-mod list (protocol 56, either side): diffed against our
+// own list on the main thread. Session-scoped - the connection outlives a
+// world swap and the list is sent once per connect.
+struct InboundModList {
+    u32           ownerId;
+    ModListPacket pkt;
+};
+
 // One received camera hint (protocol 43, host side): the join's camera world
 // center, folded into interestCenters as an extra anchor. Latest wins.
 struct InboundCamHint {
@@ -682,6 +690,11 @@ public:
         InboundLoadNack ln; ln.ownerId = ownerId; ln.pkt = pkt;
         EnterCriticalSection(&cs_); loadNack_.push_back(ln); LeaveCriticalSection(&cs_);
     }
+    // NET thread: the peer's active-mod list (protocol 56).
+    void pushModList(u32 ownerId, const ModListPacket& pkt) {
+        InboundModList ml; ml.ownerId = ownerId; ml.pkt = pkt;
+        EnterCriticalSection(&cs_); modList_.push_back(ml); LeaveCriticalSection(&cs_);
+    }
     // NET thread: one received camera hint (protocol 43), owner-tagged.
     void pushCamHint(u32 ownerId, const CamHintPacket& pkt) {
         InboundCamHint ch; ch.ownerId = ownerId; ch.pkt = pkt;
@@ -820,6 +833,9 @@ public:
     void drainLoadNacks(std::deque<InboundLoadNack>& out) {
         EnterCriticalSection(&cs_); out.swap(loadNack_); LeaveCriticalSection(&cs_);
     }
+    void drainModLists(std::deque<InboundModList>& out) {
+        EnterCriticalSection(&cs_); out.swap(modList_); LeaveCriticalSection(&cs_);
+    }
     void drainCamHints(std::deque<InboundCamHint>& out) {
         EnterCriticalSection(&cs_); out.swap(camHint_); LeaveCriticalSection(&cs_);
     }
@@ -910,6 +926,7 @@ private:
     SessionQ<InboundLoadGo>        loadGo_;
     SessionQ<InboundLoadReq>       loadReq_;
     SessionQ<InboundLoadNack>      loadNack_;
+    SessionQ<InboundModList>       modList_;
 
     Inbound(const Inbound&);
     Inbound& operator=(const Inbound&);

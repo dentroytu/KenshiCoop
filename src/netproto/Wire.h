@@ -25,7 +25,7 @@ typedef double         f64;
 // this header stays a definition file. When you bump PROTOCOL_VERSION, add the
 // matching entry at the bottom of that doc. The version is checked at handshake
 // and a mismatch is rejected (no back-compat).
-const u16 PROTOCOL_VERSION = 55;
+const u16 PROTOCOL_VERSION = 56;
 
 // Packet type tags (first byte of every packet).
 enum PacketType {
@@ -76,7 +76,8 @@ enum PacketType {
     PKT_INV_XFER_ACK     = 45,// RELIABLE transfer verdict (protocol 50); InvXferAckPacket
     PKT_MONEY_DELTA      = 46,// RELIABLE join money-pool delta (join -> host, protocol 52); MoneyDeltaPacket
     PKT_DEED             = 47,// RELIABLE property-ownership row (protocol 54); DeedPacket
-    PKT_FIXTURE          = 48 // RELIABLE runtime-fixture identity row (protocol 55); FixturePacket
+    PKT_FIXTURE          = 48,// RELIABLE runtime-fixture identity row (protocol 55); FixturePacket
+    PKT_MODLIST          = 49 // RELIABLE active-mod list, both directions on connect (protocol 56); ModListPacket
 };
 
 // One-shot transition events carried on the RELIABLE channel. Continuous state
@@ -1577,6 +1578,25 @@ struct TimePongPacket {
     u32 nonce;        // echoed from the ping
     u32 echoWallMs;   // the ping's senderWallMs, echoed verbatim
     u32 responderWallMs; // host's wallClockMs() at echo
+};
+
+// Active-mod list (protocol 56). Each side sends its own once on the connect
+// edge; the receiver diffs it against its own list and warns (panel, banner,
+// KenshiCoop_mods_diff.txt). Advisory only - a mismatch never disconnects.
+// text: one "file|version\n" line per active mod in load order (ModInfo::file
+// + GameDataHeader::version), '\0'-padded. hash is fnv1a over the used bytes,
+// so equal lists compare without parsing.
+const u16 MODLIST_TEXT_MAX = 4000;
+const u8  MODLIST_TRUNCATED   = 0x01; // list did not fit in text
+const u8  MODLIST_UNAVAILABLE = 0x02; // sender could not read its mods
+struct ModListPacket {
+    u8   type;     // = PKT_MODLIST
+    u32  ownerId;  // network player id of the sender
+    u32  hash;     // fnv1a over text[0..textLen)
+    u16  count;    // mods listed
+    u16  textLen;  // used bytes of text
+    u8   flags;    // MODLIST_*
+    char text[MODLIST_TEXT_MAX];
 };
 
 #pragma pack(pop)
