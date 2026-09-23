@@ -1,0 +1,131 @@
+name: build
+
+# Builds KenshiCoop.dll with the VC++ 2010 (v100) x64 toolset on a hosted Windows
+# runner (Windows SDK 7.1 + KB2519277 + VS2022 MSBuild, same recipe as
+# scripts/build_plugin.cmd) and runs the prototest wire-protocol unit layer.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    env:
+      SDK71_ISO_URL: https://download.microsoft.com/download/F/1/0/F10113F5-B750-4969-A255-274341AC6BCE/GRMSDKX_EN_DVD.iso
+      KB2519277_URL: https://download.microsoft.com/download/7/5/0/75040801-126C-4591-BCE4-4CD1FD1499AA/VC-Compiler-KB2519277.exe
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache toolchain installers
+        uses: actions/cache@v4
+        with:
+          path: C:\toolchain-dl
+          key: vc2010-sdk71-kb2519277-v1
+
+      - name: Download toolchain installers
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force C:\toolchain-dl | Out-Null
+          if (!(Test-Path C:\toolchain-dl\sdk71.iso)) { curl.exe -sSfL -o C:\toolchain-dl\sdk71.iso $env:SDK71_ISO_URL }
+          if (!(Test-Path C:\toolchain-dl\kb2519277.exe)) { curl.exe -sSfL -o C:\toolchain-dl\kb2519277.exe $env:KB2519277_URL }
+          Get-ChildItem C:\toolchain-dl | Format-Table Name, Length
+
+      # SDK 7.1 setup refuses to install next to a newer VC2010 redistributable
+      # (same fix as tools/uninstall_redists.ps1).
+      - name: Install Windows SDK 7.1 + VC2010 compiler update
+        shell: pwsh
+        run: |
+          $keys = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
+                  'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
+          $redists = Get-ItemProperty $keys -ErrorAction SilentlyContinue |
+            Where-Object { $_.DisplayName -match 'Visual C\+\+ 2010 .*Redistributable' }
+          foreach ($r in $redists) {
+            Write-Host "Uninstalling $($r.DisplayName) $($r.PSChildName)"
+            Start-Process msiexec.exe -ArgumentList "/x $($r.PSChildName) /qn /norestart" -Wait
+          }
+
+          $img = Mount-DiskImage -ImagePath C:\toolchain-dl\sdk71.iso -PassThru
+          $drive = ($img | Get-Volume).DriveLetter + ':'
+          # SDKSetup.exe is a .NET 2.0 app that exits immediately on hosted runners,
+          # so install the component MSIs directly: VC2010 compilers + CRT, Windows
+          # headers/libs + MSBuild v100 toolset, and the SDK tools (rc/mt).
+          $msis = 'vc_stdx86\vc_stdx86.msi', 'vc_stdamd64\vc_stdamd64.msi',
+                  'WinSDKBuild_amd64\WinSDKBuild_amd64.msi', 'WinSDKTools_amd64\WinSDKTools_amd64.msi',
+                  'WinSDKWin32Tools_amd64\WinSDKWin32Tools_amd64.msi'
+          foreach ($m in $msis) {
+            $path = Join-Path "$drive\Setup" $m
+            if (!(Test-Path $path)) { Get-ChildItem (Split-Path $path) | Format-Table Name; throw "missing $path" }
+            $log = "C:\toolchain-dl\" + [IO.Path]::GetFileNameWithoutExtension($m) + '.log'
+            $p = Start-Process msiexec.exe -ArgumentList "/i `"$path`" /qn /norestart /l*v `"$log`"" -Wait -PassThru
+            Write-Host "$m exit code: $($p.ExitCode)"
+          }
+          Dismount-DiskImage -ImagePath C:\toolchain-dl\sdk71.iso | Out-Null
+
+          $p = Start-Process C:\toolchain-dl\kb2519277.exe -ArgumentList '/q', '/norestart' -Wait -PassThru
+          Write-Host "KB2519277 exit code: $($p.ExitCode)"
+
+          # Same as tools/fix_vs7_registry.ps1: lets MSBuild locate the v100 toolset.
+          $vs7 = 'HKLM:\SOFTWARE\Wow6432Node\Microsoft\VisualStudio\SxS\VS7'
+          if (!(Test-Path $vs7)) { New-Item -Path $vs7 -Force | Out-Null }
+          New-ItemProperty -Path $vs7 -Name '10.0' -Value 'C:\Program Files (x86)\Microsoft Visual Studio 10.0\' -PropertyType String -Force | Out-Null
+
+          $checks = 'C:\Program Files (x86)\Microsoft Visual Studio 10.0\VC\bin\amd64\cl.exe',
+                    'C:\Program Files (x86)\Microsoft Visual Studio 10.0\VC\include\stdio.h',
+                    'C:\Program Files (x86)\Microsoft Visual Studio 10.0\VC\lib\amd64\msvcrt.lib',
+                    'C:\Program Files\Microsoft SDKs\Windows\v7.1\Include\windows.h',
+                    'C:\Program Files\Microsoft SDKs\Windows\v7.1\Lib\x64\kernel32.lib',
+                    'C:\Program Files\Microsoft SDKs\Windows\v7.1\Bin\x64\mt.exe',
+                    'C:\Program Files\Microsoft SDKs\Windows\v7.1\Bin\x64\rc.exe',
+                    'C:\Program Files (x86)\MSBuild\Microsoft.Cpp\v4.0\Platforms\x64\PlatformToolsets\v100'
+          $missing = @($checks | Where-Object { !(Test-Path $_) })
+          $checks | ForEach-Object { Write-Host ("{0}  {1}" -f $(if (Test-Path $_) { 'OK     ' } else { 'MISSING' }), $_) }
+          if ($missing.Count) {
+            Get-ChildItem 'C:\Program Files (x86)\Microsoft Visual Studio 10.0', 'C:\Program Files\Microsoft SDKs\Windows', 'C:\Program Files (x86)\MSBuild\Microsoft.Cpp' -ErrorAction SilentlyContinue | Format-Table FullName
+            throw "v100 toolchain incomplete"
+          }
+          & $checks[0] 2>&1 | Select-Object -First 1
+
+      - name: Fetch dependencies
+        shell: pwsh
+        run: |
+          ./scripts/fetch_deps.ps1
+          $kl = (Resolve-Path third_party/KenshiLib_deps).Path
+          "KENSHILIB_DIR=$kl\KenshiLib" >> $env:GITHUB_ENV
+          "KENSHILIB_DEPS_DIR=$kl" >> $env:GITHUB_ENV
+          "BOOST_INCLUDE_PATH=$kl\boost_1_60_0" >> $env:GITHUB_ENV
+          "BOOST_ROOT=$kl\boost_1_60_0" >> $env:GITHUB_ENV
+
+      - name: Build prototest and run it
+        shell: cmd
+        run: |
+          call scripts\build_prototest.cmd || exit /b 1
+          dist\prototest.exe
+
+      - name: Build plugin (Harness)
+        shell: cmd
+        run: call scripts\build_plugin.cmd Harness
+
+      - name: Build plugin (Release)
+        shell: cmd
+        run: call scripts\build_plugin.cmd Release
+
+      - name: Upload DLLs
+        uses: actions/upload-artifact@v4
+        with:
+          name: KenshiCoop-${{ github.sha }}
+          path: |
+            src/plugin/x64/Harness/KenshiCoop.dll
+            src/plugin/x64/Release/KenshiCoop.dll
+            dist/prototest.exe
+          if-no-files-found: error
+
+      - name: Upload install logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: toolchain-logs
+          path: C:\toolchain-dl\*.log
+          if-no-files-found: ignore

@@ -3,22 +3,17 @@
 Mod cooperativo de Kenshi, fork de `nhoral/KenshiCoop` (base: v0.51, commit `5a761e1`).
 Remotes: `origin` = dentroytu/KenshiCoop, `upstream` = nhoral/KenshiCoop.
 
-> **Estado del borrador (2026-09-23):** redactado leyendo el repo desde macOS.
-> Nada de lo que sigue se ha compilado ni ejecutado todavía. Marcar como
-> verificado cada paso cuando funcione en Windows.
+> **Estado (2026-09-23):**
+> - Compilación verificada en CI (`windows-2022`): `prototest` 522/522, DLL Harness y Release.
+> - La DLL Release importa exactamente los mismos 185 símbolos de KenshiLib que la v0.51 publicada, y mide lo mismo (1 027 072 bytes).
+> - Sin probar todavía en el juego: despliegue, `dev_cycle.ps1` y harness necesitan Windows con Kenshi.
 
 ## Objetivo del fork
 
-**Co-op de hasta 4 jugadores (host + 3) y que conectarse sea fácil.**
-Upstream está diseñado para 2. Puntos donde hoy asume un único par (hallados leyendo el código, sin verificar a fondo):
-
-- `net/SteamP2P.cpp`: el túnel Steam tiene un solo peer (`g_peer`), un socket falso y una dirección fabricada.
-- Panel F2: pega un único Steam ID de amigo.
-- Squads: el host tiene el squad 1 y el join el squad 2. Las starts "Wanderer x2" traen dos squads.
-- `net/NetLink.cpp`: `enet_host_create(..., 8 /*peers*/ ...)` ya admite varios peers en UDP,
-  pero habrá que revisar la lógica de replicación y autoridad, que puede asumir un solo remoto.
-- Harness: exactamente dos instalaciones (host + `Kenshi-Join`).
-- Referencia: `LogoutUser/KenshiCoopTrio` intentó 3 jugadores con relay en el host (sin compilar ni probar).
+**Co-op de 2 jugadores (host + 1 amigo), muy fácil de instalar y de conectar.**
+El soporte para 3–4 jugadores queda aparcado (2026-09-23). Si se retoma, hay referencias en
+`LogoutUser/KenshiCoopTrio` (relay en el host, ids por jugador, túnel Steam multi-peer).
+Ojo: está 9 versiones de protocolo por detrás y sus ids de paquete chocan con los nuestros.
 
 ## Plataforma
 
@@ -41,16 +36,30 @@ funciona desde macOS/Linux.
 
 ## Dependencias de código (no versionadas, van en `third_party/`)
 
-```bat
-git clone https://github.com/BFrizzleFoShizzle/KenshiLib_Examples_deps third_party\KenshiLib_deps
-git clone --branch v1.3.18 https://github.com/lsalzman/enet third_party\enet\enet
-git apply third_party\enet\patches\0001-enet-c89-for-loops.patch
-git apply third_party\enet\patches\0002-enet-socket-hooks.patch
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\fetch_deps.ps1   # necesita git + git-lfs; idempotente
 ```
+
+Qué hace (y por qué):
+- `KenshiLib_Examples_deps` @ `b566d74` (KenshiLib 0.4.0, Git LFS): `KenshiLib.lib`, Ogre/MyGUI, Boost 1.60.
+  Su `KenshiLib.lib` exporta los 185 símbolos que importa la DLL v0.51 publicada.
+- Sustituye las cabeceras por las del repo fuente `BFrizzleFoShizzle/KenshiLib` @ `b0d7665` (2026-08-09).
+  Las cabeceras empaquetadas no compilan juntas: `BuildingDesignation` está definido dos veces y `CraftingItem` está incompleto.
+  El autor tenía cabeceras parcheadas a mano en local (ver `src/plugin/game/ZoneQuery.cpp:1-5`).
+- Añade un `kenshi/CombatClass.h` que reenvía a `kenshi/combat/CombatClass.h`: la clase se movió de carpeta
+  y los offsets no cambian.
+- ENet v1.3.18 + los dos parches de `third_party/enet/patches/`.
 
 - Los parches se aplican desde la raíz del repo. El 0001 hace ENet 1.3.18 compatible con C89 (v100).
 - `third_party/vc10_compat/` es un shim versionado (`ammintrin.h`, `OgreConfig.h`, `OgrePlatformInformation.h`).
 - Las fuentes de ENet se compilan directamente dentro de `KenshiCoop.vcxproj`.
+
+## CI (compilar sin Windows)
+
+`.github/workflows/build.yml` compila la DLL (Harness y Release) y ejecuta `prototest` en `windows-2022`
+en cada push. Instala el toolchain v100 igual que `tools/*.ps1`. Los artefactos son las DLLs.
+Si solo tienes el Mac, haz push y descarga la DLL del run:
+`gh run download --repo dentroytu/KenshiCoop -n KenshiCoop-<sha>`.
 
 ## Compilar
 
@@ -71,6 +80,13 @@ scripts\deploy.cmd ["C:\ruta\a\Kenshi"] [Harness|Release|Debug]
 
 Copia la DLL, `RE_Kenshi.json` y `KenshiCoop.mod` a `<Kenshi>\mods\KenshiCoop\`.
 Por defecto usa la ruta de Steam. Requisitos en el juego: Kenshi 1.0.65 (Steam) + RE_Kenshi 0.3.1+.
+
+Compatibilidad comprobada con análisis estático (2026-09-23), no ejecutando el juego:
+- Los 185 símbolos que la DLL v0.51 importa de `KenshiLib.dll` los exportan RE_Kenshi 0.3.4 y 0.3.5.
+- RE_Kenshi 0.3.5 admite Kenshi Steam/GOG 1.0.65 y 1.0.68 (`config.json`).
+- La `KenshiLib.lib` de deps `b566d74` exporta los mismos 9789 símbolos que la `KenshiLib.dll` de RE_Kenshi 0.3.4.
+- Tras cambiar cabeceras o KenshiLib, repetir la comparación con la DLL nueva: importaciones de la DLL
+  (`llvm-objdump -p`) frente a exportaciones de la `KenshiLib.dll` de RE_Kenshi.
 
 ## Testear (harness de dos clientes en una sola máquina)
 
