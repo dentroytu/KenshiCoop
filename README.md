@@ -49,26 +49,40 @@ panel, so there's no config file to edit and no launcher scripts to run. (A tiny
 
 ### Before you start (both players)
 
-1. **Kenshi 1.0.65 (Steam)**.
-2. **[RE_Kenshi 0.3.1+](https://www.nexusmods.com/kenshi/mods/847)** installed
-   (free Nexus mod - it loads the co-op plugin into the game).
-3. **Steam running and online** on both machines. That's the whole network
+1. **Kenshi 1.0.65 or 1.0.68** (Steam or GOG).
+2. **Steam running and online** on both machines. That's the whole network
    setup: the connection is Steam P2P, so there's no port forwarding, no
    router configuration, and no IP addresses. (A direct-UDP mode is also
    available for LAN / port-forwarded games.)
+3. **The same KenshiCoop release** on both machines (the handshake rejects a
+   version mismatch).
 
-### 1. Install the mod
+### 1. Install (one click)
 
 Grab `KenshiCoop-kit.zip` from the
-[latest release](https://github.com/nhoral/KenshiCoop/releases/latest) and
-unzip it anywhere (both players). You do not need to clone this repository -
-but if you did, the same kit is in [dist/mod-kit](dist/mod-kit).
+[latest release of this fork](https://github.com/dentroytu/KenshiCoop/releases/latest),
+extract it anywhere and double-click **`Instalar KenshiCoop.cmd`** (if Windows
+asks, choose *Run* / *More info > Run anyway*). The installer:
 
-The zip contains a single **`KenshiCoop`** folder. Copy that folder into your
-Kenshi `mods` directory so you end up with
-`<Kenshi>\mods\KenshiCoop\KenshiCoop.dll` (default Steam path:
-`C:\Program Files (x86)\Steam\steamapps\common\Kenshi\mods\`). Then launch
-Kenshi and enable **KenshiCoop** in the Mods menu.
+- finds Kenshi in any Steam library or GOG (and asks for the folder if it
+  can't);
+- installs **[RE_Kenshi](https://github.com/BFrizzleFoShizzle/RE_Kenshi)** if
+  it's missing. It downloads the pinned 0.3.5 release, checks its SHA-256 and
+  opens RE_Kenshi's official installer with your Kenshi folder on the
+  clipboard. Click *Install*: that installer is required on Kenshi 1.0.68;
+- copies the mod into `<Kenshi>\mods\KenshiCoop` (keeping your
+  `coop_config.json`) and enables it in `data\mods.cfg`.
+
+Run it again to update. The installer is plain PowerShell
+(`installer\Install-KenshiCoop.ps1`), so you can read what it does. It is new
+in this fork and not yet tested on a real install.
+
+<details><summary>Manual install</summary>
+
+Install RE_Kenshi 0.3.5 with its own installer, copy the kit's `KenshiCoop`
+folder into `<Kenshi>\mods\`, then enable **KenshiCoop** in the launcher's
+Mods list.
+</details>
 
 ### 2. Connect in-game (press F2)
 

@@ -88,6 +88,28 @@ Compatibilidad comprobada con análisis estático (2026-09-23), no ejecutando el
 - Tras cambiar cabeceras o KenshiLib, repetir la comparación con la DLL nueva: importaciones de la DLL
   (`llvm-objdump -p`) frente a exportaciones de la `KenshiLib.dll` de RE_Kenshi.
 
+## Kit de jugador, instalador y releases
+
+- Fuentes del kit en `kit/`:
+  - `README.txt`;
+  - `Instalar KenshiCoop.cmd`;
+  - `installer/Install-KenshiCoop.ps1`: el flujo interactivo;
+  - `installer/KenshiCoopInstaller.psm1`: la lógica, testeable.
+- `scripts/make_mod_kit.ps1 [-SkipBuild]` arma `dist/mod-kit/` y `dist/KenshiCoop-kit.zip`.
+- El instalador hace esto:
+  - busca Kenshi en las librerías de Steam (`libraryfolders.vdf`), en GOG o preguntando;
+  - si falta RE_Kenshi, descarga la 0.3.5 de GitHub, verifica su SHA-256 y abre su instalador oficial
+    (obligatorio en 1.0.68; no tiene modo silencioso);
+  - copia a `mods\KenshiCoop` sin pisar `coop_config.json`;
+  - añade `KenshiCoop.mod` a `data\mods.cfg`;
+  - avisa si hay una copia en Workshop.
+- Scripts en PowerShell 5.1, con los `.ps1`/`.psm1` en UTF-8 con BOM (si no, 5.1 rompe las tildes).
+- Tests sin juego: `scripts/tests/Installer.Tests.ps1`, con carpetas falsas; el CI los ejecuta con `powershell` 5.1.
+- CI: cada push sube el artefacto `KenshiCoop-kit-<sha>`.
+- Release: `git tag vX.Y.Z && git push origin vX.Y.Z` publica la Release con el zip y su `.sha256`.
+- Cambiar de versión de RE_Kenshi requiere tocar dos sitios de `KenshiCoopInstaller.psm1`:
+  `$REKenshiRelease` (URL + SHA-256) y `$KnownKenshiLib` (hash de su `KenshiLib.dll`).
+
 ## Testear (harness de dos clientes en una sola máquina)
 
 - **Host:** la instalación de Steam, `C:\Program Files (x86)\Steam\steamapps\common\Kenshi`
