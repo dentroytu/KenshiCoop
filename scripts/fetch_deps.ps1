@@ -31,17 +31,17 @@ $tp = Join-Path $repo "third_party"
 $deps = Join-Path $tp "KenshiLib_deps"
 $enet = Join-Path $tp "enet\enet"
 
-function Git { & git @args; if ($LASTEXITCODE -ne 0) { throw "git $args failed ($LASTEXITCODE)" } }
+function Invoke-Git { & git.exe @args; if ($LASTEXITCODE -ne 0) { throw "git $args failed ($LASTEXITCODE)" } }
 
 Write-Host "=== KenshiLib_Examples_deps @ $DepsRef ==="
-Git lfs install --skip-repo | Out-Null
+Invoke-Git lfs install --skip-repo | Out-Null
 if (!(Test-Path (Join-Path $deps ".git"))) {
     $env:GIT_LFS_SKIP_SMUDGE = "1"
-    Git clone -q https://github.com/BFrizzleFoShizzle/KenshiLib_Examples_deps $deps
+    Invoke-Git clone -q https://github.com/BFrizzleFoShizzle/KenshiLib_Examples_deps $deps
     Remove-Item Env:\GIT_LFS_SKIP_SMUDGE
 }
-Git -C $deps checkout -q -f $DepsRef
-Git -C $deps lfs pull
+Invoke-Git -C $deps checkout -q -f $DepsRef
+Invoke-Git -C $deps lfs pull
 $boost = Join-Path $deps "boost_1_60_0"
 if (!(Test-Path (Join-Path $boost "boost"))) {
     Write-Host "extracting boost"
@@ -53,10 +53,10 @@ Write-Host "=== KenshiLib headers @ $HeadersRef ==="
 $src = Join-Path $tp "KenshiLib_src"
 if (!(Test-Path (Join-Path $src ".git"))) {
     $env:GIT_LFS_SKIP_SMUDGE = "1"
-    Git clone -q --filter=blob:none --no-checkout https://github.com/BFrizzleFoShizzle/KenshiLib.git $src
+    Invoke-Git clone -q --filter=blob:none --no-checkout https://github.com/BFrizzleFoShizzle/KenshiLib.git $src
     Remove-Item Env:\GIT_LFS_SKIP_SMUDGE
 }
-Git -C $src -c filter.lfs.smudge= -c filter.lfs.required=false checkout -q -f $HeadersRef -- Include
+Invoke-Git -C $src -c filter.lfs.smudge= -c filter.lfs.required=false checkout -q -f $HeadersRef -- Include
 $inc = Join-Path $deps "KenshiLib\Include"
 Remove-Item -Recurse -Force $inc
 Copy-Item -Recurse (Join-Path $src "Include") $inc
@@ -68,11 +68,11 @@ Copy-Item -Recurse (Join-Path $src "Include") $inc
 
 Write-Host "=== ENet $EnetTag ==="
 if (!(Test-Path (Join-Path $enet ".git"))) {
-    Git clone -q --branch $EnetTag --depth 1 https://github.com/lsalzman/enet $enet
+    Invoke-Git clone -q --branch $EnetTag --depth 1 https://github.com/lsalzman/enet $enet
     Push-Location $repo
     try {
-        Git apply third_party/enet/patches/0001-enet-c89-for-loops.patch
-        Git apply third_party/enet/patches/0002-enet-socket-hooks.patch
+        Invoke-Git apply third_party/enet/patches/0001-enet-c89-for-loops.patch
+        Invoke-Git apply third_party/enet/patches/0002-enet-socket-hooks.patch
     } finally { Pop-Location }
 } else {
     Write-Host "  already present (patches assumed applied)"
