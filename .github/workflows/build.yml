@@ -50,10 +50,19 @@ jobs:
 
           $img = Mount-DiskImage -ImagePath C:\toolchain-dl\sdk71.iso -PassThru
           $drive = ($img | Get-Volume).DriveLetter + ':'
-          Get-ChildItem "$drive\", "$drive\Setup" | Select-Object -First 40 | Format-Table Name
-          $setup = if (Test-Path "$drive\Setup\SDKSetup.exe") { "$drive\Setup\SDKSetup.exe" } else { "$drive\setup.exe" }
-          $p = Start-Process $setup -ArgumentList '/Quiet', '/NoRestart', '/Log', 'C:\toolchain-dl\sdk71.log' -Wait -PassThru
-          Write-Host "SDK 7.1 setup exit code: $($p.ExitCode)"
+          # SDKSetup.exe is a .NET 2.0 app that exits immediately on hosted runners,
+          # so install the component MSIs directly: VC2010 compilers + CRT, Windows
+          # headers/libs + MSBuild v100 toolset, and the SDK tools (rc/mt).
+          $msis = 'vc_stdx86\vc_stdx86.msi', 'vc_stdamd64\vc_stdamd64.msi',
+                  'WinSDKBuild_amd64\WinSDKBuild_amd64.msi', 'WinSDKTools_amd64\WinSDKTools_amd64.msi',
+                  'WinSDKWin32Tools_amd64\WinSDKWin32Tools_amd64.msi'
+          foreach ($m in $msis) {
+            $path = Join-Path "$drive\Setup" $m
+            if (!(Test-Path $path)) { Get-ChildItem (Split-Path $path) | Format-Table Name; throw "missing $path" }
+            $log = "C:\toolchain-dl\" + [IO.Path]::GetFileNameWithoutExtension($m) + '.log'
+            $p = Start-Process msiexec.exe -ArgumentList "/i `"$path`" /qn /norestart /l*v `"$log`"" -Wait -PassThru
+            Write-Host "$m exit code: $($p.ExitCode)"
+          }
           Dismount-DiskImage -ImagePath C:\toolchain-dl\sdk71.iso | Out-Null
 
           $p = Start-Process C:\toolchain-dl\kb2519277.exe -ArgumentList '/q', '/norestart' -Wait -PassThru
@@ -64,15 +73,21 @@ jobs:
           if (!(Test-Path $vs7)) { New-Item -Path $vs7 -Force | Out-Null }
           New-ItemProperty -Path $vs7 -Name '10.0' -Value 'C:\Program Files (x86)\Microsoft Visual Studio 10.0\' -PropertyType String -Force | Out-Null
 
-          $cl = 'C:\Program Files (x86)\Microsoft Visual Studio 10.0\VC\bin\amd64\cl.exe'
-          if (!(Test-Path $cl)) {
-            Get-ChildItem $env:TEMP -Filter '*.log' -Recurse -ErrorAction SilentlyContinue |
-              Sort-Object LastWriteTime -Descending | Select-Object -First 3 |
-              ForEach-Object { Write-Host "==== $($_.FullName)"; Get-Content $_.FullName -Tail 60 }
-            if (Test-Path C:\toolchain-dl\sdk71.log) { Get-Content C:\toolchain-dl\sdk71.log -Tail 80 }
-            throw "v100 x64 cl.exe not found at $cl"
+          $checks = 'C:\Program Files (x86)\Microsoft Visual Studio 10.0\VC\bin\amd64\cl.exe',
+                    'C:\Program Files (x86)\Microsoft Visual Studio 10.0\VC\include\stdio.h',
+                    'C:\Program Files (x86)\Microsoft Visual Studio 10.0\VC\lib\amd64\msvcrt.lib',
+                    'C:\Program Files\Microsoft SDKs\Windows\v7.1\Include\windows.h',
+                    'C:\Program Files\Microsoft SDKs\Windows\v7.1\Lib\x64\kernel32.lib',
+                    'C:\Program Files\Microsoft SDKs\Windows\v7.1\Bin\x64\mt.exe',
+                    'C:\Program Files\Microsoft SDKs\Windows\v7.1\Bin\x64\rc.exe',
+                    'C:\Program Files (x86)\MSBuild\Microsoft.Cpp\v4.0\Platforms\x64\PlatformToolsets\v100'
+          $missing = @($checks | Where-Object { !(Test-Path $_) })
+          $checks | ForEach-Object { Write-Host ("{0}  {1}" -f $(if (Test-Path $_) { 'OK     ' } else { 'MISSING' }), $_) }
+          if ($missing.Count) {
+            Get-ChildItem 'C:\Program Files (x86)\Microsoft Visual Studio 10.0', 'C:\Program Files\Microsoft SDKs\Windows', 'C:\Program Files (x86)\MSBuild\Microsoft.Cpp' -ErrorAction SilentlyContinue | Format-Table FullName
+            throw "v100 toolchain incomplete"
           }
-          & $cl 2>&1 | Select-Object -First 1
+          & $checks[0] 2>&1 | Select-Object -First 1
 
       - name: Fetch dependencies (KenshiLib_deps via LFS, ENet + patches)
         shell: pwsh
