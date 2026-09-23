@@ -3,9 +3,10 @@
 Mod cooperativo de Kenshi, fork de `nhoral/KenshiCoop` (base: v0.51, commit `5a761e1`).
 Remotes: `origin` = dentroytu/KenshiCoop, `upstream` = nhoral/KenshiCoop.
 
-> **Estado del borrador (2026-09-23):** redactado leyendo el repo desde macOS.
-> Nada de lo que sigue se ha compilado ni ejecutado todavía. Marcar como
-> verificado cada paso cuando funcione en Windows.
+> **Estado (2026-09-23):**
+> - Compilación verificada en CI (`windows-2022`): `prototest` 522/522, DLL Harness y Release.
+> - La DLL Release importa exactamente los mismos 185 símbolos de KenshiLib que la v0.51 publicada, y mide lo mismo (1 027 072 bytes).
+> - Sin probar todavía en el juego: despliegue, `dev_cycle.ps1` y harness necesitan Windows con Kenshi.
 
 ## Objetivo del fork
 
