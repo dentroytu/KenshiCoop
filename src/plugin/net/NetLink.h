@@ -191,6 +191,10 @@ public:
     void queueLoadReq(const LoadReqPacket& pkt);
     void queueLoadNack(const LoadNackPacket& pkt);
 
+    // MAIN thread: our active-mod list (protocol 56), sent once per connect edge
+    // in both directions on CH_BULK (~4 KB, fragments like a save chunk).
+    void queueModList(const ModListPacket& pkt);
+
     // Debug WAN simulation. When delayMs > 0, received entity batches are held in a
     // net-thread queue and delivered to the game thread only after delayMs +/- jitter
     // has elapsed (lossPct of them are dropped outright). Must be called before
@@ -333,6 +337,7 @@ private:
     std::vector<LoadGoPacket>    outLoadGo_;
     std::vector<LoadReqPacket>   outLoadReq_;
     std::vector<LoadNackPacket>  outLoadNack_;
+    std::vector<ModListPacket>   outModList_;
 
     HANDLE        thread_;
     volatile LONG running_;

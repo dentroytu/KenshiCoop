@@ -31,6 +31,7 @@
 #include "core/CrashDump.h"
 #include "core/OwnRanks.h"
 #include "core/Inbound.h"
+#include "core/ModList.h"      // protocol 56: active-mod list diff
 #include "net/NetLink.h"
 #include "net/SteamP2P.h"
 #include "net/SteamInvite.h"
@@ -150,6 +151,10 @@ DWORD&       g_gameStartTick   = g_session.gameStartTick;
 bool&        g_autoLoadDone    = g_session.autoLoadDone;
 DWORD&       g_titleFirstTick  = g_session.titleFirstTick;
 bool&        g_peerPresent     = g_session.peerPresent;
+// Active-mod list check (protocol 56) state, shown on the F2 panel/banner.
+std::string  g_modsLine;        // F2 "Mods" row ("" until the peer's list arrives)
+bool         g_modsWarn = false;
+std::string  g_peerModsCfg;     // friend's list as mods.cfg text (Copy button)
 std::string& g_savePending     = g_session.savePending;
 coop::u32&   g_saveReqId       = g_session.saveReqId;
 bool&        g_bootstrapArmed  = g_session.bootstrapArmed;
@@ -241,6 +246,9 @@ void warnIfNoPortraits(const std::string& name) {
 // into the next save. Falls back to a plain map reset if no world has ticked yet.
 void sessionResetForUi() {
     g_peerPresent = false;
+    g_modsLine.clear();
+    g_modsWarn = false;
+    g_peerModsCfg.clear();
     if (g_lastGw) g_repl.clearPeerReplicationState(g_lastGw);
     else          g_repl.resetSession();
     g_inbound.flushWorldState();
@@ -280,6 +288,122 @@ void armConnectPush() {
         coopErr("[boot] connect-push save FAILED to issue");
 }
 
+// ---- Active-mod list check (protocol 56) -------------------------------------
+// Each side sends its active mods (load order) on the connect edge; the other
+// diffs them against its own. Advisory: a mismatch never disconnects, it warns
+// on the F2 panel, in the status banner and in KenshiCoop_mods_diff.txt, and
+// the panel can copy the friend's list in mods.cfg form.
+
+bool readOwnModList(coop::ModListPacket& p) {
+    memset(&p, 0, sizeof(p));
+    p.type    = (coop::u8)coop::PKT_MODLIST;
+    p.ownerId = g_net.localId();
+    unsigned int len = 0, count = 0;
+    bool truncated = false;
+    if (!coop::engine::activeModList(p.text, coop::MODLIST_TEXT_MAX, &len, &count,
+                                     &truncated)) {
+        p.flags = coop::MODLIST_UNAVAILABLE;
+        return false;
+    }
+    p.textLen = (coop::u16)len;
+    p.count   = (coop::u16)count;
+    p.flags   = truncated ? coop::MODLIST_TRUNCATED : 0;
+    p.hash    = coop::modTextHash(p.text, len);
+    return true;
+}
+
+void sendModList() {
+    coop::ModListPacket p;
+    bool ok = readOwnModList(p);
+    g_net.queueModList(p);
+    char b[112];
+    _snprintf(b, sizeof(b) - 1, "[mods] sent %u mod(s) hash=%08x%s", (unsigned)p.count,
+              p.hash, ok ? (p.flags & coop::MODLIST_TRUNCATED ? " (truncated)" : "")
+                         : " (UNAVAILABLE)");
+    b[sizeof(b) - 1] = '\0';
+    coopLog(b);
+}
+
+void writeModDiffFile(const std::vector<coop::ModEntry>& mine,
+                      const std::vector<coop::ModEntry>& theirs,
+                      const coop::ModDiff& d) {
+    FILE* f = fopen("KenshiCoop_mods_diff.txt", "w");
+    if (!f) return;
+    fprintf(f, "KenshiCoop - your mods vs your friend's (%s)\n\n",
+            g_cfg.isHost ? "you host" : "you join");
+    for (size_t i = 0; i < d.missing.size(); ++i)
+        fprintf(f, "MISSING (friend has it, you don't): %s\n", d.missing[i].c_str());
+    for (size_t i = 0; i < d.extra.size(); ++i)
+        fprintf(f, "EXTRA (you have it, friend doesn't): %s\n", d.extra[i].c_str());
+    for (size_t i = 0; i < d.versionDiff.size(); ++i)
+        fprintf(f, "OTHER VERSION: %s\n", d.versionDiff[i].c_str());
+    if (d.orderAt != 0)
+        fprintf(f, "LOAD ORDER differs from position %d\n", d.orderAt);
+    fprintf(f, "\nYour mods (load order):\n");
+    for (size_t i = 0; i < mine.size(); ++i)
+        fprintf(f, "  %2u. %s (v%s)\n", (unsigned)i + 1, mine[i].file.c_str(),
+                mine[i].version.c_str());
+    fprintf(f, "\nYour friend's mods (load order):\n");
+    for (size_t i = 0; i < theirs.size(); ++i)
+        fprintf(f, "  %2u. %s (v%s)\n", (unsigned)i + 1, theirs[i].file.c_str(),
+                theirs[i].version.c_str());
+    fclose(f);
+}
+
+void checkModLists() {
+    std::deque<coop::InboundModList> lists;
+    g_inbound.drainModLists(lists);
+    for (std::deque<coop::InboundModList>::iterator it = lists.begin();
+         it != lists.end(); ++it) {
+        const coop::ModListPacket& theirs = it->pkt;
+        coop::ModListPacket mine;
+        bool mineOk = readOwnModList(mine);
+        char b[192];
+        if (!mineOk || (theirs.flags & coop::MODLIST_UNAVAILABLE)) {
+            g_modsLine = mineOk ? "Could not read your friend's mods"
+                                : "Could not read your mods";
+            g_modsWarn = false;
+            g_peerModsCfg.clear();
+            _snprintf(b, sizeof(b) - 1, "[mods] check skipped: %s", g_modsLine.c_str());
+            b[sizeof(b) - 1] = '\0'; coopLog(b);
+            continue;
+        }
+        unsigned int tlen = theirs.textLen;
+        if (tlen > coop::MODLIST_TEXT_MAX) tlen = coop::MODLIST_TEXT_MAX;
+        std::vector<coop::ModEntry> mineV, theirsV;
+        coop::parseModText(mine.text, mine.textLen, mineV);
+        coop::parseModText(theirs.text, tlen, theirsV);
+        g_peerModsCfg = coop::modsCfgText(theirsV);
+        if (mine.hash == theirs.hash && mine.textLen == theirs.textLen) {
+            _snprintf(b, sizeof(b) - 1, "Same as your friend (%u mods)",
+                      (unsigned)mineV.size());
+            b[sizeof(b) - 1] = '\0';
+            g_modsLine = b;
+            g_modsWarn = false;
+            _snprintf(b, sizeof(b) - 1, "[mods] MATCH %u mod(s) hash=%08x",
+                      (unsigned)mineV.size(), mine.hash);
+            b[sizeof(b) - 1] = '\0'; coopLog(b);
+            continue;
+        }
+        coop::ModDiff d = coop::diffModLists(mineV, theirsV);
+        std::string sum = coop::summarizeModDiff(d);
+        g_modsWarn = !d.same();
+        g_modsLine = g_modsWarn
+            ? "DIFFERENT: " + sum + " - see KenshiCoop_mods_diff.txt"
+            : std::string("Same mods (list text differs only in format)");
+        _snprintf(b, sizeof(b) - 1, "[mods] %s mine=%08x theirs=%08x: %s",
+                  g_modsWarn ? "MISMATCH" : "MATCH", mine.hash, theirs.hash, sum.c_str());
+        b[sizeof(b) - 1] = '\0'; coopLog(b);
+        for (size_t i = 0; i < d.missing.size(); ++i)
+            coopLog(("[mods]   missing: " + d.missing[i]).c_str());
+        for (size_t i = 0; i < d.extra.size(); ++i)
+            coopLog(("[mods]   extra: " + d.extra[i]).c_str());
+        for (size_t i = 0; i < d.versionDiff.size(); ++i)
+            coopLog(("[mods]   version: " + d.versionDiff[i]).c_str());
+        if (g_modsWarn) writeModDiffFile(mineV, theirsV, d);
+    }
+}
+
 // Drain peer connect/leave events and surface a single game-thread confirmation
 // per event. The net thread already logs the handshake; this proves the event
 // reached the game thread cleanly (and is where later stages spawn/sweep).
@@ -300,6 +424,7 @@ void processNetEvents(GameWorld* gw) {
         if (g_cfg.latejoinSync) g_repl.onPeerConnected(g_net, g_net.localId());
         else coopLog("[latejoin] connect edge seen, resync OFF (gate)");
         g_peerPresent = true;
+        sendModList(); // protocol 56: the peer diffs it against its own
         // Coordinated save (protocol 31): while connected under save-sync,
         // the JOIN never writes a save locally - the host's save is
         // authoritative and a local save press forwards as PKT_SAVE_REQ.
@@ -324,6 +449,9 @@ void processNetEvents(GameWorld* gw) {
         // release any carry or occupancy its driven copies still hold.
         if (gw && (g_cfg.carrySync || g_cfg.furnSync)) g_repl.sweepCarries(gw);
         g_peerPresent = false;
+        g_modsLine.clear();
+        g_modsWarn = false;
+        g_peerModsCfg.clear();
         // Coordinated save: disconnected = solo again; local saves must work.
         if (!g_cfg.isHost && g_cfg.saveSync) {
             coop::engine::setSaveSuppress(false);
@@ -340,6 +468,7 @@ void processNetEvents(GameWorld* gw) {
         g_repl.clearPeerReplicationState(gw);
         g_inbound.flushWorldState();
     }
+    checkModLists();
 }
 
 // SaveLoadCoordinator receive primitive (protocol 31): the join-side save-
@@ -806,6 +935,9 @@ void coopPanelDrive() {
             s_friends[friendN].state = coop::steaminvite::friendState(i);
         }
     }
+    ps.modsLine     = g_modsLine.empty() ? (const char*)0 : g_modsLine.c_str();
+    ps.modsWarn     = g_modsWarn;
+    ps.peerModsCfg  = g_peerModsCfg.empty() ? (const char*)0 : g_peerModsCfg.c_str();
     ps.inviteReady  = coop::steaminvite::ready();
     ps.inviteStatus = coop::steaminvite::status();
     ps.friendN      = friendN;
@@ -814,6 +946,7 @@ void coopPanelDrive() {
     coop::engine::coopPanelTick(&ps, &coopUiConnect, &coopUiDisconnect,
                                 &coop::steaminvite::beginInvite,
                                 &coop::steaminvite::inviteFriend);
+    if (g_peerPresent && g_modsWarn) detail += " - mods differ (F2)";
     coop::engine::coopOverlayTick(detail.c_str(), ostate, g_net.isRunning());
 }
 

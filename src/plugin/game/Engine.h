@@ -47,6 +47,16 @@ bool savesReady();
 // saves without a manual menu round-trip. Main-thread only.
 bool saveGameAs(const std::string& name);
 
+// ---- Protocol 56: active-mod list ---------------------------------------------
+// SEH-guarded: write the active mods (GameWorld::activeMods through the ::ou
+// export, load order) as "file|version\n" lines into text, NUL-terminated,
+// using at most cap-1 bytes. textLen/count = bytes/mods written; truncated =
+// the list did not fit. Returns false when the world or its mod list is not
+// readable. Valid at the title screen (RE_Kenshi loads plugins from the same
+// list). Main-thread only.
+bool activeModList(char* text, unsigned int cap, unsigned int* textLen,
+                   unsigned int* count, bool* truncated);
+
 // ---- Protocol 31: coordinated save + session resume -------------------------
 
 // SEH-guarded: read SaveManager::getCurrentGame() and getSavePath() (spike 39

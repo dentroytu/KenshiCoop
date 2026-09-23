@@ -243,6 +243,7 @@ struct CoopPanelUi {
     std::string   lastStatus;    // last status text shown (refresh gate)
     std::string   lastTransfer;  // last save-transfer line shown (refresh gate)
     std::string   lastInvite;    // last invite rows/status shown (refresh gate)
+    std::string   lastMods;      // last mods row shown (refresh gate)
     CoopPanelUi()
         : panel(0), open(false), built(false), hostFlag(true), steamFlag(true),
           connectedFlag(false), lastConnected(false), lastChkVal(false),
@@ -279,6 +280,11 @@ unsigned long long      g_pickIds[MAX_PICK]  = {0};
 bool                    g_pickOpen     = false;
 CoopInviteBeginFn       g_onInviteBegin  = 0;
 CoopInviteFriendFn      g_onInviteFriend = 0;
+
+// Active-mod list check (protocol 56).
+DataPanelLine*          g_modsLine     = 0; // "Mods" row (amber on mismatch)
+DataPanelLine_Button*   g_copyModsBtn  = 0; // "Copy friend's mod list"
+std::string             g_peerModsCfg;      // set each tick from st->peerModsCfg
 
 // Button callbacks (free functions - MyGUI::newDelegate wraps them without any
 // raw-MyGUI link). A press flips the armed flag and requests a rebuild so the
@@ -335,6 +341,14 @@ void onPasteIdBtn(DataPanelLine*) {
     }
     g_panel.needsRebuild = true;
 }
+// Copy the friend's active mods (load order, mods.cfg form) to the clipboard so
+// the player can compare or rebuild their own list in the launcher.
+void onCopyModsBtn(DataPanelLine*) {
+    if (g_peerModsCfg.empty()) return;
+    bool ok = clipboardSetText(g_peerModsCfg.c_str());
+    coop::logLine(ok ? "[coop-ui] copied friend's mod list to clipboard: ok"
+                     : "[coop-ui] copied friend's mod list to clipboard: FAILED");
+}
 // "Invite a Steam friend": opening the picker creates the friends-only lobby
 // (async) and fills the friend list; closing it just hides the list (the lobby
 // stays, so an invite already sent can still be accepted).
@@ -371,6 +385,8 @@ struct PanelStrings {
     const std::string *empty;
     // Steam invite rows. showInvite gates the button; pickOpen shows the status
     // row + pickN friend buttons and hides the manual Steam ID rows.
+    const std::string *modsKey, *modsVal, *copyModsKey, *copyModsCap;
+    bool showMods, showCopyMods;
     bool showInvite, pickOpen;
     int  pickN;
     const std::string *inviteKey, *inviteCap, *invStKey, *invStVal;
@@ -385,6 +401,7 @@ void panelBuildSeh(DatapanelGUI* p, const PanelStrings* s) {
         g_peerLine = 0; g_pasteIdBtn = 0; g_selfLine = 0; g_copyIdBtn = 0;
         g_inviteBtn = 0; g_inviteLine = 0;
         for (int i = 0; i < MAX_PICK; ++i) g_pickBtns[i] = 0;
+        g_modsLine = 0; g_copyModsBtn = 0;
         p->setCaption(*s->title);
         g_roleBtn  = p->setLineButton(*s->roleKey,  *s->roleCap,  0);
         g_transBtn = p->setLineButton(*s->transKey, *s->transCap, 0);
@@ -392,6 +409,11 @@ void panelBuildSeh(DatapanelGUI* p, const PanelStrings* s) {
         p->addSpace(0, 0.35f);
         // Connection-status debug line (coloured white below, outside SEH).
         g_debugLine = p->setLine(*s->dbgKey, *s->dbgVal, *s->empty, 0, false, true);
+        if (s->showMods) {
+            g_modsLine = p->setLine(*s->modsKey, *s->modsVal, *s->empty, 0, false, true);
+            if (s->showCopyMods)
+                g_copyModsBtn = p->setLineButton(*s->copyModsKey, *s->copyModsCap, 0);
+        }
         p->addSpace(0, 0.35f);
         if (s->showInvite) {
             g_inviteBtn = p->setLineButton(*s->inviteKey, *s->inviteCap, 0);
@@ -497,6 +519,7 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
             g_debugLine = 0; g_peerLine = 0; g_selfLine = 0;
             g_inviteBtn = 0; g_inviteLine = 0;
             for (int i = 0; i < MAX_PICK; ++i) g_pickBtns[i] = 0;
+            g_modsLine = 0; g_copyModsBtn = 0;
             g_panel.open = false;
             coop::logLine("[coop-ui] panel closed");
         }
@@ -556,6 +579,13 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
     inviteSig += g_pickOpen ? "1" : "0";
     inviteSig += inviteStatus;
     if (inviteSig != g_panel.lastInvite) g_panel.needsRebuild = true;
+
+    // Mods row: shown once the peer's list has been compared.
+    g_peerModsCfg = st->peerModsCfg ? std::string(st->peerModsCfg) : std::string();
+    std::string modsVal = st->modsLine ? std::string(st->modsLine) : std::string();
+    std::string modsSig = modsVal + (st->modsWarn ? "!" : "") +
+                          (g_peerModsCfg.empty() ? "" : "c");
+    if (modsSig != g_panel.lastMods) g_panel.needsRebuild = true;
 
     // Create the window once (outside SEH - see the header note on C2712).
     // Layer MUST be "Info": spike 48 proved createFloatingLabel renders non-null
@@ -650,6 +680,13 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
         if (g_pickOpen && pickN == 0 && inviteStatus.empty())
             invStVal = "No friends online";
         std::string pickKeys[MAX_PICK];
+        std::string modsKey     = "Mods";
+        std::string copyModsKey = "copymods";
+        std::string copyModsCap = "Copy friend's mod list";
+        ps.modsKey = &modsKey; ps.modsVal = &modsVal;
+        ps.copyModsKey = &copyModsKey; ps.copyModsCap = &copyModsCap;
+        ps.showMods     = !modsVal.empty();
+        ps.showCopyMods = ps.showMods && st->modsWarn && !g_peerModsCfg.empty();
         ps.showInvite = showInvite;
         ps.pickOpen   = showInvite && g_pickOpen;
         ps.pickN      = pickN;
@@ -675,6 +712,7 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
         if (g_copyIdBtn)  g_copyIdBtn->callback  = MyGUI::newDelegate(&onCopyIdBtn);
         if (g_pasteIdBtn) g_pasteIdBtn->callback = MyGUI::newDelegate(&onPasteIdBtn);
         if (g_inviteBtn)  g_inviteBtn->callback  = MyGUI::newDelegate(&onInviteBtn);
+        if (g_copyModsBtn) g_copyModsBtn->callback = MyGUI::newDelegate(&onCopyModsBtn);
         if (g_pickBtns[0]) g_pickBtns[0]->callback = MyGUI::newDelegate(&onPickBtn<0>);
         if (g_pickBtns[1]) g_pickBtns[1]->callback = MyGUI::newDelegate(&onPickBtn<1>);
         if (g_pickBtns[2]) g_pickBtns[2]->callback = MyGUI::newDelegate(&onPickBtn<2>);
@@ -685,12 +723,14 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
         dbgColourSeh(g_peerLine, false);
         dbgColourSeh(g_selfLine, false);
         dbgColourSeh(g_inviteLine, false);
+        dbgColourSeh(g_modsLine, st->modsWarn); // amber on mismatch
 
         g_panel.built = true;
         g_panel.needsRebuild = false;
         g_panel.lastStatus = detail;
         g_panel.lastTransfer = transfer;
         g_panel.lastInvite = inviteSig;
+        g_panel.lastMods = modsSig;
     }
 
     // Connect / disconnect on the Online/Offline toggle edge (edge, not level, so
