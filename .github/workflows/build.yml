@@ -35,8 +35,7 @@ jobs:
           Get-ChildItem C:\toolchain-dl | Format-Table Name, Length
 
       # SDK 7.1 setup refuses to install next to a newer VC2010 redistributable
-      # (same fix as tools/uninstall_redists.ps1), and misdetects .NET 4.5+ as a
-      # pre-release .NET 4, so pin the reported version to 4.0 during setup.
+      # (same fix as tools/uninstall_redists.ps1).
       - name: Install Windows SDK 7.1 + VC2010 compiler update
         shell: pwsh
         run: |
@@ -49,15 +48,6 @@ jobs:
             Start-Process msiexec.exe -ArgumentList "/x $($r.PSChildName) /qn /norestart" -Wait
           }
 
-          $ndp = 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP\v4'
-          $saved = @{}
-          foreach ($sub in 'Full', 'Client') {
-            if (Test-Path "$ndp\$sub") {
-              $saved[$sub] = (Get-ItemProperty "$ndp\$sub").Version
-              Set-ItemProperty "$ndp\$sub" -Name Version -Value '4.0.30319'
-            }
-          }
-
           $img = Mount-DiskImage -ImagePath C:\toolchain-dl\sdk71.iso -PassThru
           $drive = ($img | Get-Volume).DriveLetter + ':'
           Get-ChildItem "$drive\", "$drive\Setup" | Select-Object -First 40 | Format-Table Name
@@ -65,8 +55,6 @@ jobs:
           $p = Start-Process $setup -ArgumentList '/Quiet', '/NoRestart', '/Log', 'C:\toolchain-dl\sdk71.log' -Wait -PassThru
           Write-Host "SDK 7.1 setup exit code: $($p.ExitCode)"
           Dismount-DiskImage -ImagePath C:\toolchain-dl\sdk71.iso | Out-Null
-
-          foreach ($sub in $saved.Keys) { Set-ItemProperty "$ndp\$sub" -Name Version -Value $saved[$sub] }
 
           $p = Start-Process C:\toolchain-dl\kb2519277.exe -ArgumentList '/q', '/norestart' -Wait -PassThru
           Write-Host "KB2519277 exit code: $($p.ExitCode)"
