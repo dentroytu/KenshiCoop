@@ -87,5 +87,9 @@ TROUBLESHOOTING
     confirm it matches). If "Paste friend's Steam ID" says the clipboard wasn't
     a Steam ID, have your friend re-copy theirs with "Copy my Steam ID". Look for
     '[steam] session ... active=1' in <Kenshi>\KenshiCoop_*.log.
+  * "Mods: DIFFERENT" on the F2 panel: you and your friend don't have the same
+    mods, versions or load order. <Kenshi>\KenshiCoop_mods_diff.txt lists every
+    difference; "Copy friend's mod list" copies their load order. The check
+    only warns, it never blocks the connection (new, not yet tested in-game).
   * "protocol mismatch": one player has an older/newer build; both should use
     the same release.
