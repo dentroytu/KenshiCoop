@@ -21,7 +21,7 @@
 [CmdletBinding()]
 param(
     [string]$DepsRef = "b566d74",
-    [string]$HeadersRef = "b0d7665",
+    [string]$HeadersRef = "b0d7665c1613b3aca29727df0d945afd2033ab19",
     [string]$EnetTag = "v1.3.18"
 )
 
@@ -51,12 +51,15 @@ if (!(Test-Path (Join-Path $boost "boost"))) {
 
 Write-Host "=== KenshiLib headers @ $HeadersRef ==="
 $src = Join-Path $tp "KenshiLib_src"
-if (!(Test-Path (Join-Path $src ".git"))) {
-    $env:GIT_LFS_SKIP_SMUDGE = "1"
-    Invoke-Git clone -q --filter=blob:none --no-checkout https://github.com/BFrizzleFoShizzle/KenshiLib.git $src
-    Remove-Item Env:\GIT_LFS_SKIP_SMUDGE
+if (!(Test-Path (Join-Path $src "Include"))) {
+    New-Item -ItemType Directory -Force $src | Out-Null
+    $tgz = Join-Path $src "KenshiLib.tar.gz"
+    & curl.exe -sSfL -o $tgz "https://codeload.github.com/BFrizzleFoShizzle/KenshiLib/tar.gz/$HeadersRef"
+    if ($LASTEXITCODE -ne 0) { throw "KenshiLib source download failed" }
+    & tar -xzf $tgz --strip-components=1 -C $src
+    if ($LASTEXITCODE -ne 0) { throw "KenshiLib source extract failed" }
+    Remove-Item $tgz
 }
-Invoke-Git -C $src -c filter.lfs.smudge= -c filter.lfs.required=false checkout -q -f $HeadersRef -- Include
 $inc = Join-Path $deps "KenshiLib\Include"
 Remove-Item -Recurse -Force $inc
 Copy-Item -Recurse (Join-Path $src "Include") $inc

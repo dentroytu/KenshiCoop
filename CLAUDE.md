@@ -80,6 +80,13 @@ scripts\deploy.cmd ["C:\ruta\a\Kenshi"] [Harness|Release|Debug]
 Copia la DLL, `RE_Kenshi.json` y `KenshiCoop.mod` a `<Kenshi>\mods\KenshiCoop\`.
 Por defecto usa la ruta de Steam. Requisitos en el juego: Kenshi 1.0.65 (Steam) + RE_Kenshi 0.3.1+.
 
+Compatibilidad comprobada con análisis estático (2026-09-23), no ejecutando el juego:
+- Los 185 símbolos que la DLL v0.51 importa de `KenshiLib.dll` los exportan RE_Kenshi 0.3.4 y 0.3.5.
+- RE_Kenshi 0.3.5 admite Kenshi Steam/GOG 1.0.65 y 1.0.68 (`config.json`).
+- La `KenshiLib.lib` de deps `b566d74` exporta los mismos 9789 símbolos que la `KenshiLib.dll` de RE_Kenshi 0.3.4.
+- Tras cambiar cabeceras o KenshiLib, repetir la comparación con la DLL nueva: importaciones de la DLL
+  (`llvm-objdump -p`) frente a exportaciones de la `KenshiLib.dll` de RE_Kenshi.
+
 ## Testear (harness de dos clientes en una sola máquina)
 
 - **Host:** la instalación de Steam, `C:\Program Files (x86)\Steam\steamapps\common\Kenshi`
