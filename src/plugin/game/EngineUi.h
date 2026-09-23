@@ -24,6 +24,18 @@ namespace engine {
 // coop_config.json. The GUI layer stays session-agnostic: live status is passed IN
 // via *st and the user's actions are handed BACK through the callbacks (the plugin
 // root owns the session/config wiring). Main-thread only; SEH-guarded.
+//
+// Steam invite: when the invite layer is up and Steam is the armed transport,
+// an "Invite a Steam friend" button opens an in-panel friend list (one button
+// per online friend). Picking one sends a Steam lobby invite; the friend accepts
+// from their Steam notification and the plugin connects both sides on its own,
+// so nobody copies an ID. The list and status come IN via *st; the clicks go
+// back OUT through the invite callbacks.
+struct CoopFriendRow {
+    unsigned long long id;
+    const char*        name;  // valid for the duration of the coopPanelTick call
+    int                state; // 0 offline, 1 online, 2 playing Kenshi
+};
 struct CoopPanelState {
     unsigned long long selfSteamId; // steamp2p::selfId (0 = Steam not up)
     unsigned long long peerSteamId; // config steamPeer fallback (0 = unset; pasted id wins)
@@ -37,14 +49,21 @@ struct CoopPanelState {
     // while a join receives the host's world (e.g. "Streaming host world... 42%
     // (3.1/7.4 MB)"). Set by coopPanelDrive, rendered in dbgVal.
     const char*        transferDetail;
+    bool               inviteReady;  // Steam invite layer is up
+    const char*        inviteStatus; // steaminvite::status() ("" when idle)
+    int                friendN;      // rows in friends (sorted in-Kenshi > online > offline)
+    const CoopFriendRow* friends;
 };
 // The panel's role/transport selections at the moment Connect is hit. peerId is the
 // Steam ID pasted in-panel this session (0 if none), and overrides the config
 // steamPeer in coopUiConnect; the UDP endpoint is re-read from the config there.
 typedef void (*CoopConnectFn)(bool isHost, bool useSteam, unsigned long long peerId);
 typedef void (*CoopDisconnectFn)();
+typedef void (*CoopInviteBeginFn)();                    // open picker + create lobby
+typedef void (*CoopInviteFriendFn)(unsigned long long); // send a lobby invite
 void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
-                   CoopDisconnectFn onDisconnect);
+                   CoopDisconnectFn onDisconnect, CoopInviteBeginFn onInviteBegin,
+                   CoopInviteFriendFn onInviteFriend);
 
 // Persistent co-op connection-status banner: a single screen-space label fixed 10
 // px in from the top-left corner (a createFloatingLabel MyGUI::Window on the

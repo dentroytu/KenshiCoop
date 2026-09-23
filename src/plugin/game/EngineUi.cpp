@@ -242,6 +242,7 @@ struct CoopPanelUi {
     bool          f2Down;        // F2 held last tick (rising-edge toggle)
     std::string   lastStatus;    // last status text shown (refresh gate)
     std::string   lastTransfer;  // last save-transfer line shown (refresh gate)
+    std::string   lastInvite;    // last invite rows/status shown (refresh gate)
     CoopPanelUi()
         : panel(0), open(false), built(false), hostFlag(true), steamFlag(true),
           connectedFlag(false), lastConnected(false), lastChkVal(false),
@@ -265,6 +266,19 @@ std::string             g_selfIdStr;   // self SteamID as digits (set each tick;
 // where it overrides the (usually empty) config steamPeer.
 unsigned long long      g_pastedPeer   = 0;
 bool                    g_pasteFailed  = false; // last paste wasn't a valid Steam ID
+
+// Steam invite picker. The friend buttons are rebuilt from st->friends each
+// time the panel is (re)populated; g_pickIds[i] is the id behind button i.
+// The callbacks are refreshed at the top of every coopPanelTick so the free-fn
+// button handlers can reach them.
+const int               MAX_PICK       = 6;
+DataPanelLine_Button*   g_inviteBtn    = 0;
+DataPanelLine*          g_inviteLine   = 0; // white invite status row
+DataPanelLine_Button*   g_pickBtns[MAX_PICK] = {0};
+unsigned long long      g_pickIds[MAX_PICK]  = {0};
+bool                    g_pickOpen     = false;
+CoopInviteBeginFn       g_onInviteBegin  = 0;
+CoopInviteFriendFn      g_onInviteFriend = 0;
 
 // Button callbacks (free functions - MyGUI::newDelegate wraps them without any
 // raw-MyGUI link). A press flips the armed flag and requests a rebuild so the
@@ -321,6 +335,31 @@ void onPasteIdBtn(DataPanelLine*) {
     }
     g_panel.needsRebuild = true;
 }
+// "Invite a Steam friend": opening the picker creates the friends-only lobby
+// (async) and fills the friend list; closing it just hides the list (the lobby
+// stays, so an invite already sent can still be accepted).
+void onInviteBtn(DataPanelLine*) {
+    g_pickOpen = !g_pickOpen;
+    g_panel.needsRebuild = true;
+    if (g_pickOpen) {
+        coop::logLine("[coop-ui] invite picker opened");
+        if (g_onInviteBegin) g_onInviteBegin();
+    } else {
+        coop::logLine("[coop-ui] invite picker closed");
+    }
+}
+// One handler per picker row (MyGUI delegates carry no row context).
+template <int I>
+void onPickBtn(DataPanelLine*) {
+    unsigned long long id = g_pickIds[I];
+    if (id == 0) return;
+    char b[64];
+    _snprintf(b, sizeof(b) - 1, "[coop-ui] invite friend row=%d", I);
+    b[sizeof(b) - 1] = '\0';
+    coop::logLine(b);
+    if (g_onInviteFriend) g_onInviteFriend(id);
+    g_panel.needsRebuild = true;
+}
 
 // POD-only pointer bundle so the row-build SEH frame constructs no std::string.
 struct PanelStrings {
@@ -330,11 +369,22 @@ struct PanelStrings {
     const std::string *peerKey, *peerVal, *pasteKey, *pasteCap;
     const std::string *selfKey, *selfVal, *copyKey, *copyCap;
     const std::string *empty;
+    // Steam invite rows. showInvite gates the button; pickOpen shows the status
+    // row + pickN friend buttons and hides the manual Steam ID rows.
+    bool showInvite, pickOpen;
+    int  pickN;
+    const std::string *inviteKey, *inviteCap, *invStKey, *invStVal;
+    const std::string *pickKey[MAX_PICK], *pickCap[MAX_PICK];
 };
 
 void panelBuildSeh(DatapanelGUI* p, const PanelStrings* s) {
     __try {
         p->_NV_clear();
+        // Rows below are conditional: drop every pointer from the previous build
+        // so a hidden row never keeps a callback/colour target from a cleared one.
+        g_peerLine = 0; g_pasteIdBtn = 0; g_selfLine = 0; g_copyIdBtn = 0;
+        g_inviteBtn = 0; g_inviteLine = 0;
+        for (int i = 0; i < MAX_PICK; ++i) g_pickBtns[i] = 0;
         p->setCaption(*s->title);
         g_roleBtn  = p->setLineButton(*s->roleKey,  *s->roleCap,  0);
         g_transBtn = p->setLineButton(*s->transKey, *s->transCap, 0);
@@ -343,12 +393,23 @@ void panelBuildSeh(DatapanelGUI* p, const PanelStrings* s) {
         // Connection-status debug line (coloured white below, outside SEH).
         g_debugLine = p->setLine(*s->dbgKey, *s->dbgVal, *s->empty, 0, false, true);
         p->addSpace(0, 0.35f);
-        // Friend's SteamID: pasted in-panel (Copy on their side -> Paste here).
-        g_peerLine = p->setLine(*s->peerKey, *s->peerVal, *s->empty, 0, false, true);
-        g_pasteIdBtn = p->setLineButton(*s->pasteKey, *s->pasteCap, 0);
-        p->addSpace(0, 0.35f);
-        g_selfLine = p->setLine(*s->selfKey, *s->selfVal, *s->empty, 0, false, true);
-        g_copyIdBtn = p->setLineButton(*s->copyKey, *s->copyCap, 0);
+        if (s->showInvite) {
+            g_inviteBtn = p->setLineButton(*s->inviteKey, *s->inviteCap, 0);
+            if (s->pickOpen) {
+                g_inviteLine = p->setLine(*s->invStKey, *s->invStVal, *s->empty, 0, false, true);
+                for (int i = 0; i < s->pickN; ++i)
+                    g_pickBtns[i] = p->setLineButton(*s->pickKey[i], *s->pickCap[i], 0);
+            }
+            p->addSpace(0, 0.35f);
+        }
+        if (!s->pickOpen) {
+            // Friend's SteamID: pasted in-panel (Copy on their side -> Paste here).
+            g_peerLine = p->setLine(*s->peerKey, *s->peerVal, *s->empty, 0, false, true);
+            g_pasteIdBtn = p->setLineButton(*s->pasteKey, *s->pasteCap, 0);
+            p->addSpace(0, 0.35f);
+            g_selfLine = p->setLine(*s->selfKey, *s->selfVal, *s->empty, 0, false, true);
+            g_copyIdBtn = p->setLineButton(*s->copyKey, *s->copyCap, 0);
+        }
         p->_NV_update();
     } __except (EXCEPTION_EXECUTE_HANDLER) {}
 }
@@ -394,8 +455,11 @@ void panelDestroySeh(ForgottenGUI* g, DatapanelGUI* p) {
 } // namespace
 
 void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
-                   CoopDisconnectFn onDisconnect) {
+                   CoopDisconnectFn onDisconnect, CoopInviteBeginFn onInviteBegin,
+                   CoopInviteFriendFn onInviteFriend) {
     if (!st) return;
+    g_onInviteBegin  = onInviteBegin;
+    g_onInviteFriend = onInviteFriend;
     ForgottenGUI* g = ::gui; // KenshiLib data export (spike 46)
     { static void* s_last = (void*)-1;
       if ((void*)g != s_last) { s_last = (void*)g;
@@ -431,6 +495,8 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
             g_roleBtn = 0; g_transBtn = 0; g_connBtn = 0; g_copyIdBtn = 0;
             g_pasteIdBtn = 0;
             g_debugLine = 0; g_peerLine = 0; g_selfLine = 0;
+            g_inviteBtn = 0; g_inviteLine = 0;
+            for (int i = 0; i < MAX_PICK; ++i) g_pickBtns[i] = 0;
             g_panel.open = false;
             coop::logLine("[coop-ui] panel closed");
         }
@@ -447,6 +513,9 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
         g_panel.lastConnected = st->running;
         g_panel.connectedFlag = st->running;
         g_panel.lastChkVal    = st->running;
+        // A Steam invite connects without the Role button (the inviter hosts,
+        // the invitee joins), so show the role that actually started.
+        if (st->running) g_panel.hostFlag = st->isHost;
         g_panel.needsRebuild = true;
     }
 
@@ -458,6 +527,35 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
     std::string transfer = st->transferDetail ? std::string(st->transferDetail)
                                                : std::string();
     if (transfer != g_panel.lastTransfer) g_panel.needsRebuild = true;
+
+    // Steam invite: offered only when the invite layer is up, Steam is the armed
+    // transport and nobody is connected yet. The picker lists online friends
+    // (the rows arrive sorted in-Kenshi first). Its visible content is folded
+    // into one signature so the rows rebuild only when something shown changes.
+    bool showInvite = st->inviteReady && g_panel.steamFlag && !st->peerPresent;
+    if (!showInvite) g_pickOpen = false;
+    std::string inviteStatus = st->inviteStatus ? std::string(st->inviteStatus)
+                                                : std::string();
+    int pickN = 0;
+    unsigned long long pickIds[MAX_PICK] = {0};
+    std::string pickCaps[MAX_PICK];
+    std::string inviteSig;
+    if (g_pickOpen) {
+        for (int i = 0; i < st->friendN && pickN < MAX_PICK; ++i) {
+            const CoopFriendRow& f = st->friends[i];
+            if (f.state == 0 || f.id == 0) continue; // offline friends can't accept
+            pickIds[pickN] = f.id;
+            pickCaps[pickN] = std::string("Invite ") + (f.name ? f.name : "?") +
+                              (f.state == 2 ? "    (in Kenshi)" : "    (online)");
+            inviteSig += pickCaps[pickN];
+            inviteSig += '\n';
+            ++pickN;
+        }
+    }
+    inviteSig += showInvite ? "1" : "0";
+    inviteSig += g_pickOpen ? "1" : "0";
+    inviteSig += inviteStatus;
+    if (inviteSig != g_panel.lastInvite) g_panel.needsRebuild = true;
 
     // Create the window once (outside SEH - see the header note on C2712).
     // Layer MUST be "Info": spike 48 proved createFloatingLabel renders non-null
@@ -542,6 +640,30 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
         ps.selfKey = &selfKey; ps.selfVal = &selfVal;
         ps.copyKey = &copyKey; ps.copyCap = &copyCap;
         ps.empty = &empty;
+
+        std::string inviteKey = "invite";
+        std::string inviteCap = g_pickOpen ? "Hide friend list"
+                                           : "Invite a Steam friend    (you host)";
+        std::string invStKey  = "Invite";
+        std::string invStVal  = inviteStatus.empty() ? std::string("Loading friends...")
+                                                     : inviteStatus;
+        if (g_pickOpen && pickN == 0 && inviteStatus.empty())
+            invStVal = "No friends online";
+        std::string pickKeys[MAX_PICK];
+        ps.showInvite = showInvite;
+        ps.pickOpen   = showInvite && g_pickOpen;
+        ps.pickN      = pickN;
+        ps.inviteKey = &inviteKey; ps.inviteCap = &inviteCap;
+        ps.invStKey = &invStKey; ps.invStVal = &invStVal;
+        for (int i = 0; i < MAX_PICK; ++i) {
+            char k[16];
+            _snprintf(k, sizeof(k) - 1, "pick%d", i);
+            k[sizeof(k) - 1] = '\0';
+            pickKeys[i] = k;
+            ps.pickKey[i] = &pickKeys[i];
+            ps.pickCap[i] = &pickCaps[i];
+            g_pickIds[i]  = (i < pickN) ? pickIds[i] : 0;
+        }
         panelBuildSeh(g_panel.panel, &ps);
 
         // Delegate assignment + white-colouring live OUTSIDE the SEH frame (pointer
@@ -552,14 +674,23 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
         if (g_connBtn)    g_connBtn->callback    = MyGUI::newDelegate(&onConnBtn);
         if (g_copyIdBtn)  g_copyIdBtn->callback  = MyGUI::newDelegate(&onCopyIdBtn);
         if (g_pasteIdBtn) g_pasteIdBtn->callback = MyGUI::newDelegate(&onPasteIdBtn);
+        if (g_inviteBtn)  g_inviteBtn->callback  = MyGUI::newDelegate(&onInviteBtn);
+        if (g_pickBtns[0]) g_pickBtns[0]->callback = MyGUI::newDelegate(&onPickBtn<0>);
+        if (g_pickBtns[1]) g_pickBtns[1]->callback = MyGUI::newDelegate(&onPickBtn<1>);
+        if (g_pickBtns[2]) g_pickBtns[2]->callback = MyGUI::newDelegate(&onPickBtn<2>);
+        if (g_pickBtns[3]) g_pickBtns[3]->callback = MyGUI::newDelegate(&onPickBtn<3>);
+        if (g_pickBtns[4]) g_pickBtns[4]->callback = MyGUI::newDelegate(&onPickBtn<4>);
+        if (g_pickBtns[5]) g_pickBtns[5]->callback = MyGUI::newDelegate(&onPickBtn<5>);
         dbgColourSeh(g_debugLine, !transfer.empty()); // amber while streaming
         dbgColourSeh(g_peerLine, false);
         dbgColourSeh(g_selfLine, false);
+        dbgColourSeh(g_inviteLine, false);
 
         g_panel.built = true;
         g_panel.needsRebuild = false;
         g_panel.lastStatus = detail;
         g_panel.lastTransfer = transfer;
+        g_panel.lastInvite = inviteSig;
     }
 
     // Connect / disconnect on the Online/Offline toggle edge (edge, not level, so
