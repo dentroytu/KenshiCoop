@@ -26,6 +26,13 @@ PREREQUISITES (both players)
 
 PLAY (Steam - recommended)
 --------------------------
+  EASIEST - invite from the panel (new, not yet tested in-game):
+  Your friend just needs Kenshi running with the mod enabled (main menu is
+  fine). The HOST loads a save, presses F2 and clicks "Invite a Steam
+  friend", then clicks "Invite <name>" next to the friend. The friend
+  accepts the Steam notification and both sides connect on their own.
+  If that doesn't work, use the manual steps below.
+
   1. Press F2 to open the Co-op panel. It works at the MAIN MENU (before loading
      a game) as well as in-game.
   2. Swap Steam IDs: each player clicks "Copy my Steam ID" and sends it to the

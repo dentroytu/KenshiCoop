@@ -75,6 +75,13 @@ Kenshi and enable **KenshiCoop** in the Mods menu.
 The Co-op panel works at the **main menu** (before you load a game) as well as
 in-game, so the joining player doesn't need to load anything first.
 
+**Easiest: invite from the panel (new in this fork, not yet tested in-game).**
+Your friend just needs Kenshi running with the mod enabled (the main menu is
+fine). You load your save, press **F2** and click **"Invite a Steam friend"**.
+Then click **"Invite <name>"** next to your friend. Your friend accepts the
+Steam notification, and both sides connect on their own. You host, and nobody
+copies an ID. If that doesn't work, use the manual steps below.
+
 1. Press **F2** to open the Co-op panel.
 2. **Swap Steam IDs.** Each player clicks **"Copy my Steam ID"** and sends it to
    the other (Steam chat, Discord, ...). When you receive your friend's ID, copy

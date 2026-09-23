@@ -791,11 +791,29 @@ void coopPanelDrive() {
     }
     ps.transferDetail = transfer.empty() ? (const char*)0 : transfer.c_str();
 
-    // Still pump Steam callbacks so an inbound "Join Game" (a friend inviting
-    // US) can fire coopUiConnect; the outbound invite/picker UI is gone.
+    // Pump Steam callbacks: an inbound "Join Game" (a friend inviting US) and the
+    // host's lobby-membership poll both end in coopUiConnect. Then hand the F2
+    // panel the invite state + friend list for its "Invite a Steam friend" picker
+    // (names point into steaminvite's cache, valid for this call).
     coop::steaminvite::tick();
+    static coop::engine::CoopFriendRow s_friends[32];
+    int friendN = 0;
+    if (coop::steaminvite::pickerActive()) {
+        int n = coop::steaminvite::friendCount();
+        for (int i = 0; i < n && friendN < 32; ++i, ++friendN) {
+            s_friends[friendN].id    = coop::steaminvite::friendId(i);
+            s_friends[friendN].name  = coop::steaminvite::friendName(i);
+            s_friends[friendN].state = coop::steaminvite::friendState(i);
+        }
+    }
+    ps.inviteReady  = coop::steaminvite::ready();
+    ps.inviteStatus = coop::steaminvite::status();
+    ps.friendN      = friendN;
+    ps.friends      = s_friends;
 
-    coop::engine::coopPanelTick(&ps, &coopUiConnect, &coopUiDisconnect);
+    coop::engine::coopPanelTick(&ps, &coopUiConnect, &coopUiDisconnect,
+                                &coop::steaminvite::beginInvite,
+                                &coop::steaminvite::inviteFriend);
     coop::engine::coopOverlayTick(detail.c_str(), ostate, g_net.isRunning());
 }
 
