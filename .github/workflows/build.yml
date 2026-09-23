@@ -17,6 +17,9 @@ jobs:
       SDK71_ISO_URL: https://download.microsoft.com/download/F/1/0/F10113F5-B750-4969-A255-274341AC6BCE/GRMSDKX_EN_DVD.iso
       KB2519277_URL: https://download.microsoft.com/download/7/5/0/75040801-126C-4591-BCE4-4CD1FD1499AA/VC-Compiler-KB2519277.exe
       ENET_TAG: v1.3.18
+      # KenshiLib 0.3.0: the newest deps commit that still has every header the plugin
+      # includes (0.4.0 / b566d74 dropped kenshi/CombatClass.h).
+      KENSHILIB_DEPS_REF: e75769b
     steps:
       - uses: actions/checkout@v4
 
@@ -94,6 +97,7 @@ jobs:
         run: |
           git lfs install
           git clone https://github.com/BFrizzleFoShizzle/KenshiLib_Examples_deps third_party/KenshiLib_deps
+          git -C third_party/KenshiLib_deps checkout -q $env:KENSHILIB_DEPS_REF
           git -C third_party/KenshiLib_deps lfs pull
           git -C third_party/KenshiLib_deps log --oneline -1
           tar -xf third_party/KenshiLib_deps/boost_1_60_0/boost.zip --directory third_party/KenshiLib_deps/boost_1_60_0/

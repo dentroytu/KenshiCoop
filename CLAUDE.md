@@ -44,8 +44,9 @@ funciona desde macOS/Linux.
 ```bat
 git lfs install
 git clone https://github.com/BFrizzleFoShizzle/KenshiLib_Examples_deps third_party\KenshiLib_deps
+:: e75769b = KenshiLib 0.3.0: la 0.4.0 quitó kenshi/CombatClass.h y el plugin no compila con ella.
 :: los .lib y boost.zip están en Git LFS; Setup.bat descomprime boost y fija KENSHILIB_DIR/BOOST_INCLUDE_PATH (pide admin)
-cd third_party\KenshiLib_deps && git lfs pull && Setup.bat && cd ..\..
+cd third_party\KenshiLib_deps && git checkout e75769b && git lfs pull && Setup.bat && cd ..\..
 git clone --branch v1.3.18 https://github.com/lsalzman/enet third_party\enet\enet
 git apply third_party\enet\patches\0001-enet-c89-for-loops.patch
 git apply third_party\enet\patches\0002-enet-socket-hooks.patch
