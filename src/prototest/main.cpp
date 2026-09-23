@@ -30,6 +30,7 @@
 #include "../plugin/core/SteamId.h"
 #include "../plugin/core/WorkPose.h"
 #include "../plugin/core/DeathLatch.h"
+#include "../plugin/core/ModList.h" // protocol 56: active-mod list diff (header-only)
 #include "../plugin/core/Inbound.h" // Phase 0 queue-lifecycle fixes (header-only)
 #include "../plugin/game/EngineFaults.h" // Phase 5c: fault throttle (pure inline)
 #include "../plugin/game/EngineCaps.h"   // Phase 5d: capability registry (pure inline)
@@ -118,6 +119,7 @@ static void testSizes() {
     CHECK_EQ("sizeof(ResearchPacket)",          sizeof(ResearchPacket),          57); // v37: research
     CHECK_EQ("sizeof(DeedPacket)",              sizeof(DeedPacket),              78); // v54: deeds
     CHECK_EQ("sizeof(FixturePacket)",           sizeof(FixturePacket),           90); // v55: fixture identity
+    CHECK_EQ("sizeof(ModListPacket)",           sizeof(ModListPacket),           4014); // v56: mod list
     CHECK_EQ("sizeof(CamHintPacket)",           sizeof(CamHintPacket),           17); // v43: camera hint
     CHECK_EQ("sizeof(CellClaimPacket)",         sizeof(CellClaimPacket),         21); // v49: cell claim
     CHECK_EQ("sizeof(InvXferAckPacket)",        sizeof(InvXferAckPacket),        18); // v50: transfer verdict
@@ -310,8 +312,9 @@ static void testSizes() {
     CHECK_EQ("EVT_SQUAD_MOVE id", (int)EVT_SQUAD_MOVE, 11);
     CHECK("EVT_SQUAD_MOVE distinct", EVT_SQUAD_MOVE != EVT_RECRUIT &&
           EVT_SQUAD_MOVE != EVT_NONE && EVT_SQUAD_MOVE != EVT_EXIT_FURNITURE);
-    CHECK_EQ("PROTOCOL_VERSION (v55: runtime-fixture identity)",
-             (int)PROTOCOL_VERSION, 55);
+    CHECK_EQ("PROTOCOL_VERSION (v56: active-mod list check)",
+             (int)PROTOCOL_VERSION, 56);
+    CHECK_EQ("PKT_MODLIST id", (int)PKT_MODLIST, 49);
 
     // Protocol 52: the shared money pool. The two players spend from ONE wallet,
     // so the join reports CHANGES and the host the authoritative TOTAL - swap
@@ -440,7 +443,7 @@ static void roundTrip(const char* name, u8 typeTag) {
     T in;
     fillPattern(&in, (unsigned char)(typeTag * 31));
     in.type = typeTag;
-    unsigned char buf[512];
+    static unsigned char buf[8192]; // >= the largest packet (ModListPacket, ~4 KB)
     std::memcpy(buf, &in, sizeof(T));
 
     char label[128];
@@ -495,6 +498,7 @@ static void testRoundTrips() {
     roundTrip<ResearchPacket>("ResearchPacket", (u8)PKT_RESEARCH);
     roundTrip<DeedPacket>("DeedPacket", (u8)PKT_DEED);
     roundTrip<FixturePacket>("FixturePacket", (u8)PKT_FIXTURE);
+    roundTrip<ModListPacket>("ModListPacket", (u8)PKT_MODLIST);
     roundTrip<CellClaimPacket>("CellClaimPacket", (u8)PKT_CELL_CLAIM);
     roundTrip<InvXferAckPacket>("InvXferAckPacket", (u8)PKT_INV_XFER_ACK);
 
@@ -1137,6 +1141,56 @@ static void testOwnRanks() {
 // a streamed screen leaks no account. A leaked prefix would defeat the point, so
 // the exact output shape is pinned here.
 
+static void testModList() {
+    std::printf("== active-mod list diff (ModList.h, protocol 56) ==\n");
+    using coop::ModEntry;
+    const char* a = "A.mod|1\nB.mod|3\nC.mod|2\n";
+    std::vector<ModEntry> va, vb;
+    coop::parseModText(a, (unsigned)std::strlen(a), va);
+    CHECK_EQ("parse count", (int)va.size(), 3);
+    CHECK("parse file/version", va[1].file == "B.mod" && va[1].version == "3");
+
+    // No trailing newline, NUL padding, a line without a version.
+    const char pad[] = "A.mod|1\nNoVer.mod\0\0\0";
+    coop::parseModText(pad, (unsigned)sizeof(pad) - 1, vb);
+    CHECK("parse stops at NUL + keeps unversioned line",
+          vb.size() == 2 && vb[1].file == "NoVer.mod" && vb[1].version.empty());
+
+    coop::parseModText(a, (unsigned)std::strlen(a), vb);
+    coop::ModDiff same = coop::diffModLists(va, vb);
+    CHECK("identical lists -> same", same.same());
+    CHECK("identical lists summary", coop::summarizeModDiff(same) == "match");
+    CHECK("hash equal for equal text",
+          coop::modTextHash(a, (unsigned)std::strlen(a)) ==
+          coop::modTextHash(a, (unsigned)std::strlen(a)));
+
+    // Friend: B missing on our side, D extra on ours, C other version, order swapped.
+    const char* mine   = "A.mod|1\nD.mod|1\nC.mod|2\n";
+    const char* theirs = "C.mod|5\nA.mod|1\nB.mod|3\n";
+    coop::parseModText(mine, (unsigned)std::strlen(mine), va);
+    coop::parseModText(theirs, (unsigned)std::strlen(theirs), vb);
+    coop::ModDiff d = coop::diffModLists(va, vb);
+    CHECK("diff missing = B", d.missing.size() == 1 && d.missing[0] == "B.mod");
+    CHECK("diff extra = D", d.extra.size() == 1 && d.extra[0] == "D.mod");
+    CHECK("diff version = C", d.versionDiff.size() == 1 &&
+          d.versionDiff[0] == "C.mod (you 2, friend 5)");
+    CHECK_EQ("diff order position", d.orderAt, 1);
+    CHECK("diff summary", coop::summarizeModDiff(d) ==
+          "1 missing, 1 extra, 1 other version, order differs at #1");
+    CHECK("hash differs for different text",
+          coop::modTextHash(mine, (unsigned)std::strlen(mine)) !=
+          coop::modTextHash(theirs, (unsigned)std::strlen(theirs)));
+    CHECK("mods.cfg text", coop::modsCfgText(vb) == "C.mod\r\nA.mod\r\nB.mod\r\n");
+
+    // Same set, different order only.
+    const char* reord = "B.mod|3\nA.mod|1\nC.mod|2\n";
+    coop::parseModText(a, (unsigned)std::strlen(a), va);
+    coop::parseModText(reord, (unsigned)std::strlen(reord), vb);
+    d = coop::diffModLists(va, vb);
+    CHECK("order-only diff", d.missing.empty() && d.extra.empty() &&
+          d.versionDiff.empty() && d.orderAt == 1 && !d.same());
+}
+
 static void testSteamIdParse() {
     std::printf("== SteamID64 parse (SteamId.h) ==\n");
     unsigned long long id = 0;
@@ -1401,6 +1455,7 @@ static void testFlushWorldStateContract() {
     LoadGoPacket    lg;  std::memset(&lg,  0, sizeof(lg));
     LoadReqPacket   lrq; std::memset(&lrq, 0, sizeof(lrq));
     LoadNackPacket  lnk; std::memset(&lnk, 0, sizeof(lnk));
+    ModListPacket   mlp; std::memset(&mlp, 0, sizeof(mlp));
 
     // --- Push one sentinel into every WORLD-STATE queue (34).
     in.pushEntity(1, 0, e);
@@ -1438,7 +1493,7 @@ static void testFlushWorldStateContract() {
     in.pushCellClaim(1, cc);
     in.pushInvXferAck(1, xa);
 
-    // --- Push one sentinel into every SESSION-PRESERVING queue (10).
+    // --- Push one sentinel into every SESSION-PRESERVING queue (11).
     in.pushConnect(0);
     in.pushLeave(0);
     in.pushSaveReq(1, srq);
@@ -1449,6 +1504,7 @@ static void testFlushWorldStateContract() {
     in.pushLoadGo(0, lg);
     in.pushLoadReq(1, lrq);
     in.pushLoadNack(1, lnk);
+    in.pushModList(1, mlp);
 
     in.flushWorldState();
 
@@ -1508,6 +1564,7 @@ static void testFlushWorldStateContract() {
     SP_KEPT("loadGo",    InboundLoadGo,    drainLoadGos);
     SP_KEPT("loadReq",   InboundLoadReq,   drainLoadReqs);
     SP_KEPT("loadNack",  InboundLoadNack,  drainLoadNacks);
+    SP_KEPT("modList",   InboundModList,   drainModLists);
     #undef SP_KEPT
 }
 
@@ -1783,6 +1840,7 @@ int main() {
     testInterp();
     testOwnRanks();
     testSteamIdParse();
+    testModList();
     testWorkPoseMatch();
     testTaskClear();
     testDeathRekey();

@@ -279,6 +279,7 @@ void NetLink::queueLoadGo(const LoadGoPacket& pkt) { pushLocked(outCs_, outLoadG
 void NetLink::queueLoadReq(const LoadReqPacket& pkt) { pushLocked(outCs_, outLoadReq_, pkt); }
 
 void NetLink::queueLoadNack(const LoadNackPacket& pkt) { pushLocked(outCs_, outLoadNack_, pkt); }
+void NetLink::queueModList(const ModListPacket& pkt) { pushLocked(outCs_, outModList_, pkt); }
 
 void NetLink::setNetSim(unsigned int delayMs, unsigned int jitterMs, unsigned int lossPct) {
     simDelayMs_  = delayMs;
@@ -918,6 +919,13 @@ void NetLink::threadLoop() {
                         if (readPacket(ev.packet->data, (unsigned)ev.packet->dataLength, &ln)
                             && inbound_) {
                             inbound_->pushLoadNack(ln.ownerId, ln);
+                        }
+                    } else if (type == PKT_MODLIST) {
+                        // Reliable active-mod list (protocol 56, either direction).
+                        ModListPacket ml;
+                        if (readPacket(ev.packet->data, (unsigned)ev.packet->dataLength, &ml)
+                            && inbound_) {
+                            inbound_->pushModList(ml.ownerId, ml);
                         }
                     } else if (type == PKT_CAM_HINT) {
                         // Camera hint (protocol 43): latest-wins interest
@@ -1787,10 +1795,12 @@ void NetLink::threadLoop() {
         std::vector<LoadGoPacket>   loadGos;
         std::vector<LoadReqPacket>  loadReqs;
         std::vector<LoadNackPacket> loadNacks;
+        std::vector<ModListPacket>  modLists;
         EnterCriticalSection(&outCs_);
         loadGos.swap(outLoadGo_);
         loadReqs.swap(outLoadReq_);
         loadNacks.swap(outLoadNack_);
+        modLists.swap(outModList_);
         LeaveCriticalSection(&outCs_);
         for (size_t i = 0; i < loadGos.size(); ++i) {
             ENetPacket* out = enet_packet_create(&loadGos[i], sizeof(LoadGoPacket),
@@ -1816,6 +1826,17 @@ void NetLink::threadLoop() {
         }
         for (size_t i = 0; i < loadNacks.size(); ++i) {
             ENetPacket* out = enet_packet_create(&loadNacks[i], sizeof(LoadNackPacket),
+                                                 ENET_PACKET_FLAG_RELIABLE);
+            if (isHost_) {
+                enet_host_broadcast(enetHost_, CH_BULK, out);
+            } else if (serverPeer_ && serverPeer_->state == ENET_PEER_STATE_CONNECTED) {
+                enet_peer_send(serverPeer_, CH_BULK, out);
+            } else {
+                enet_packet_destroy(out);
+            }
+        }
+        for (size_t i = 0; i < modLists.size(); ++i) {
+            ENetPacket* out = enet_packet_create(&modLists[i], sizeof(ModListPacket),
                                                  ENET_PACKET_FLAG_RELIABLE);
             if (isHost_) {
                 enet_host_broadcast(enetHost_, CH_BULK, out);

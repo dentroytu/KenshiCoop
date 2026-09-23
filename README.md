@@ -145,6 +145,13 @@ is needed after an edit.
   captured ID - confirm it matches). If "Paste friend's Steam ID" reports the
   clipboard wasn't a Steam ID, have your friend re-copy theirs. Look for
   `[steam] session ... active=1` in `<Kenshi>\KenshiCoop_*.log`.
+- **"Mods: DIFFERENT" on the F2 panel** (or "mods differ" on the banner) - you
+  and your friend don't have the same mods, versions or load order. Missing
+  entities and items are the usual symptom. `<Kenshi>\KenshiCoop_mods_diff.txt`
+  lists every difference, and **"Copy friend's mod list"** copies their load
+  order to paste into `data\mods.cfg` or match in the launcher. The check only
+  warns, it never blocks the connection (new in this fork, not yet tested
+  in-game).
 - **"protocol mismatch" in the log** - one of you has an older build; both
   players should re-install from the same release.
 

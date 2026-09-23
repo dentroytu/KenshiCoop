@@ -49,6 +49,12 @@ struct CoopPanelState {
     // while a join receives the host's world (e.g. "Streaming host world... 42%
     // (3.1/7.4 MB)"). Set by coopPanelDrive, rendered in dbgVal.
     const char*        transferDetail;
+    // Active-mod list check (protocol 56): the "Mods" row text (null until the
+    // peer's list arrives), whether it is a mismatch (amber), and the friend's
+    // list as mods.cfg text for the "Copy friend's mod list" button (null = none).
+    const char*        modsLine;
+    bool               modsWarn;
+    const char*        peerModsCfg;
     bool               inviteReady;  // Steam invite layer is up
     const char*        inviteStatus; // steaminvite::status() ("" when idle)
     int                friendN;      // rows in friends (sorted in-Kenshi > online > offline)
