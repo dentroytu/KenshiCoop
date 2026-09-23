@@ -9,16 +9,10 @@ Remotes: `origin` = dentroytu/KenshiCoop, `upstream` = nhoral/KenshiCoop.
 
 ## Objetivo del fork
 
-**Co-op de hasta 4 jugadores (host + 3) y que conectarse sea fácil.**
-Upstream está diseñado para 2. Puntos donde hoy asume un único par (hallados leyendo el código, sin verificar a fondo):
-
-- `net/SteamP2P.cpp`: el túnel Steam tiene un solo peer (`g_peer`), un socket falso y una dirección fabricada.
-- Panel F2: pega un único Steam ID de amigo.
-- Squads: el host tiene el squad 1 y el join el squad 2. Las starts "Wanderer x2" traen dos squads.
-- `net/NetLink.cpp`: `enet_host_create(..., 8 /*peers*/ ...)` ya admite varios peers en UDP,
-  pero habrá que revisar la lógica de replicación y autoridad, que puede asumir un solo remoto.
-- Harness: exactamente dos instalaciones (host + `Kenshi-Join`).
-- Referencia: `LogoutUser/KenshiCoopTrio` intentó 3 jugadores con relay en el host (sin compilar ni probar).
+**Co-op de 2 jugadores (host + 1 amigo), muy fácil de instalar y de conectar.**
+El soporte para 3–4 jugadores queda aparcado (2026-09-23). Si se retoma, hay referencias en
+`LogoutUser/KenshiCoopTrio` (relay en el host, ids por jugador, túnel Steam multi-peer).
+Ojo: está 9 versiones de protocolo por detrás y sus ids de paquete chocan con los nuestros.
 
 ## Plataforma
 
@@ -41,16 +35,19 @@ funciona desde macOS/Linux.
 
 ## Dependencias de código (no versionadas, van en `third_party/`)
 
-```bat
-git lfs install
-git clone https://github.com/BFrizzleFoShizzle/KenshiLib_Examples_deps third_party\KenshiLib_deps
-:: e75769b = KenshiLib 0.3.0: la 0.4.0 quitó kenshi/CombatClass.h y el plugin no compila con ella.
-:: los .lib y boost.zip están en Git LFS; Setup.bat descomprime boost y fija KENSHILIB_DIR/BOOST_INCLUDE_PATH (pide admin)
-cd third_party\KenshiLib_deps && git checkout e75769b && git lfs pull && Setup.bat && cd ..\..
-git clone --branch v1.3.18 https://github.com/lsalzman/enet third_party\enet\enet
-git apply third_party\enet\patches\0001-enet-c89-for-loops.patch
-git apply third_party\enet\patches\0002-enet-socket-hooks.patch
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\fetch_deps.ps1   # necesita git + git-lfs; idempotente
 ```
+
+Qué hace (y por qué):
+- `KenshiLib_Examples_deps` @ `b566d74` (KenshiLib 0.4.0, Git LFS): `KenshiLib.lib`, Ogre/MyGUI, Boost 1.60.
+  Su `KenshiLib.lib` exporta los 185 símbolos que importa la DLL v0.51 publicada.
+- Sustituye las cabeceras por las del repo fuente `BFrizzleFoShizzle/KenshiLib` @ `b0d7665` (2026-08-09).
+  Las cabeceras empaquetadas no compilan juntas: `BuildingDesignation` está definido dos veces y `CraftingItem` está incompleto.
+  El autor tenía cabeceras parcheadas a mano en local (ver `src/plugin/game/ZoneQuery.cpp:1-5`).
+- Añade un `kenshi/CombatClass.h` que reenvía a `kenshi/combat/CombatClass.h`: la clase se movió de carpeta
+  y los offsets no cambian.
+- ENet v1.3.18 + los dos parches de `third_party/enet/patches/`.
 
 - Los parches se aplican desde la raíz del repo. El 0001 hace ENet 1.3.18 compatible con C89 (v100).
 - `third_party/vc10_compat/` es un shim versionado (`ammintrin.h`, `OgreConfig.h`, `OgrePlatformInformation.h`).
