@@ -42,7 +42,10 @@ funciona desde macOS/Linux.
 ## Dependencias de código (no versionadas, van en `third_party/`)
 
 ```bat
+git lfs install
 git clone https://github.com/BFrizzleFoShizzle/KenshiLib_Examples_deps third_party\KenshiLib_deps
+:: los .lib y boost.zip están en Git LFS; Setup.bat descomprime boost y fija KENSHILIB_DIR/BOOST_INCLUDE_PATH (pide admin)
+cd third_party\KenshiLib_deps && git lfs pull && Setup.bat && cd ..\..
 git clone --branch v1.3.18 https://github.com/lsalzman/enet third_party\enet\enet
 git apply third_party\enet\patches\0001-enet-c89-for-loops.patch
 git apply third_party\enet\patches\0002-enet-socket-hooks.patch
@@ -51,6 +54,13 @@ git apply third_party\enet\patches\0002-enet-socket-hooks.patch
 - Los parches se aplican desde la raíz del repo. El 0001 hace ENet 1.3.18 compatible con C89 (v100).
 - `third_party/vc10_compat/` es un shim versionado (`ammintrin.h`, `OgreConfig.h`, `OgrePlatformInformation.h`).
 - Las fuentes de ENet se compilan directamente dentro de `KenshiCoop.vcxproj`.
+
+## CI (compilar sin Windows)
+
+`.github/workflows/build.yml` compila la DLL (Harness y Release) y ejecuta `prototest` en `windows-2022`
+en cada push. Instala el toolchain v100 igual que `tools/*.ps1`. Los artefactos son las DLLs.
+Si solo tienes el Mac, haz push y descarga la DLL del run:
+`gh run download --repo dentroytu/KenshiCoop -n KenshiCoop-<sha>`.
 
 ## Compilar
 
