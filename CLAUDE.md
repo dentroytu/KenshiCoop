@@ -3,30 +3,28 @@
 Mod cooperativo de Kenshi, fork de `nhoral/KenshiCoop` (base: v0.51, commit `5a761e1`).
 Remotes: `origin` = dentroytu/KenshiCoop, `upstream` = nhoral/KenshiCoop.
 
-> **Estado (2026-09-24):**
-> - Compilación verificada en CI (`windows-2022`): `prototest`, DLL Harness y Release, y kit con instalador.
+> **Estado (2026-09-25):**
+> - Compilación verificada en CI (`windows-2022`): `prototest`, `tunneltest`, DLL Harness y Release, y kit con instalador.
 >   Releases publicadas: `v0.52` y `v0.53`.
-> - **Verificado en el juego** (PC del autor del fork, Kenshi de Steam con RE_Kenshi, sin co-op todavía):
+> - **Verificado en el juego** (PC del autor del fork, Kenshi de Steam con RE_Kenshi):
 >   - el plugin carga;
 >   - el panel F2 abre en el menú principal, detecta el idioma (español) y colorea el estado (v0.53);
 >   - el botón de invitar aparece y lista amigos (v0.52);
->   - el instalador del kit funcionó con un RE_Kenshi ya instalado.
+>   - el instalador del kit funcionó con un RE_Kenshi ya instalado;
+>   - co-op por UDP con dos instancias en un PC: `coop_presence` PASS (2026-09-24);
+>   - cerrar Kenshi con el panel F2 abierto o con la ventana enfocada ya no crashea (2026-09-24);
+>   - rechazos del host (versión distinta, sesión llena) contra un Kenshi real con `kcprobe` (2026-09-25).
 > - **Sin probar en el juego:**
->   - sesión co-op real: ni por UDP con dos instancias ni con un amigo por Steam;
+>   - sesión co-op con un amigo por Steam;
 >   - la comprobación de mods;
 >   - la instalación de RE_Kenshi desde cero con el instalador;
 >   - el flujo completo de invitación, que necesita otra cuenta de Steam.
 
 ## Próximos pasos (al retomar, p. ej. desde Windows)
 
-1. **Co-op real en un solo PC por UDP**, la prueba pendiente más útil:
-   - copia Kenshi a `C:\Kenshi-Join`;
-   - instala en ella con `installer\Install-KenshiCoop.ps1 -KenshiPath "C:\Kenshi-Join"`;
-   - abre las dos. En F2 > Opciones avanzadas elige Transport UDP; una hace de HOST con partida cargada y la otra de JOIN desde el menú;
-   - la IP por defecto, 127.0.0.1, ya vale;
-   - revisa `KenshiCoop_*.log`, la fila Mods y la transferencia del mundo.
-
-   Con el toolchain local, `scripts\dev_cycle.ps1` automatiza todo esto.
+1. **Co-op real en un solo PC por UDP** (hecho el 2026-09-24): `scripts\setup_join_install.cmd` (desde PowerShell) crea
+   `%USERPROFILE%\Kenshi-Join`, `scripts\deploy.cmd` despliega en las dos y `scripts\dev_cycle.ps1 -SkipBuild` lo prueba.
+   `dev_cycle.ps1` cierra a la fuerza cualquier Kenshi abierto: avisa antes de lanzarlo.
 2. **Toolchain local en Windows** (hecho el 2026-09-24 en el PC del autor), en una PowerShell de **administrador** y de uno en uno (dos instalaciones MSI a la vez fallan con 1618):
    - VS2022 Build Tools: `winget install --id Microsoft.VisualStudio.2022.BuildTools --override "--quiet --wait --norestart --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"`;
    - `scripts\setup_toolchain.ps1`: los mismos pasos que `.github/workflows/build.yml` (MSIs del SDK 7.1 sacados de la ISO, KB2519277 y la clave de registro VS7).
@@ -170,6 +168,9 @@ powershell -ExecutionPolicy Bypass -File scripts\regress.ps1 -Tier full -SkipBui
 - `-Sync` copia los saves del host a la instalación del join (ambos deben cargar el mismo save).
 - Escenarios y oráculos: `scripts/scenarios.psd1` + `scripts/CoopOracles.psm1` + `scripts/oracles/`.
 - Logs, capturas y `verdict.json` en `tools/test-runs/<stamp>/`.
+- Handshake sin segundo Kenshi: `scripts\build_kcprobe.cmd` y `dist\kcprobe.exe client --version N [--hold MS] [--exit goodbye|crash] [--junk] [--retry MS]`,
+  un cliente falso contra un host real (UDP). Solo para pruebas; no va en el kit.
+- `scripts\build_tunneltest.cmd` y `dist\tunneltest.exe`: ENet por el modelo del túnel de Steam (1200 bytes, pérdida), sin juego. Lo ejecuta el CI.
 - En el juego: `<Kenshi>\KenshiCoop_host.log` / `_join.log` y `RE_Kenshi_log.txt`.
 
 ## Arquitectura
@@ -182,6 +183,10 @@ powershell -ExecutionPolicy Bypass -File scripts\regress.ps1 -Tier full -SkipBui
   Los datos entrantes pasan al hilo principal por una cola; nunca se toca el motor desde el hilo de red.
 - **netproto** (`src/netproto/Wire.h`): protocolo de red en C++03 con structs empaquetados little-endian.
   - `PROTOCOL_VERSION` se comprueba en el handshake: súbelo al cambiar cualquier paquete.
+  - Rechazos: el host desconecta con un código en el u32 de DISCONNECT de ENet (`refuseEncode`: VERSION, FULL con reintento).
+    Regla: el host **nunca** desconecta con 0. Así rechazan las versiones hasta la v0.53, y un cliente tiene que poder distinguirlas.
+  - Sesión de 2: el host rechaza como FULL a un segundo peer mientras hay uno admitido, y el cliente se despide al parar
+    (también al cerrar Kenshi) para liberar la plaza al momento.
   - `src/prototest` fija el tamaño y el round-trip de cada struct.
 - **Sync/replicación** (`src/plugin/sync/`): `Replicator*` (authority, spawn, items, channels, publish, drive),
   interpolación (`Interp`), `ChangeGate`, transferencia de saves (`SaveXfer`).
