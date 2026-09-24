@@ -32,6 +32,7 @@
 #include "core/OwnRanks.h"
 #include "core/Inbound.h"
 #include "core/ModList.h"      // protocol 56: active-mod list diff
+#include "core/UiLang.h"       // L(es, en): player-facing text language
 #include "net/NetLink.h"
 #include "net/SteamP2P.h"
 #include "net/SteamInvite.h"
@@ -360,8 +361,9 @@ void checkModLists() {
         bool mineOk = readOwnModList(mine);
         char b[192];
         if (!mineOk || (theirs.flags & coop::MODLIST_UNAVAILABLE)) {
-            g_modsLine = mineOk ? "Could not read your friend's mods"
-                                : "Could not read your mods";
+            g_modsLine = mineOk ? coop::L("Mods: no se pudo leer la lista de tu amigo",
+                                          "Mods: could not read your friend's list")
+                                : coop::L("Mods: no se pudo leer tu lista", "Mods: could not read your list");
             g_modsWarn = false;
             g_peerModsCfg.clear();
             _snprintf(b, sizeof(b) - 1, "[mods] check skipped: %s", g_modsLine.c_str());
@@ -375,7 +377,8 @@ void checkModLists() {
         coop::parseModText(theirs.text, tlen, theirsV);
         g_peerModsCfg = coop::modsCfgText(theirsV);
         if (mine.hash == theirs.hash && mine.textLen == theirs.textLen) {
-            _snprintf(b, sizeof(b) - 1, "Same as your friend (%u mods)",
+            _snprintf(b, sizeof(b) - 1, coop::L("Mods: los mismos que tu amigo (%u)",
+                                                "Mods: same as your friend (%u)"),
                       (unsigned)mineV.size());
             b[sizeof(b) - 1] = '\0';
             g_modsLine = b;
@@ -389,8 +392,10 @@ void checkModLists() {
         std::string sum = coop::summarizeModDiff(d);
         g_modsWarn = !d.same();
         g_modsLine = g_modsWarn
-            ? "DIFFERENT: " + sum + " - see KenshiCoop_mods_diff.txt"
-            : std::string("Same mods (list text differs only in format)");
+            ? std::string(coop::L("Mods DISTINTOS: ", "Mods DIFFERENT: ")) +
+                  coop::summarizeModDiff(d, coop::uiSpanish()) +
+                  coop::L(" (detalle en KenshiCoop_mods_diff.txt)", " (see KenshiCoop_mods_diff.txt)")
+            : std::string(coop::L("Mods: los mismos que tu amigo", "Mods: same as your friend"));
         _snprintf(b, sizeof(b) - 1, "[mods] %s mine=%08x theirs=%08x: %s",
                   g_modsWarn ? "MISMATCH" : "MATCH", mine.hash, theirs.hash, sum.c_str());
         b[sizeof(b) - 1] = '\0'; coopLog(b);
@@ -883,14 +888,16 @@ void coopPanelDrive() {
     ps.transportSel = (g_cfg.transport == "steam") ? 0 : 1;
     std::string detail;
     int ostate;
+    // Top-left banner text (the F2 panel words its own status).
     if (g_peerPresent) {
-        detail = g_cfg.isHost ? "Connected - peer joined" : "Connected to host";
+        detail = coop::L("Co-op: conectado con tu amigo", "Co-op: connected to your friend");
         ostate = 2;
     } else if (g_net.isRunning()) {
-        detail = g_cfg.isHost ? "Hosting - waiting for peer..." : "Connecting...";
+        detail = g_cfg.isHost ? coop::L("Co-op: esperando a tu amigo...", "Co-op: waiting for your friend...")
+                              : coop::L("Co-op: conectando...", "Co-op: connecting...");
         ostate = 1;
     } else {
-        detail = "Offline - press F2, then set Connection to ONLINE";
+        detail = coop::L("Co-op: sin conectar (pulsa F2)", "Co-op: not connected (press F2)");
         ostate = 0;
     }
     ps.detail = detail.c_str();
@@ -940,13 +947,15 @@ void coopPanelDrive() {
     ps.peerModsCfg  = g_peerModsCfg.empty() ? (const char*)0 : g_peerModsCfg.c_str();
     ps.inviteReady  = coop::steaminvite::ready();
     ps.inviteStatus = coop::steaminvite::status();
+    ps.inviteCode   = coop::steaminvite::statusCode();
+    ps.inviteArg    = coop::steaminvite::statusArg();
     ps.friendN      = friendN;
     ps.friends      = s_friends;
 
     coop::engine::coopPanelTick(&ps, &coopUiConnect, &coopUiDisconnect,
                                 &coop::steaminvite::beginInvite,
                                 &coop::steaminvite::inviteFriend);
-    if (g_peerPresent && g_modsWarn) detail += " - mods differ (F2)";
+    if (g_peerPresent && g_modsWarn) detail += coop::L(" - mods distintos (F2)", " - mods differ (F2)");
     coop::engine::coopOverlayTick(detail.c_str(), ostate, g_net.isRunning());
 }
 

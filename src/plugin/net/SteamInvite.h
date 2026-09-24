@@ -68,6 +68,15 @@ void tick();
 // One-line human status for the panel/overlay (never null; "" when idle).
 const char* status();
 
+// The same status as a code, so the panel can word it in the player's language.
+// statusArg() is the invited friend's name for ST_INVITED ("" otherwise).
+enum StatusCode {
+    ST_IDLE = 0, ST_PICK = 1, ST_INVITED = 2, ST_LOBBY_FAILED = 3, ST_FRIEND_JOINED = 4,
+    ST_JOINING = 5, ST_CONNECTING = 6, ST_VERSION = 7, ST_NO_STEAM = 8, ST_INVITE_SENT = 9
+};
+int         statusCode();
+const char* statusArg();
+
 // Leave any lobby and clear invite state (called on disconnect / teardown).
 void reset();
 

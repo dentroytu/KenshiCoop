@@ -57,6 +57,8 @@ struct CoopPanelState {
     const char*        peerModsCfg;
     bool               inviteReady;  // Steam invite layer is up
     const char*        inviteStatus; // steaminvite::status() ("" when idle)
+    int                inviteCode;   // steaminvite::statusCode() (ST_*), worded by the panel
+    const char*        inviteArg;    // steaminvite::statusArg() (invited friend's name)
     int                friendN;      // rows in friends (sorted in-Kenshi > online > offline)
     const CoopFriendRow* friends;
 };
