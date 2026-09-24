@@ -27,12 +27,13 @@ Remotes: `origin` = dentroytu/KenshiCoop, `upstream` = nhoral/KenshiCoop.
    - revisa `KenshiCoop_*.log`, la fila Mods y la transferencia del mundo.
 
    Con el toolchain local, `scripts\dev_cycle.ps1` automatiza todo esto.
-2. **Toolchain local en Windows:** replicar los pasos de `.github/workflows/build.yml`:
-   - MSIs del SDK 7.1 sacados de la ISO, KB2519277 y la clave de registro VS7;
-   - `scripts\fetch_deps.ps1`;
+2. **Toolchain local en Windows** (hecho el 2026-09-24 en el PC del autor), en una PowerShell de **administrador** y de uno en uno (dos instalaciones MSI a la vez fallan con 1618):
+   - VS2022 Build Tools: `winget install --id Microsoft.VisualStudio.2022.BuildTools --override "--quiet --wait --norestart --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"`;
+   - `scripts\setup_toolchain.ps1`: los mismos pasos que `.github/workflows/build.yml` (MSIs del SDK 7.1 sacados de la ISO, KB2519277 y la clave de registro VS7).
+     Desinstala el redistributable de VC++ 2010 para que el SDK se instale y lo vuelve a instalar al final:
+     sin él, el launcher de Kenshi falla con "no se encontró mfc100u.dll";
+   - `scripts\fetch_deps.ps1` (no necesita administrador);
    - `scripts\build_plugin.cmd`.
-
-   Candidato a `scripts\setup_toolchain.ps1`.
 3. **Con el amigo (2 cuentas de Steam):** invitación completa desde "Invitar a un amigo de Steam", comprobación de mods y sesión larga.
 4. **Instalador:** instalación de RE_Kenshi desde cero y un Kenshi que no esté en `C:`.
 5. **Hoja de ruta** (`docs/MODS_Y_FACILIDAD.md` §5):

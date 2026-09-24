@@ -94,7 +94,11 @@ if (-not $SkipBuild) {
 Write-Host ""
 Write-Host "=== run test ==="
 $testArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $scriptDir "run_test.ps1"),
-              "-Save", $Save, "-Seconds", "$Seconds", "-Port", "$Port")
+              "-Save", $Save, "-Port", "$Port")
+# Forward -Seconds only when the caller chose it: run_test.ps1 gives scenario runs
+# a 150 s backstop (or the manifest's per-scenario value) only when -Seconds is
+# unbound, and a forwarded default of 60 cut scenarios off before their RESULT.
+if ($PSBoundParameters.ContainsKey("Seconds") -or $Scenario -eq "") { $testArgs += @("-Seconds", "$Seconds") }
 if ($Sync) { $testArgs += "-Sync" }
 if ($Scenario -ne "") { $testArgs += @("-Scenario", $Scenario, "-Tolerance", "$Tolerance") }
 if ($Setup -ne "") { $testArgs += @("-Setup", $Setup) }
