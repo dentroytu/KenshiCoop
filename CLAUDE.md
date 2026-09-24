@@ -17,6 +17,36 @@ Remotes: `origin` = dentroytu/KenshiCoop, `upstream` = nhoral/KenshiCoop.
 >   - la instalación de RE_Kenshi desde cero con el instalador;
 >   - el flujo completo de invitación, que necesita otra cuenta de Steam.
 
+## Próximos pasos (al retomar, p. ej. desde Windows)
+
+1. **Co-op real en un solo PC por UDP**, la prueba pendiente más útil:
+   - copia Kenshi a `C:\Kenshi-Join`;
+   - instala en ella con `installer\Install-KenshiCoop.ps1 -KenshiPath "C:\Kenshi-Join"`;
+   - abre las dos. En F2 > Opciones avanzadas elige Transport UDP; una hace de HOST con partida cargada y la otra de JOIN desde el menú;
+   - la IP por defecto, 127.0.0.1, ya vale;
+   - revisa `KenshiCoop_*.log`, la fila Mods y la transferencia del mundo.
+
+   Con el toolchain local, `scripts\dev_cycle.ps1` automatiza todo esto.
+2. **Toolchain local en Windows:** replicar los pasos de `.github/workflows/build.yml`:
+   - MSIs del SDK 7.1 sacados de la ISO, KB2519277 y la clave de registro VS7;
+   - `scripts\fetch_deps.ps1`;
+   - `scripts\build_plugin.cmd`.
+
+   Candidato a `scripts\setup_toolchain.ps1`.
+3. **Con el amigo (2 cuentas de Steam):** invitación completa desde "Invitar a un amigo de Steam", comprobación de mods y sesión larga.
+4. **Instalador:** instalación de RE_Kenshi desde cero y un Kenshi que no esté en `C:`.
+5. **Hoja de ruta** (`docs/MODS_Y_FACILIDAD.md` §5):
+   - error de versión visible, con el motivo en la desconexión, sin reintentos infinitos y mostrado en F2;
+   - "Reconectar con <amigo>";
+   - unirse desde la lista de amigos de Steam;
+   - aviso de versión nueva;
+   - Steam Workshop.
+
+Flujo de trabajo:
+- una rama por cambio, PR y fusión cuando el CI está en verde;
+- las releases se publican con una etiqueta `vX.YY` (última: `v0.53`);
+- el dueño prefiere español y una UX muy sencilla.
+
 ## Objetivo del fork
 
 **Co-op de 2 jugadores (host + 1 amigo), muy fácil de instalar y de conectar.**
