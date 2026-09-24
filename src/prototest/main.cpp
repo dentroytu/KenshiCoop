@@ -31,6 +31,7 @@
 #include "../plugin/core/WorkPose.h"
 #include "../plugin/core/DeathLatch.h"
 #include "../plugin/core/ModList.h" // protocol 56: active-mod list diff (header-only)
+#include "../plugin/core/UiLang.h"  // accented fonts XML + ASCII fallback (header-only)
 #include "../plugin/core/Inbound.h" // Phase 0 queue-lifecycle fixes (header-only)
 #include "../plugin/game/EngineFaults.h" // Phase 5c: fault throttle (pure inline)
 #include "../plugin/game/EngineCaps.h"   // Phase 5d: capability registry (pure inline)
@@ -1270,6 +1271,46 @@ static void testPresenceOrder() {
     CHECK("drain empties the queue", again.empty());
 }
 
+// Kenshi's fonts only rasterize 32-126, so accented panel text drew as gaps.
+// UiLang.h builds accented copies of the fonts from kenshi_fonts.xml, and folds
+// text to ASCII when those copies cannot be loaded.
+static void testAccentText() {
+    std::printf("== accented panel text (UiLang.h) ==\n");
+    using coop::foldToAscii;
+    CHECK("ASCII unchanged", foldToAscii("Sin conectar (F2)") == "Sin conectar (F2)");
+    CHECK("a-acute folds", foldToAscii("Steam no est\xC3\xA1 disponible") == "Steam no esta disponible");
+    CHECK("inverted ? dropped", foldToAscii("\xC2\xBFTe han invitado?") == "Te han invitado?");
+    CHECK("n-tilde folds", foldToAscii("a\xC3\xB1o") == "ano");
+    CHECK("capital O-acute folds", foldToAscii("\xC3\x93rdenes") == "Ordenes");
+    CHECK("all five vowels", foldToAscii("\xC3\xA1\xC3\xA9\xC3\xAD\xC3\xB3\xC3\xBA\xC3\xBC") == "aeiouu");
+    CHECK("other symbol -> ?", foldToAscii("x\xE2\x80\xA6y") == "x?y");
+    CHECK("cut sequence -> ?", foldToAscii("ok\xC3") == "ok?");
+
+    // A two-font sample shaped like Kenshi's file (BOM, ASCII range + quotes).
+    const std::string src =
+        "\xEF\xBB\xBF<MyGUI type=\"Resource\" version=\"1.1\">"
+        "<Resource type=\"ResourceTrueTypeFont\" name=\"Kenshi_StandardFont_Small\">"
+        "<Property key=\"Source\" value=\"Exo2-SemiBold.ttf\"/>"
+        "<Codes><Code range=\"32 126\"/><Code range=\"8127 8217\"/></Codes></Resource>"
+        "<Resource type=\"ResourceTrueTypeFont\" name=\"Kenshi_UI_Messages\">"
+        "<Codes><Code range=\"65 90\"/></Codes></Resource></MyGUI>";
+    int renamed = -1, widened = -1;
+    const std::string out = coop::accentFontXml(src, &renamed, &widened);
+    CHECK_EQ("fonts renamed", renamed, 2);
+    CHECK_EQ("ASCII ranges widened", widened, 1);
+    CHECK("BOM dropped", out.compare(0, 7, "<MyGUI ") == 0);
+    CHECK("copy named _KC", out.find("name=\"Kenshi_StandardFont_Small_KC\"") != std::string::npos);
+    CHECK("original name gone", out.find("name=\"Kenshi_StandardFont_Small\"") == std::string::npos);
+    CHECK("Latin-1 range present", out.find("<Code range=\"32 255\"/>") != std::string::npos);
+    CHECK("ASCII-only range gone", out.find("<Code range=\"32 126\"/>") == std::string::npos);
+    CHECK("other ranges kept", out.find("<Code range=\"8127 8217\"/>") != std::string::npos &&
+                               out.find("<Code range=\"65 90\"/>") != std::string::npos);
+    CHECK("source untouched", out.find("value=\"Exo2-SemiBold.ttf\"") != std::string::npos);
+    int r2 = -1, w2 = -1;
+    coop::accentFontXml("<MyGUI/>", &r2, &w2);
+    CHECK("no fonts -> zero edits (caller refuses)", r2 == 0 && w2 == 0);
+}
+
 static void testSteamIdParse() {
     std::printf("== SteamID64 parse (SteamId.h) ==\n");
     unsigned long long id = 0;
@@ -1920,6 +1961,7 @@ int main() {
     testModList();
     testRefusal();
     testPresenceOrder();
+    testAccentText();
     testWorkPoseMatch();
     testTaskClear();
     testDeathRekey();

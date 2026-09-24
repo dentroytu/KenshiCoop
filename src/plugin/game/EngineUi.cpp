@@ -21,10 +21,18 @@
 #include <kenshi/gui/DatapanelGUI.h>
 #include <kenshi/gui/DataPanelLine.h>
 #include <mygui/MyGUI_Delegate.h> // MyGUI::newDelegate + CDelegate* (free-fn callbacks)
+#include <mygui/MyGUI_DataManager.h>     // accented fonts: find kenshi_fonts.xml
+#include <mygui/MyGUI_ResourceManager.h> // accented fonts: register the copies
+#include <mygui/MyGUI_XmlDocument.h>     // accented fonts: parse them from memory
+#include <mygui/MyGUI_FontManager.h>     // accented fonts: MyGUI's default font
 #include <windows.h>
 
 #include "../core/SteamId.h" // parseSteamId64 (paste button) + maskSteamId64 (id rows)
 #include "../core/UiLang.h" // L(es, en): panel text in the player's language
+#include <fstream>
+#include <iterator>
+#include <map>
+#include <sstream>
 #include <vector>
 
 namespace coop {
@@ -151,6 +159,109 @@ void markerDestroy(void* label) {
     if (!markerAlive(label)) return;
     markerDestroySeh(g, (ScreenLabel*)label);
 }
+
+// ---- Accented text (Kenshi's fonts are ASCII-only) ----------------------------
+// Every font in Kenshi's data/gui/fonts/kenshi_fonts.xml rasterizes only codes
+// 32-126 (plus a few quote marks), so the Spanish panel and banner drew every
+// accented letter, n-tilde and inverted mark as a gap (seen in game 2026-09-25).
+// We register a copy of each of those fonts named <font>_KC that also covers
+// 32-255 - built from the game's own file, so the TTF, size and hinting match -
+// and switch only OUR widgets to it. If that cannot be done, the text is folded
+// to plain ASCII instead (UiLang.h foldToAscii): never gaps either way.
+
+namespace {
+
+enum { FONTS_UNTRIED = 0, FONTS_OK = 1, FONTS_FAILED = 2 };
+int g_fontState = FONTS_UNTRIED;
+std::map<std::string, std::string> g_fontFor; // Kenshi font -> our copy ("" = none)
+
+bool loadAccentFonts(std::string* why) {
+    try {
+        MyGUI::DataManager*     dm = MyGUI::DataManager::getInstancePtr();
+        MyGUI::ResourceManager* rm = MyGUI::ResourceManager::getInstancePtr();
+        if (!dm || !rm) { *why = "MyGUI managers not up"; return false; }
+        const std::string path = dm->getDataPath("kenshi_fonts.xml");
+        if (path.empty()) { *why = "kenshi_fonts.xml not found"; return false; }
+        std::ifstream f(path.c_str(), std::ios::binary);
+        if (!f) { *why = "cannot open " + path; return false; }
+        std::string src((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+        int renamed = 0, widened = 0;
+        std::string xml = coop::accentFontXml(src, &renamed, &widened);
+        if (renamed == 0 || widened == 0) { *why = "unexpected kenshi_fonts.xml"; return false; }
+        std::istringstream in(xml);
+        MyGUI::xml::Document doc;
+        if (!doc.open(in) || !doc.getRoot()) { *why = "font XML did not parse"; return false; }
+        rm->loadFromXmlNode(doc.getRoot(), path, MyGUI::Version(1, 1, 0));
+        return true;
+    } catch (...) {
+        *why = "MyGUI threw while loading";
+        return false;
+    }
+}
+
+// Once, on the main thread with the GUI up (first panel/banner tick).
+void ensureAccentFonts() {
+    if (g_fontState != FONTS_UNTRIED || !::gui) return;
+    std::string why;
+    g_fontState = loadAccentFonts(&why) ? FONTS_OK : FONTS_FAILED;
+    if (g_fontState == FONTS_OK)
+        coop::logLine("[coop-ui] accented fonts loaded (Kenshi fonts + Latin-1)");
+    else
+        coop::logErrLine(("[coop-ui] accented fonts unavailable (" + why +
+                          "); showing panel text without accents").c_str());
+}
+
+// Text for our widgets: as written when the accented fonts are in, else ASCII.
+std::string uiText(const std::string& utf8) {
+    return g_fontState == FONTS_OK ? utf8 : coop::foldToAscii(utf8);
+}
+
+// Our copy of a Kenshi font, if one was registered ("" otherwise).
+const std::string& accentFontFor(const std::string& kenshiFont) {
+    std::map<std::string, std::string>::iterator it = g_fontFor.find(kenshiFont);
+    if (it != g_fontFor.end()) return it->second;
+    std::string mine = kenshiFont + coop::accentFontSuffix();
+    MyGUI::ResourceManager* rm = MyGUI::ResourceManager::getInstancePtr();
+    bool ok = false;
+    try { ok = rm && rm->isExist(mine); } catch (...) { ok = false; }
+    coop::logLine(("[coop-ui] font '" + kenshiFont + "' -> " +
+                   (ok ? "'" + mine + "'" : std::string("no accented copy"))).c_str());
+    return g_fontFor[kenshiFont] = ok ? mine : std::string();
+}
+
+// C2712 split: the string work stays out here, the widget calls in POD frames.
+const std::string* widgetFontSeh(MyGUI::TextBox* w) {
+    __try { return &w->getFontName(); } __except (EXCEPTION_EXECUTE_HANDLER) { return 0; }
+}
+void setWidgetFontSeh(MyGUI::TextBox* w, const std::string* font) {
+    __try { w->setFontName(*font); } __except (EXCEPTION_EXECUTE_HANDLER) {}
+}
+// An empty font name means MyGUI's default font. The panel's text lines are
+// EditBoxes, and an EditBox always reports an empty name (it keeps its font in
+// its own client text, which getFontName does not read) while setFontName does
+// work on it - so an empty name is resolved to the default font's copy. Only
+// the buttons report their font (Kenshi_StandardFont_Medium). Seen 2026-09-25.
+std::string defaultFontName() {
+    try {
+        MyGUI::FontManager* fm = MyGUI::FontManager::getInstancePtr();
+        return fm ? fm->getDefaultFont() : std::string();
+    } catch (...) { return std::string(); }
+}
+
+void useAccentFont(MyGUI::TextBox* w) {
+    if (!w || g_fontState != FONTS_OK) return;
+    const std::string* cur = widgetFontSeh(w);
+    if (!cur) return;
+    std::string font = cur->empty() ? defaultFontName() : *cur; // copy: *cur changes below
+    if (font.empty()) return;
+    const std::string suffix = coop::accentFontSuffix();
+    if (font.size() > suffix.size() &&
+        font.compare(font.size() - suffix.size(), suffix.size(), suffix) == 0) return;
+    std::string mine = accentFontFor(font);
+    if (!mine.empty()) setWidgetFontSeh(w, &mine);
+}
+
+} // namespace
 
 // ---- In-game co-op session panel (config-driven, spike-50 DatapanelGUI stack) -
 // A native DatapanelGUI window toggled with F2. The player picks role + transport
@@ -448,6 +559,15 @@ void lineColourSeh(DataPanelLine* line, float r, float g, float b) {
         if (line->w2) line->w2->setTextColour(c);
     } __except (EXCEPTION_EXECUTE_HANDLER) {}
 }
+// The text widgets of one built row: w1/w2 of its line, plus a button row's
+// button (a MyGUI::Button is a TextBox). Unset entries stay 0.
+void rowTextWidgetsSeh(DataPanelLine* line, DataPanelLine_Button* btn, MyGUI::TextBox* out[3]) {
+    __try {
+        DataPanelLine* l = line ? line : btn;
+        if (l) { out[0] = l->w1; out[1] = l->w2; }
+        if (btn) out[2] = btn->button;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {}
+}
 void colourRow(DataPanelLine* line, int col) {
     switch (col) {
     case COL_GREY:  lineColourSeh(line, 0.72f, 0.72f, 0.72f); break;
@@ -543,6 +663,7 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
           char b[64]; _snprintf(b, sizeof(b) - 1, "[coop-ui] gui ptr=%p", (void*)g);
           b[sizeof(b) - 1] = '\0'; coop::logLine(b); } }
     if (!g) return;
+    ensureAccentFonts();
 
     // Cache the self id as a string for the Copy button (used by onCopyIdBtn).
     if (st->selfSteamId) {
@@ -728,10 +849,11 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
 
     // (Re)populate the rows when anything visible changed.
     if (g_panel.panel && (g_panel.needsRebuild || !g_panel.built)) {
-        std::string title = L("Co-op    -    F2 para cerrar", "Co-op    -    F2 to close");
+        std::string title = uiText(L("Co-op    -    F2 para cerrar", "Co-op    -    F2 to close"));
         std::string empty;
         std::vector<std::string> keys(rows.size());
         RowPod pods[MAX_ROWS];
+        for (size_t i = 0; i < rows.size(); ++i) rows[i].text = uiText(rows[i].text);
         for (size_t i = 0; i < rows.size(); ++i) {
             char k[16];
             _snprintf(k, sizeof(k) - 1, "kc_row%u", (unsigned)i);
@@ -750,6 +872,10 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
         for (size_t i = 0; i < rows.size(); ++i) {
             if (g_rowBtn[i]) bindButton(g_rowBtn[i], rows[i].act);
             if (g_rowLine[i]) colourRow(g_rowLine[i], rows[i].col);
+            // Accented copies of Kenshi's fonts (see "Accented text" above).
+            MyGUI::TextBox* w[3] = { 0, 0, 0 };
+            rowTextWidgetsSeh(g_rowLine[i], g_rowBtn[i], w);
+            for (int k = 0; k < 3; ++k) useAccentFont(w[k]);
         }
 
         g_panel.built = true;
@@ -862,7 +988,8 @@ void coopOverlayTick(const char* text, int state, bool show) {
         return;
     }
 
-    std::string t = text ? std::string(text) : std::string();
+    ensureAccentFonts();
+    std::string t = uiText(text ? std::string(text) : std::string());
     if (!g_overlay) {
         // createFloatingLabel takes the layer BY VALUE (an unwindable temporary
         // => C2712), so the container mint stays outside SEH, exactly like
@@ -887,6 +1014,7 @@ void coopOverlayTick(const char* text, int state, bool show) {
             coop::logErrLine("[coop-ui] banner label FAILED");
             return;
         }
+        useAccentFont(g_overlay);
         g_overlayState = -1;   // no caller state is -1: forces the caption pass
         g_overlayText.clear();
     }
