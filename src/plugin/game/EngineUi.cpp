@@ -172,6 +172,17 @@ void markerDestroy(void* label) {
 
 namespace {
 
+// Is one of this process's windows in the foreground? GetAsyncKeyState reads the
+// keyboard system-wide, so without this check F2 pressed in a browser, a chat app
+// or the other Kenshi of a two-client test toggled this panel too.
+bool gameHasFocus() {
+    HWND fg = GetForegroundWindow();
+    if (!fg) return false;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(fg, &pid);
+    return pid == GetCurrentProcessId();
+}
+
 // Write a UTF-8/ANSI string to the Windows clipboard (CF_TEXT). Mirror of the
 // paste-read: OpenClipboard -> EmptyClipboard -> GlobalAlloc+copy -> SetClipboardData
 // -> CloseClipboard. Used by the "Copy my Steam ID" button. Win32 only (no MyGUI).
@@ -545,7 +556,8 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
     g_peerModsCfg = st->peerModsCfg ? std::string(st->peerModsCfg) : std::string();
 
     // F2 rising edge toggles the panel open/closed (it always opens on MAIN).
-    bool f2 = (GetAsyncKeyState(VK_F2) & 0x8000) != 0;
+    // Only while Kenshi has focus: the key state itself is system-wide.
+    bool f2 = gameHasFocus() && (GetAsyncKeyState(VK_F2) & 0x8000) != 0;
     if (f2 && !g_panel.f2Down) {
         if (!g_panel.open) {
             g_panel.hostFlag      = st->isHost;
