@@ -3,10 +3,19 @@
 Mod cooperativo de Kenshi, fork de `nhoral/KenshiCoop` (base: v0.51, commit `5a761e1`).
 Remotes: `origin` = dentroytu/KenshiCoop, `upstream` = nhoral/KenshiCoop.
 
-> **Estado (2026-09-23):**
-> - Compilación verificada en CI (`windows-2022`): `prototest` 522/522, DLL Harness y Release.
-> - La DLL Release importa exactamente los mismos 185 símbolos de KenshiLib que la v0.51 publicada, y mide lo mismo (1 027 072 bytes).
-> - Sin probar todavía en el juego: despliegue, `dev_cycle.ps1` y harness necesitan Windows con Kenshi.
+> **Estado (2026-09-24):**
+> - Compilación verificada en CI (`windows-2022`): `prototest`, DLL Harness y Release, y kit con instalador.
+>   Releases publicadas: `v0.52` y `v0.53`.
+> - **Verificado en el juego** (PC del autor del fork, Kenshi de Steam con RE_Kenshi, sin co-op todavía):
+>   - el plugin carga;
+>   - el panel F2 abre en el menú principal, detecta el idioma (español) y colorea el estado (v0.53);
+>   - el botón de invitar aparece y lista amigos (v0.52);
+>   - el instalador del kit funcionó con un RE_Kenshi ya instalado.
+> - **Sin probar en el juego:**
+>   - sesión co-op real: ni por UDP con dos instancias ni con un amigo por Steam;
+>   - la comprobación de mods;
+>   - la instalación de RE_Kenshi desde cero con el instalador;
+>   - el flujo completo de invitación, que necesita otra cuenta de Steam.
 
 ## Objetivo del fork
 
