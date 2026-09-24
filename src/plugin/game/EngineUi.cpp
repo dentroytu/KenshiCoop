@@ -393,6 +393,7 @@ struct Row {
     std::string text;
     int         act;
     int         col;
+    Row() : kind(ROW_SPACE), act(ACT_NONE), col(COL_WHITE) {} // VS2010 vector::resize needs it
     Row(int k, const std::string& t, int a, int c) : kind(k), text(t), act(a), col(c) {}
 };
 void addLine(std::vector<Row>& r, const std::string& t, int col) { r.push_back(Row(ROW_LINE, t, ACT_NONE, col)); }
