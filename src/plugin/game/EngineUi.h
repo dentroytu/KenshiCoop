@@ -83,6 +83,13 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
 // only; SEH-guarded.
 void coopOverlayTick(const char* text, int state, bool show);
 
+// Process exit: destroy the F2 panel and the banner while the engine's GUI is
+// still intact. A panel left on ForgottenGUI's datapanel update list faults the
+// engine's own GUI teardown inside exit() (AV at kenshi_x64.exe+0x6ea9ab;
+// reproduced 2026-09-24: panel open at close -> crash, closed first -> clean).
+// Called from the MSVCR100!exit hook (Plugin.cpp). Main thread only; idempotent.
+void coopUiShutdown();
+
 } // namespace engine
 } // namespace coop
 

@@ -20,6 +20,7 @@
 #include <core/Functions.h>         // KenshiLib::AddHook / GetRealAddress / SUCCESS
 #include <kenshi/GameWorld.h>       // GameWorld (main-loop hook signature)
 #include <kenshi/gui/TitleScreen.h> // TitleScreen::_NV_update (auto-load trigger)
+#include <ogre/OgreWindowEventUtilities.h> // exit hook: RE_Kenshi focus listener
 
 #include <windows.h>
 #include <cstdio>
@@ -2469,6 +2470,69 @@ void installTitleHook() {
     }
 }
 
+// Process-exit hook (MSVCR100!exit). Every normal quit - the menu's Exit, the
+// window's X, quitting from in-game - leaves WinMain and exits through the CRT,
+// whose static destructors tear the engine GUI down. Our F2 panel must be gone
+// by then or that teardown faults (see coopUiShutdown in game/EngineUi.h).
+typedef void (__cdecl* CrtExitFn)(int);
+CrtExitFn g_crtExit_orig = 0;
+
+// RE_Kenshi's alt-tab fix (WindowFocusListener in its MiscHooks.cpp) reads
+// ou->player->camera whenever the game window loses focus. At exit the renderer
+// destroys the window after ou->player is gone, so closing Kenshi while it has
+// focus ends in an AV at RE_Kenshi.dll+0x381e9 (exit code 0xC000041D) - with or
+// without this mod (reproduced 2026-09-24). The listener has nothing left to do
+// once we are exiting, so unregister the Ogre window listeners whose vtable lies
+// in RE_Kenshi.dll. Returns how many were removed (-1 = faulted).
+int detachReKenshiFocusListenersSeh() {
+    HMODULE re = GetModuleHandleA("RE_Kenshi.dll");
+    if (!re) return 0;
+    __try {
+        const IMAGE_DOS_HEADER* dos = (const IMAGE_DOS_HEADER*)re;
+        const IMAGE_NT_HEADERS* nt =
+            (const IMAGE_NT_HEADERS*)((const char*)re + dos->e_lfanew);
+        const char* lo = (const char*)re;
+        const char* hi = lo + nt->OptionalHeader.SizeOfImage;
+        Ogre::RenderWindow*        wins[16];
+        Ogre::WindowEventListener* lsns[16];
+        int n = 0;
+        Ogre::WindowEventUtilities::WindowEventListeners& all =
+            Ogre::WindowEventUtilities::_msListeners;
+        for (Ogre::WindowEventUtilities::WindowEventListeners::iterator it = all.begin();
+             it != all.end() && n < 16; ++it) {
+            const char* vt = it->second ? *(const char* const*)it->second : 0;
+            if (vt >= lo && vt < hi) { wins[n] = it->first; lsns[n] = it->second; ++n; }
+        }
+        for (int i = 0; i < n; ++i)
+            Ogre::WindowEventUtilities::removeWindowEventListener(wins[i], lsns[i]);
+        return n;
+    } __except (EXCEPTION_EXECUTE_HANDLER) { return -1; }
+}
+
+void __cdecl crtExit_hook(int code) {
+    coop::engine::coopUiShutdown();
+    int n = detachReKenshiFocusListenersSeh();
+    if (n != 0) {
+        char b[96];
+        _snprintf(b, sizeof(b) - 1, "[exit] detached %d RE_Kenshi window listener(s)", n);
+        b[sizeof(b) - 1] = '\0';
+        coopLog(b);
+    }
+    g_crtExit_orig(code);
+}
+
+void installExitHook() {
+    HMODULE crt = GetModuleHandleA("MSVCR100.dll");
+    void* target = crt ? (void*)GetProcAddress(crt, "exit") : 0;
+    if (!target ||
+        KenshiLib::AddHook(target, (void*)&crtExit_hook,
+                           (void**)&g_crtExit_orig) != KenshiLib::SUCCESS) {
+        coopErr("KenshiCoop: could not install exit hook (quitting with the F2 panel open may crash)");
+        return;
+    }
+    coopLog("KenshiCoop: exit hook armed (co-op UI torn down before the engine GUI)");
+}
+
 __declspec(dllexport) void startPlugin() {
     coop::loadConfig(g_cfg);
     // The fake clock skew must be armed BEFORE the first log line so every
@@ -2499,6 +2563,8 @@ __declspec(dllexport) void startPlugin() {
     installEngineDetours();
 
     installTitleHook();
+
+    installExitHook();
 
     if (g_cfg.testSeconds > 0) {
         char b[96];

@@ -258,6 +258,7 @@ struct CoopPanelUi {
 
 CoopPanelUi             g_panel;
 std::string             g_selfIdStr;   // self SteamID as digits (set each tick; "" = none)
+DWORD                   g_uiThread = 0; // main thread, from coopPanelTick (coopUiShutdown guard)
 
 // Friend's SteamID pasted in-panel this session (0 = none). Per-session by
 // design: it lives only in memory, so relaunching Kenshi clears it and the
@@ -522,6 +523,7 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
                    CoopDisconnectFn onDisconnect, CoopInviteBeginFn onInviteBegin,
                    CoopInviteFriendFn onInviteFriend) {
     if (!st) return;
+    g_uiThread       = GetCurrentThreadId();
     g_onInviteBegin  = onInviteBegin;
     g_onInviteFriend = onInviteFriend;
     ForgottenGUI* g = ::gui; // KenshiLib data export (spike 46)
@@ -890,6 +892,25 @@ void coopOverlayTick(const char* text, int state, bool show) {
             g_overlayBox = 0; g_overlay = 0;
             g_overlayState = -1; g_overlayText.clear();
         }
+    }
+}
+
+void coopUiShutdown() {
+    ForgottenGUI* g = ::gui;
+    if (!g) return;
+    // exit() off the main thread races the render loop; leave the GUI alone.
+    if (g_uiThread != 0 && GetCurrentThreadId() != g_uiThread) return;
+    if (g_panel.panel) {
+        panelDestroySeh(g, g_panel.panel);
+        g_panel.panel = 0; g_panel.built = false;
+        clearRowPointers();
+        coop::logLine("[coop-ui] panel torn down for process exit");
+    }
+    g_panel.open = false;
+    if (g_overlayBox) {
+        overlayDestroySeh(g, g_overlayBox);
+        g_overlayBox = 0; g_overlay = 0;
+        g_overlayState = -1; g_overlayText.clear();
     }
 }
 
