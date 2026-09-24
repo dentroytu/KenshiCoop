@@ -138,6 +138,8 @@ bool               g_creating     = false;// CreateLobby call in flight
 bool               g_picker       = false;// in-panel friend picker is active
 unsigned long long g_pendingInvitee = 0;  // friend clicked before the lobby existed
 char               g_status[128]  = {0};
+int                g_statusCode   = 0;    // ST_* (steaminvite.h) for the localized panel
+char               g_statusArg[64] = {0}; // friend name for ST_INVITED
 
 // Cached friend list for the in-panel picker (our own copy - GetFriendPersonaName
 // returns a Steam-owned pointer only valid until the next call). Sorted in-Kenshi
@@ -162,6 +164,12 @@ void steamLog(const char* msg) {
 void setStatus(const char* s) {
     _snprintf(g_status, sizeof(g_status) - 1, "%s", s ? s : "");
     g_status[sizeof(g_status) - 1] = '\0';
+}
+// The English status above stays for logs/back-compat; the panel shows the code.
+void setCode(int code, const char* arg = 0) {
+    g_statusCode = code;
+    _snprintf(g_statusArg, sizeof(g_statusArg) - 1, "%s", arg ? arg : "");
+    g_statusArg[sizeof(g_statusArg) - 1] = '\0';
 }
 
 // True if a friend is currently playing Kenshi (checked via GetFriendGamePlayed).
@@ -213,6 +221,7 @@ void onLobbyCreated(LobbyCreated_t* r, bool ioFailure) {
     if (ioFailure || !r || r->m_eResult != k_EResultOK) {
         steamLog("lobby creation FAILED");
         setStatus("Lobby creation failed - try again or type the ID");
+        setCode(ST_LOBBY_FAILED);
         return;
     }
     g_lobby     = r->m_ulSteamIDLobby;
@@ -239,8 +248,10 @@ void onLobbyCreated(LobbyCreated_t* r, bool ioFailure) {
         c[sizeof(c) - 1] = '\0';
         steamLog(c);
         setStatus("Invite sent - waiting for friend to accept...");
+        if (g_statusCode != ST_INVITED) setCode(ST_INVITE_SENT);
     } else {
         setStatus("Pick a friend to invite");
+        setCode(ST_PICK);
     }
 }
 
@@ -256,6 +267,7 @@ void onGameLobbyJoinRequested(GameLobbyJoinRequested_t* r) {
     b[sizeof(b) - 1] = '\0';
     steamLog(b);
     setStatus("Joining friend's game...");
+    setCode(ST_JOINING);
     g_joinLobby(g_mm, r->m_steamIDLobby);
 }
 
@@ -286,6 +298,7 @@ void onLobbyEnter(LobbyEnter_t* r) {
                 b[sizeof(b) - 1] = '\0';
                 steamLog(b);
                 setStatus("Version mismatch with host - update both sides");
+                setCode(ST_VERSION);
                 return;
             }
         }
@@ -297,6 +310,7 @@ void onLobbyEnter(LobbyEnter_t* r) {
     b[sizeof(b) - 1] = '\0';
     steamLog(b);
     setStatus("Connecting to host...");
+    setCode(ST_CONNECTING);
     if (g_onConnect) g_onConnect(false, true, owner);
 }
 
@@ -415,6 +429,7 @@ void createLobbyIfNeeded() {
         g_creating = false;
         steamLog("CreateLobby returned no call handle");
         setStatus("Lobby creation failed - type the ID instead");
+        setCode(ST_LOBBY_FAILED);
         return;
     }
     // Re-arm the LobbyCreated call-result object for this specific async call.
@@ -425,11 +440,11 @@ void createLobbyIfNeeded() {
 } // namespace
 
 void beginInvite() {
-    if (!g_ready) { steamLog("beginInvite: Steam invite layer not ready"); setStatus("Steam unavailable - type the ID instead"); return; }
+    if (!g_ready) { steamLog("beginInvite: Steam invite layer not ready"); setStatus("Steam unavailable - type the ID instead"); setCode(ST_NO_STEAM); return; }
     g_picker = true;
     refreshFriends();
     createLobbyIfNeeded();
-    if (g_status[0] == '\0') setStatus("Pick a friend to invite");
+    if (g_status[0] == '\0') { setStatus("Pick a friend to invite"); setCode(ST_PICK); }
     steamLog("friend picker opened");
 }
 
@@ -454,6 +469,7 @@ void inviteFriend(SteamId id) {
     _snprintf(s, sizeof(s) - 1, "Invited %s - waiting for them to accept...", nm ? nm : "friend");
     s[sizeof(s) - 1] = '\0';
     setStatus(s);
+    setCode(ST_INVITED, nm ? nm : "");
 }
 
 bool pickerActive()            { return g_picker; }
@@ -498,6 +514,7 @@ void tick() {
                     b[sizeof(b) - 1] = '\0';
                     steamLog(b);
                     setStatus("Friend joined - hosting...");
+                    setCode(ST_FRIEND_JOINED);
                     if (g_onConnect) g_onConnect(true, true, m);
                     break;
                 }
@@ -507,6 +524,8 @@ void tick() {
 }
 
 const char* status() { return g_status; }
+int         statusCode() { return g_statusCode; }
+const char* statusArg()  { return g_statusArg; }
 
 void reset() {
     if (g_ready && g_lobby != 0 && g_leaveLobby) g_leaveLobby(g_mm, g_lobby);
@@ -518,6 +537,7 @@ void reset() {
     g_pendingInvitee = 0;
     g_friendN   = 0;
     g_status[0] = '\0';
+    setCode(ST_IDLE);
     if (g_ready && g_unregCb) g_unregCb(&g_cbLobbyCreated);
 }
 

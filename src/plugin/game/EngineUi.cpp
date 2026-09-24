@@ -24,6 +24,8 @@
 #include <windows.h>
 
 #include "../core/SteamId.h" // parseSteamId64 (paste button) + maskSteamId64 (id rows)
+#include "../core/UiLang.h" // L(es, en): panel text in the player's language
+#include <vector>
 
 namespace coop {
 namespace engine {
@@ -230,6 +232,12 @@ bool clipboardGetText(std::string& out) {
     return ok;
 }
 
+// Panel views. MAIN is what a player needs (status, "Invite a Steam friend",
+// how to accept an invite, Disconnect); PICK lists online friends to invite;
+// ADVANCED keeps the original manual controls (role / transport / connection
+// toggles and the Steam ID copy-paste) for LAN/UDP or when invites fail.
+enum { VIEW_MAIN = 0, VIEW_PICK = 1, VIEW_ADVANCED = 2 };
+
 struct CoopPanelUi {
     DatapanelGUI* panel;
     bool          open, built;
@@ -240,25 +248,15 @@ struct CoopPanelUi {
     bool          lastChkVal;    // last toggle value (connect/disconnect edge)
     bool          needsRebuild;
     bool          f2Down;        // F2 held last tick (rising-edge toggle)
-    std::string   lastStatus;    // last status text shown (refresh gate)
-    std::string   lastTransfer;  // last save-transfer line shown (refresh gate)
-    std::string   lastInvite;    // last invite rows/status shown (refresh gate)
-    std::string   lastMods;      // last mods row shown (refresh gate)
+    int           view;          // VIEW_*
+    std::string   lastSig;       // rows shown by the last build (refresh gate)
     CoopPanelUi()
         : panel(0), open(false), built(false), hostFlag(true), steamFlag(true),
           connectedFlag(false), lastConnected(false), lastChkVal(false),
-          needsRebuild(false), f2Down(false) {}
+          needsRebuild(false), f2Down(false), view(VIEW_MAIN) {}
 };
 
 CoopPanelUi             g_panel;
-DataPanelLine_Button*   g_roleBtn      = 0;
-DataPanelLine_Button*   g_transBtn     = 0;
-DataPanelLine_Button*   g_connBtn      = 0; // Online/Offline toggle (replaces the checkbox)
-DataPanelLine_Button*   g_copyIdBtn    = 0;
-DataPanelLine_Button*   g_pasteIdBtn   = 0; // "Paste friend's Steam ID" from clipboard
-DataPanelLine*          g_debugLine    = 0; // white connection-status debug row
-DataPanelLine*          g_peerLine     = 0; // white "Friend's Steam ID" row
-DataPanelLine*          g_selfLine     = 0; // white "Your Steam ID" row
 std::string             g_selfIdStr;   // self SteamID as digits (set each tick; "" = none)
 
 // Friend's SteamID pasted in-panel this session (0 = none). Per-session by
@@ -268,27 +266,18 @@ std::string             g_selfIdStr;   // self SteamID as digits (set each tick;
 unsigned long long      g_pastedPeer   = 0;
 bool                    g_pasteFailed  = false; // last paste wasn't a valid Steam ID
 
-// Steam invite picker. The friend buttons are rebuilt from st->friends each
-// time the panel is (re)populated; g_pickIds[i] is the id behind button i.
-// The callbacks are refreshed at the top of every coopPanelTick so the free-fn
+// Steam invite picker: g_pickIds[i] is the friend behind picker button i. The
+// callbacks are refreshed at the top of every coopPanelTick so the free-fn
 // button handlers can reach them.
 const int               MAX_PICK       = 6;
-DataPanelLine_Button*   g_inviteBtn    = 0;
-DataPanelLine*          g_inviteLine   = 0; // white invite status row
-DataPanelLine_Button*   g_pickBtns[MAX_PICK] = {0};
 unsigned long long      g_pickIds[MAX_PICK]  = {0};
-bool                    g_pickOpen     = false;
 CoopInviteBeginFn       g_onInviteBegin  = 0;
 CoopInviteFriendFn      g_onInviteFriend = 0;
-
-// Active-mod list check (protocol 56).
-DataPanelLine*          g_modsLine     = 0; // "Mods" row (amber on mismatch)
-DataPanelLine_Button*   g_copyModsBtn  = 0; // "Copy friend's mod list"
-std::string             g_peerModsCfg;      // set each tick from st->peerModsCfg
+std::string             g_peerModsCfg;  // friend's mod list (mods.cfg form), set each tick
 
 // Button callbacks (free functions - MyGUI::newDelegate wraps them without any
-// raw-MyGUI link). A press flips the armed flag and requests a rebuild so the
-// caption reflects the new choice on the next tick.
+// raw-MyGUI link). A press changes panel state and requests a rebuild so the
+// rows reflect it on the next tick.
 void onRoleBtn(DataPanelLine*) {
     g_panel.hostFlag = !g_panel.hostFlag;
     g_panel.needsRebuild = true;
@@ -300,12 +289,18 @@ void onTransBtn(DataPanelLine*) {
     coop::logLine(g_panel.steamFlag ? "[coop-ui] transport -> Steam" : "[coop-ui] transport -> UDP");
 }
 // Online/Offline toggle: flip the desired connection state. The connect/disconnect
-// edge (connectedFlag vs lastChkVal) is handled in coopPanelTick, same as before.
+// edge (connectedFlag vs lastChkVal) is handled in coopPanelTick.
 void onConnBtn(DataPanelLine*) {
     g_panel.connectedFlag = !g_panel.connectedFlag;
     g_panel.needsRebuild = true;
     coop::logLine(g_panel.connectedFlag ? "[coop-ui] connection -> ONLINE"
                                         : "[coop-ui] connection -> OFFLINE");
+}
+// Main-view Disconnect / Cancel: same edge as the toggle, forced OFFLINE.
+void onDisconnectBtn(DataPanelLine*) {
+    g_panel.connectedFlag = false;
+    g_panel.needsRebuild = true;
+    coop::logLine("[coop-ui] connection -> OFFLINE");
 }
 // Copy the player's own SteamID to the clipboard so they can paste it to a friend
 // (who pastes it into their panel via "Paste friend's Steam ID").
@@ -349,18 +344,25 @@ void onCopyModsBtn(DataPanelLine*) {
     coop::logLine(ok ? "[coop-ui] copied friend's mod list to clipboard: ok"
                      : "[coop-ui] copied friend's mod list to clipboard: FAILED");
 }
-// "Invite a Steam friend": opening the picker creates the friends-only lobby
-// (async) and fills the friend list; closing it just hides the list (the lobby
-// stays, so an invite already sent can still be accepted).
+// "Invite a Steam friend": switch to the picker, which creates the friends-only
+// lobby (async) and fills the friend list.
 void onInviteBtn(DataPanelLine*) {
-    g_pickOpen = !g_pickOpen;
+    g_panel.view = VIEW_PICK;
     g_panel.needsRebuild = true;
-    if (g_pickOpen) {
-        coop::logLine("[coop-ui] invite picker opened");
-        if (g_onInviteBegin) g_onInviteBegin();
-    } else {
-        coop::logLine("[coop-ui] invite picker closed");
-    }
+    coop::logLine("[coop-ui] invite picker opened");
+    if (g_onInviteBegin) g_onInviteBegin();
+}
+// Back to the main view. Leaving the picker keeps the lobby, so an invite already
+// sent can still be accepted.
+void onBackBtn(DataPanelLine*) {
+    if (g_panel.view == VIEW_PICK) coop::logLine("[coop-ui] invite picker closed");
+    g_panel.view = VIEW_MAIN;
+    g_panel.needsRebuild = true;
+}
+void onAdvancedBtn(DataPanelLine*) {
+    g_panel.view = VIEW_ADVANCED;
+    g_panel.needsRebuild = true;
+    coop::logLine("[coop-ui] advanced options opened");
 }
 // One handler per picker row (MyGUI delegates carry no row context).
 template <int I>
@@ -375,80 +377,116 @@ void onPickBtn(DataPanelLine*) {
     g_panel.needsRebuild = true;
 }
 
-// POD-only pointer bundle so the row-build SEH frame constructs no std::string.
-struct PanelStrings {
-    const std::string *title, *roleKey, *roleCap, *transKey, *transCap;
-    const std::string *connKey, *connCap;
-    const std::string *dbgKey, *dbgVal;
-    const std::string *peerKey, *peerVal, *pasteKey, *pasteCap;
-    const std::string *selfKey, *selfVal, *copyKey, *copyCap;
-    const std::string *empty;
-    // Steam invite rows. showInvite gates the button; pickOpen shows the status
-    // row + pickN friend buttons and hides the manual Steam ID rows.
-    const std::string *modsKey, *modsVal, *copyModsKey, *copyModsCap;
-    bool showMods, showCopyMods;
-    bool showInvite, pickOpen;
-    int  pickN;
-    const std::string *inviteKey, *inviteCap, *invStKey, *invStVal;
-    const std::string *pickKey[MAX_PICK], *pickCap[MAX_PICK];
+// ---- Row model -------------------------------------------------------------------
+// Each view is a list of rows (text line, button or spacer). The rows are rebuilt
+// every tick as strings and only pushed into the DatapanelGUI when their
+// signature changes. Line colour carries the state (red / amber / green).
+enum RowKind { ROW_LINE, ROW_BUTTON, ROW_SPACE };
+enum RowAct {
+    ACT_NONE, ACT_ROLE, ACT_TRANS, ACT_CONN, ACT_COPYID, ACT_PASTEID, ACT_COPYMODS,
+    ACT_INVITE, ACT_BACK, ACT_ADVANCED, ACT_DISCONNECT, ACT_PICK0
 };
+enum RowCol { COL_WHITE, COL_GREY, COL_RED, COL_AMBER, COL_GREEN };
 
-void panelBuildSeh(DatapanelGUI* p, const PanelStrings* s) {
+struct Row {
+    int         kind;
+    std::string text;
+    int         act;
+    int         col;
+    Row() : kind(ROW_SPACE), act(ACT_NONE), col(COL_WHITE) {} // VS2010 vector::resize needs it
+    Row(int k, const std::string& t, int a, int c) : kind(k), text(t), act(a), col(c) {}
+};
+void addLine(std::vector<Row>& r, const std::string& t, int col) { r.push_back(Row(ROW_LINE, t, ACT_NONE, col)); }
+void addButton(std::vector<Row>& r, const std::string& t, int act) { r.push_back(Row(ROW_BUTTON, t, act, COL_WHITE)); }
+void addSpace(std::vector<Row>& r) { r.push_back(Row(ROW_SPACE, std::string(), ACT_NONE, COL_WHITE)); }
+
+const int              MAX_ROWS = 24;
+DataPanelLine*         g_rowLine[MAX_ROWS];
+DataPanelLine_Button*  g_rowBtn[MAX_ROWS];
+
+// POD view of the rows so the build SEH frame constructs no std::string.
+struct RowPod { int kind; const std::string* key; const std::string* text; };
+
+void panelBuildSeh(DatapanelGUI* p, const std::string* title, const RowPod* rows, int n,
+                   const std::string* empty) {
     __try {
         p->_NV_clear();
-        // Rows below are conditional: drop every pointer from the previous build
-        // so a hidden row never keeps a callback/colour target from a cleared one.
-        g_peerLine = 0; g_pasteIdBtn = 0; g_selfLine = 0; g_copyIdBtn = 0;
-        g_inviteBtn = 0; g_inviteLine = 0;
-        for (int i = 0; i < MAX_PICK; ++i) g_pickBtns[i] = 0;
-        g_modsLine = 0; g_copyModsBtn = 0;
-        p->setCaption(*s->title);
-        g_roleBtn  = p->setLineButton(*s->roleKey,  *s->roleCap,  0);
-        g_transBtn = p->setLineButton(*s->transKey, *s->transCap, 0);
-        g_connBtn  = p->setLineButton(*s->connKey,  *s->connCap,  0);
-        p->addSpace(0, 0.35f);
-        // Connection-status debug line (coloured white below, outside SEH).
-        g_debugLine = p->setLine(*s->dbgKey, *s->dbgVal, *s->empty, 0, false, true);
-        if (s->showMods) {
-            g_modsLine = p->setLine(*s->modsKey, *s->modsVal, *s->empty, 0, false, true);
-            if (s->showCopyMods)
-                g_copyModsBtn = p->setLineButton(*s->copyModsKey, *s->copyModsCap, 0);
-        }
-        p->addSpace(0, 0.35f);
-        if (s->showInvite) {
-            g_inviteBtn = p->setLineButton(*s->inviteKey, *s->inviteCap, 0);
-            if (s->pickOpen) {
-                g_inviteLine = p->setLine(*s->invStKey, *s->invStVal, *s->empty, 0, false, true);
-                for (int i = 0; i < s->pickN; ++i)
-                    g_pickBtns[i] = p->setLineButton(*s->pickKey[i], *s->pickCap[i], 0);
-            }
-            p->addSpace(0, 0.35f);
-        }
-        if (!s->pickOpen) {
-            // Friend's SteamID: pasted in-panel (Copy on their side -> Paste here).
-            g_peerLine = p->setLine(*s->peerKey, *s->peerVal, *s->empty, 0, false, true);
-            g_pasteIdBtn = p->setLineButton(*s->pasteKey, *s->pasteCap, 0);
-            p->addSpace(0, 0.35f);
-            g_selfLine = p->setLine(*s->selfKey, *s->selfVal, *s->empty, 0, false, true);
-            g_copyIdBtn = p->setLineButton(*s->copyKey, *s->copyCap, 0);
+        for (int i = 0; i < MAX_ROWS; ++i) { g_rowLine[i] = 0; g_rowBtn[i] = 0; }
+        p->setCaption(*title);
+        for (int i = 0; i < n; ++i) {
+            if (rows[i].kind == ROW_SPACE)
+                p->addSpace(0, 0.35f);
+            else if (rows[i].kind == ROW_BUTTON)
+                g_rowBtn[i] = p->setLineButton(*rows[i].key, *rows[i].text, 0);
+            else
+                g_rowLine[i] = p->setLine(*rows[i].key, *rows[i].text, *empty, 0, false, true);
         }
         p->_NV_update();
     } __except (EXCEPTION_EXECUTE_HANDLER) {}
 }
 
-// Colour a line's key + value TextBoxes for readability. Runs AFTER
-// panelBuildSeh's _NV_update (the w1/w2 widgets exist by then). MyGUI::Colour is a
-// trivial 4-float struct (no destructor), so it may live in the SEH frame.
-// yellow=true tints the value column amber - used for the join's live
-// "Streaming host world..." transfer line so it reads as in-progress activity.
-void dbgColourSeh(DataPanelLine* line, bool yellow) {
+// Colour a line's TextBoxes. Runs AFTER panelBuildSeh's _NV_update (the w1/w2
+// widgets exist by then). MyGUI::Colour is a trivial 4-float struct (no
+// destructor), so it may live in the SEH frame.
+void lineColourSeh(DataPanelLine* line, float r, float g, float b) {
     if (!line) return;
     __try {
-        MyGUI::Colour white(1.0f, 1.0f, 1.0f, 1.0f);
-        MyGUI::Colour amber(1.0f, 0.82f, 0.20f, 1.0f);
-        if (line->w1) line->w1->setTextColour(white);
-        if (line->w2) line->w2->setTextColour(yellow ? amber : white);
+        MyGUI::Colour c(r, g, b, 1.0f);
+        if (line->w1) line->w1->setTextColour(c);
+        if (line->w2) line->w2->setTextColour(c);
     } __except (EXCEPTION_EXECUTE_HANDLER) {}
+}
+void colourRow(DataPanelLine* line, int col) {
+    switch (col) {
+    case COL_GREY:  lineColourSeh(line, 0.72f, 0.72f, 0.72f); break;
+    case COL_RED:   lineColourSeh(line, 1.00f, 0.42f, 0.36f); break;
+    case COL_AMBER: lineColourSeh(line, 1.00f, 0.82f, 0.20f); break;
+    case COL_GREEN: lineColourSeh(line, 0.45f, 0.95f, 0.45f); break;
+    default:        lineColourSeh(line, 1.00f, 1.00f, 1.00f); break;
+    }
+}
+void bindButton(DataPanelLine_Button* b, int act) {
+    if (!b) return;
+    switch (act) {
+    case ACT_ROLE:       b->callback = MyGUI::newDelegate(&onRoleBtn); break;
+    case ACT_TRANS:      b->callback = MyGUI::newDelegate(&onTransBtn); break;
+    case ACT_CONN:       b->callback = MyGUI::newDelegate(&onConnBtn); break;
+    case ACT_COPYID:     b->callback = MyGUI::newDelegate(&onCopyIdBtn); break;
+    case ACT_PASTEID:    b->callback = MyGUI::newDelegate(&onPasteIdBtn); break;
+    case ACT_COPYMODS:   b->callback = MyGUI::newDelegate(&onCopyModsBtn); break;
+    case ACT_INVITE:     b->callback = MyGUI::newDelegate(&onInviteBtn); break;
+    case ACT_BACK:       b->callback = MyGUI::newDelegate(&onBackBtn); break;
+    case ACT_ADVANCED:   b->callback = MyGUI::newDelegate(&onAdvancedBtn); break;
+    case ACT_DISCONNECT: b->callback = MyGUI::newDelegate(&onDisconnectBtn); break;
+    case ACT_PICK0 + 0:  b->callback = MyGUI::newDelegate(&onPickBtn<0>); break;
+    case ACT_PICK0 + 1:  b->callback = MyGUI::newDelegate(&onPickBtn<1>); break;
+    case ACT_PICK0 + 2:  b->callback = MyGUI::newDelegate(&onPickBtn<2>); break;
+    case ACT_PICK0 + 3:  b->callback = MyGUI::newDelegate(&onPickBtn<3>); break;
+    case ACT_PICK0 + 4:  b->callback = MyGUI::newDelegate(&onPickBtn<4>); break;
+    case ACT_PICK0 + 5:  b->callback = MyGUI::newDelegate(&onPickBtn<5>); break;
+    default: break;
+    }
+}
+
+// The invite layer's status, worded for the player (codes: steaminvite::ST_*).
+std::string inviteStatusText(int code, const char* arg) {
+    std::string who = (arg && arg[0]) ? std::string(arg) : std::string(L("tu amigo", "your friend"));
+    switch (code) {
+    case 1: return L("Elige a qu\xC3\xA9 amigo invitar:", "Pick a friend to invite:");
+    case 2: return std::string(L("Invitaci\xC3\xB3n enviada a ", "Invite sent to ")) + who +
+                   L(". Esperando a que acepte...", ". Waiting for them to accept...");
+    case 9: return L("Invitaci\xC3\xB3n enviada. Esperando a que acepte...", "Invite sent. Waiting for them to accept...");
+    case 3: return L("No se pudo crear la sala de Steam. Vuelve a intentarlo.",
+                     "Could not create the Steam lobby. Try again.");
+    case 4: return L("Tu amigo ha aceptado. Conectando...", "Your friend accepted. Connecting...");
+    case 5: return L("Entrando en la partida de tu amigo...", "Joining your friend's game...");
+    case 6: return L("Conectando con tu amigo...", "Connecting to your friend...");
+    case 7: return L("Tu amigo tiene otra versi\xC3\xB3n de KenshiCoop. Instalad la misma los dos.",
+                     "Your friend has a different KenshiCoop version. Install the same one.");
+    case 8: return L("Steam no est\xC3\xA1 disponible. Abre Kenshi desde Steam.",
+                     "Steam is not available. Start Kenshi from Steam.");
+    default: return std::string();
+    }
 }
 
 // Arm a freshly-minted panel: register it for ForgottenGUI's per-frame refresh
@@ -472,6 +510,10 @@ void panelDestroySeh(ForgottenGUI* g, DatapanelGUI* p) {
         g->removeDatapanelFromUpdateList(p);
         g->destroy(p);
     } __except (EXCEPTION_EXECUTE_HANDLER) {}
+}
+
+void clearRowPointers() {
+    for (int i = 0; i < MAX_ROWS; ++i) { g_rowLine[i] = 0; g_rowBtn[i] = 0; }
 }
 
 } // namespace
@@ -498,8 +540,9 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
     } else {
         g_selfIdStr.clear();
     }
+    g_peerModsCfg = st->peerModsCfg ? std::string(st->peerModsCfg) : std::string();
 
-    // F2 rising edge toggles the panel open/closed.
+    // F2 rising edge toggles the panel open/closed (it always opens on MAIN).
     bool f2 = (GetAsyncKeyState(VK_F2) & 0x8000) != 0;
     if (f2 && !g_panel.f2Down) {
         if (!g_panel.open) {
@@ -508,18 +551,14 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
             g_panel.connectedFlag = st->running;
             g_panel.lastConnected = st->running;
             g_panel.lastChkVal    = st->running;
+            g_panel.view          = VIEW_MAIN;
             g_panel.open = true;
             g_panel.needsRebuild = true;
             coop::logLine("[coop-ui] panel opened");
         } else {
             panelDestroySeh(g, g_panel.panel);
             g_panel.panel = 0; g_panel.built = false;
-            g_roleBtn = 0; g_transBtn = 0; g_connBtn = 0; g_copyIdBtn = 0;
-            g_pasteIdBtn = 0;
-            g_debugLine = 0; g_peerLine = 0; g_selfLine = 0;
-            g_inviteBtn = 0; g_inviteLine = 0;
-            for (int i = 0; i < MAX_PICK; ++i) g_pickBtns[i] = 0;
-            g_modsLine = 0; g_copyModsBtn = 0;
+            clearRowPointers();
             g_panel.open = false;
             coop::logLine("[coop-ui] panel closed");
         }
@@ -528,10 +567,8 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
 
     if (!g_panel.open) return;
 
-    // Keep the Online/Offline toggle honest when the session state changes
-    // underneath us (a peer-driven connect, a failed connect that stopped, etc):
-    // resync the desired flag to the real state and rebuild so the button caption
-    // + debug line reflect it.
+    // Keep the Online/Offline state honest when the session changes underneath us
+    // (an invite connected us, a failed connect stopped, etc.).
     if (st->running != g_panel.lastConnected) {
         g_panel.lastConnected = st->running;
         g_panel.connectedFlag = st->running;
@@ -542,50 +579,123 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
         g_panel.needsRebuild = true;
     }
 
-    std::string detail = st->detail ? std::string(st->detail) : std::string();
-    if (detail != g_panel.lastStatus) g_panel.needsRebuild = true;
+    // ---- What the player sees ----------------------------------------------------
+    std::string status;
+    int statusCol;
+    if (st->running && st->peerPresent) {
+        status = st->isHost ? L("Conectado: tu amigo est\xC3\xA1 en tu partida", "Connected: your friend is in your game")
+                            : L("Conectado a la partida de tu amigo", "Connected to your friend's game");
+        statusCol = COL_GREEN;
+    } else if (st->running) {
+        status = st->isHost ? L("Esperando a tu amigo...", "Waiting for your friend...")
+                            : L("Conectando con tu amigo...", "Connecting to your friend...");
+        statusCol = COL_AMBER;
+    } else {
+        status = L("Sin conectar", "Not connected");
+        statusCol = COL_RED;
+    }
+    std::string transfer = st->transferDetail ? std::string(st->transferDetail) : std::string();
+    std::string inviteText = inviteStatusText(st->inviteCode, st->inviteArg);
+    bool canInvite = st->inviteReady && g_panel.steamFlag && !st->peerPresent &&
+                     (!st->running || st->isHost);
+    if (g_panel.view == VIEW_PICK && !canInvite) g_panel.view = VIEW_MAIN;
 
-    // Join save-transfer line (throttled to whole-percent by the caller): rebuild
-    // when it changes so the "Streaming host world... NN%" line advances live.
-    std::string transfer = st->transferDetail ? std::string(st->transferDetail)
-                                               : std::string();
-    if (transfer != g_panel.lastTransfer) g_panel.needsRebuild = true;
-
-    // Steam invite: offered only when the invite layer is up, Steam is the armed
-    // transport and nobody is connected yet. The picker lists online friends
-    // (the rows arrive sorted in-Kenshi first). Its visible content is folded
-    // into one signature so the rows rebuild only when something shown changes.
-    bool showInvite = st->inviteReady && g_panel.steamFlag && !st->peerPresent;
-    if (!showInvite) g_pickOpen = false;
-    std::string inviteStatus = st->inviteStatus ? std::string(st->inviteStatus)
-                                                : std::string();
-    int pickN = 0;
+    std::vector<Row> rows;
     unsigned long long pickIds[MAX_PICK] = {0};
-    std::string pickCaps[MAX_PICK];
-    std::string inviteSig;
-    if (g_pickOpen) {
+    if (g_panel.view == VIEW_PICK) {
+        addLine(rows, status, statusCol);
+        addLine(rows, inviteText.empty() ? std::string(L("Buscando amigos...", "Looking for friends...")) : inviteText,
+                COL_WHITE);
+        addSpace(rows);
+        int pickN = 0;
         for (int i = 0; i < st->friendN && pickN < MAX_PICK; ++i) {
             const CoopFriendRow& f = st->friends[i];
             if (f.state == 0 || f.id == 0) continue; // offline friends can't accept
             pickIds[pickN] = f.id;
-            pickCaps[pickN] = std::string("Invite ") + (f.name ? f.name : "?") +
-                              (f.state == 2 ? "    (in Kenshi)" : "    (online)");
-            inviteSig += pickCaps[pickN];
-            inviteSig += '\n';
+            addButton(rows, std::string(L("Invitar a ", "Invite ")) + (f.name ? f.name : "?") +
+                            (f.state == 2 ? L("    (jugando a Kenshi)", "    (playing Kenshi)")
+                                          : L("    (conectado a Steam)", "    (online)")),
+                      ACT_PICK0 + pickN);
             ++pickN;
         }
+        if (pickN == 0)
+            addLine(rows, L("Ning\xC3\xBAn amigo conectado a Steam ahora mismo.", "No friends online on Steam right now."),
+                    COL_GREY);
+        addSpace(rows);
+        addButton(rows, L("Volver", "Back"), ACT_BACK);
+    } else if (g_panel.view == VIEW_ADVANCED) {
+        addLine(rows, status + (g_panel.steamFlag ? "  (Steam)" : "  (UDP)"), statusCol);
+        addSpace(rows);
+        addButton(rows, std::string(L("Rol: ", "Role: ")) +
+                        (g_panel.hostFlag ? L("ANFITRI\xC3\x93N", "HOST") : L("UNIRSE", "JOIN")) +
+                        L("    (cambiar)", "    (switch)"), ACT_ROLE);
+        addButton(rows, std::string(L("Conexi\xC3\xB3n por: ", "Transport: ")) +
+                        (g_panel.steamFlag ? "STEAM" : "UDP") + L("    (cambiar)", "    (switch)"), ACT_TRANS);
+        addButton(rows, std::string(L("Estado: ", "Connection: ")) +
+                        (g_panel.connectedFlag ? L("CONECTADO", "ONLINE") : L("DESCONECTADO", "OFFLINE")) +
+                        L("    (cambiar)", "    (switch)"), ACT_CONN);
+        if (!g_panel.steamFlag)
+            addLine(rows, L("UDP: la IP y el puerto est\xC3\xA1n en mods\\KenshiCoop\\coop_config.json",
+                            "UDP: IP and port are in mods\\KenshiCoop\\coop_config.json"), COL_GREY);
+        addSpace(rows);
+        // Friend's SteamID: prefer the value pasted in-panel this session; fall
+        // back to the config (steamPeer). Only the last 4 digits are shown.
+        unsigned long long peerShown = g_pastedPeer ? g_pastedPeer : (unsigned long long)st->peerSteamId;
+        if (peerShown != 0)
+            addLine(rows, std::string(L("Steam ID de tu amigo: ", "Friend's Steam ID: ")) +
+                          coop::maskSteamId64(peerShown), COL_WHITE);
+        else if (g_pasteFailed)
+            addLine(rows, L("Lo copiado no era un Steam ID: copia el de tu amigo y reintenta.",
+                            "The clipboard was not a Steam ID: copy your friend's and retry."), COL_AMBER);
+        else
+            addLine(rows, L("Steam ID de tu amigo: (p\xC3\xA9galo con el bot\xC3\xB3n)", "Friend's Steam ID: (paste it below)"),
+                    COL_GREY);
+        addButton(rows, L("Pegar el Steam ID de tu amigo", "Paste friend's Steam ID"), ACT_PASTEID);
+        addLine(rows, std::string(L("Tu Steam ID: ", "Your Steam ID: ")) +
+                      (st->selfSteamId ? coop::maskSteamId64((unsigned long long)st->selfSteamId)
+                                       : std::string(L("(Steam no est\xC3\xA1 abierto)", "(Steam not running)"))),
+                COL_WHITE);
+        addButton(rows, L("Copiar mi Steam ID", "Copy my Steam ID"), ACT_COPYID);
+        addSpace(rows);
+        addButton(rows, L("Volver", "Back"), ACT_BACK);
+    } else {
+        addLine(rows, status, statusCol);
+        if (!transfer.empty()) addLine(rows, transfer, COL_AMBER);
+        if (!inviteText.empty() && st->inviteCode != 1) addLine(rows, inviteText, COL_WHITE);
+        if (st->modsLine) {
+            addLine(rows, st->modsLine, st->modsWarn ? COL_AMBER : COL_GREEN);
+            if (st->modsWarn && !g_peerModsCfg.empty())
+                addButton(rows, L("Copiar la lista de mods de tu amigo", "Copy friend's mod list"), ACT_COPYMODS);
+        }
+        addSpace(rows);
+        if (canInvite) {
+            addButton(rows, L("Invitar a un amigo de Steam", "Invite a Steam friend"), ACT_INVITE);
+            addLine(rows, L("Tu amigo acepta la invitaci\xC3\xB3n en Steam y entr\xC3\xA1is los dos.",
+                            "Your friend accepts the Steam invite and you both connect."), COL_GREY);
+        } else if (!st->inviteReady && !st->running) {
+            addLine(rows, L("Steam no est\xC3\xA1 disponible: abre Kenshi desde Steam o usa Opciones avanzadas.",
+                            "Steam is not available: start Kenshi from Steam or use Advanced options."), COL_AMBER);
+        }
+        if (!st->running) {
+            addLine(rows, L("\xC2\xBFTe han invitado? Acepta la invitaci\xC3\xB3n de Steam (con Kenshi abierto; vale el men\xC3\xBA).",
+                            "Invited? Accept the Steam invite (with Kenshi open; the main menu is fine)."), COL_GREY);
+        } else {
+            addButton(rows, st->peerPresent ? L("Desconectar", "Disconnect") : L("Cancelar", "Cancel"),
+                      ACT_DISCONNECT);
+        }
+        addSpace(rows);
+        addButton(rows, L("Opciones avanzadas", "Advanced options"), ACT_ADVANCED);
     }
-    inviteSig += showInvite ? "1" : "0";
-    inviteSig += g_pickOpen ? "1" : "0";
-    inviteSig += inviteStatus;
-    if (inviteSig != g_panel.lastInvite) g_panel.needsRebuild = true;
+    if ((int)rows.size() > MAX_ROWS) rows.resize(MAX_ROWS);
 
-    // Mods row: shown once the peer's list has been compared.
-    g_peerModsCfg = st->peerModsCfg ? std::string(st->peerModsCfg) : std::string();
-    std::string modsVal = st->modsLine ? std::string(st->modsLine) : std::string();
-    std::string modsSig = modsVal + (st->modsWarn ? "!" : "") +
-                          (g_peerModsCfg.empty() ? "" : "c");
-    if (modsSig != g_panel.lastMods) g_panel.needsRebuild = true;
+    std::string sig;
+    for (size_t i = 0; i < rows.size(); ++i) {
+        char h[16];
+        _snprintf(h, sizeof(h) - 1, "%d/%d/%d|", rows[i].kind, rows[i].act, rows[i].col);
+        h[sizeof(h) - 1] = '\0';
+        sig += h; sig += rows[i].text; sig += '\n';
+    }
+    if (sig != g_panel.lastSig) g_panel.needsRebuild = true;
 
     // Create the window once (outside SEH - see the header note on C2712).
     // Layer MUST be "Info": spike 48 proved createFloatingLabel renders non-null
@@ -604,137 +714,37 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
 
     // (Re)populate the rows when anything visible changed.
     if (g_panel.panel && (g_panel.needsRebuild || !g_panel.built)) {
-        std::string title    = "Co-op Session    -    F2 to close";
-        std::string roleKey  = "role";
-        std::string roleCap  = std::string("Role: ") + (g_panel.hostFlag ? "HOST" : "JOIN") + "    (switch)";
-        std::string transKey = "trans";
-        std::string transCap = std::string("Transport: ") + (g_panel.steamFlag ? "STEAM" : "UDP") + "    (switch)";
-        std::string connKey  = "conn";
-        std::string connCap  = std::string("Connection: ") + (g_panel.connectedFlag ? "ONLINE" : "OFFLINE") + "    (switch)";
-
-        // White debug line: describes the live connection state + type. Reflects
-        // the ACTUAL running session when online; the armed toggles when offline.
-        std::string transStr = (st->transportSel == 0) ? "Steam" : "UDP";
-        std::string dbgKey   = "Connection status";
-        std::string dbgVal;
-        if (st->running) {
-            if (st->peerPresent)
-                dbgVal = (st->isHost ? std::string("Hosting") : std::string("Joining")) +
-                         " over " + transStr + " - peer connected";
-            else if (st->isHost)
-                dbgVal = std::string("Hosting over ") + transStr + " - waiting for peer...";
-            else
-                dbgVal = std::string("Joining over ") + transStr + " - connecting to host...";
-        } else {
-            dbgVal = std::string("Offline - will ") + (g_panel.hostFlag ? "host" : "join") +
-                     " over " + (g_panel.steamFlag ? "Steam" : "UDP") + " on Connect";
-        }
-        // A join streaming the host's world at the menu has no leader for the
-        // screen overlay, so surface the live progress here instead (amber).
-        if (!transfer.empty()) { dbgVal = transfer; dbgKey = "World transfer"; }
-
-        // Friend's SteamID: prefer the value pasted in-panel this session; fall
-        // back to the config (steamPeer, mainly for advanced/back-compat use).
-        // Both id rows show only the last 4 digits - the panel is often on screen
-        // while streaming. Nothing needs the full digits by eye: Copy puts the
-        // real id on the clipboard and Paste takes it back off.
-        std::string peerKey = "Friend's Steam ID";
-        std::string peerVal;
-        unsigned long long peerShown = g_pastedPeer ? g_pastedPeer
-                                                     : (unsigned long long)st->peerSteamId;
-        if (peerShown != 0) {
-            peerVal = coop::maskSteamId64(peerShown);
-        } else if (g_pasteFailed) {
-            peerVal = "(clipboard was not a Steam ID - copy theirs and retry)";
-        } else {
-            peerVal = "(click Paste friend's Steam ID)";
-        }
-        std::string pasteKey = "pasteid";
-        std::string pasteCap = "Paste friend's Steam ID";
-
-        std::string selfKey  = "Your Steam ID";
-        std::string selfVal  = st->selfSteamId
-                                   ? coop::maskSteamId64((unsigned long long)st->selfSteamId)
-                                   : std::string("(Steam not running)");
-        std::string copyKey  = "copyid";
-        std::string copyCap  = "Copy my Steam ID";
-        std::string empty    = "";
-
-        PanelStrings ps;
-        ps.title = &title; ps.roleKey = &roleKey; ps.roleCap = &roleCap;
-        ps.transKey = &transKey; ps.transCap = &transCap;
-        ps.connKey = &connKey; ps.connCap = &connCap;
-        ps.dbgKey = &dbgKey; ps.dbgVal = &dbgVal;
-        ps.peerKey = &peerKey; ps.peerVal = &peerVal;
-        ps.pasteKey = &pasteKey; ps.pasteCap = &pasteCap;
-        ps.selfKey = &selfKey; ps.selfVal = &selfVal;
-        ps.copyKey = &copyKey; ps.copyCap = &copyCap;
-        ps.empty = &empty;
-
-        std::string inviteKey = "invite";
-        std::string inviteCap = g_pickOpen ? "Hide friend list"
-                                           : "Invite a Steam friend    (you host)";
-        std::string invStKey  = "Invite";
-        std::string invStVal  = inviteStatus.empty() ? std::string("Loading friends...")
-                                                     : inviteStatus;
-        if (g_pickOpen && pickN == 0 && inviteStatus.empty())
-            invStVal = "No friends online";
-        std::string pickKeys[MAX_PICK];
-        std::string modsKey     = "Mods";
-        std::string copyModsKey = "copymods";
-        std::string copyModsCap = "Copy friend's mod list";
-        ps.modsKey = &modsKey; ps.modsVal = &modsVal;
-        ps.copyModsKey = &copyModsKey; ps.copyModsCap = &copyModsCap;
-        ps.showMods     = !modsVal.empty();
-        ps.showCopyMods = ps.showMods && st->modsWarn && !g_peerModsCfg.empty();
-        ps.showInvite = showInvite;
-        ps.pickOpen   = showInvite && g_pickOpen;
-        ps.pickN      = pickN;
-        ps.inviteKey = &inviteKey; ps.inviteCap = &inviteCap;
-        ps.invStKey = &invStKey; ps.invStVal = &invStVal;
-        for (int i = 0; i < MAX_PICK; ++i) {
+        std::string title = L("Co-op    -    F2 para cerrar", "Co-op    -    F2 to close");
+        std::string empty;
+        std::vector<std::string> keys(rows.size());
+        RowPod pods[MAX_ROWS];
+        for (size_t i = 0; i < rows.size(); ++i) {
             char k[16];
-            _snprintf(k, sizeof(k) - 1, "pick%d", i);
+            _snprintf(k, sizeof(k) - 1, "kc_row%u", (unsigned)i);
             k[sizeof(k) - 1] = '\0';
-            pickKeys[i] = k;
-            ps.pickKey[i] = &pickKeys[i];
-            ps.pickCap[i] = &pickCaps[i];
-            g_pickIds[i]  = (i < pickN) ? pickIds[i] : 0;
+            keys[i] = k;
+            pods[i].kind = rows[i].kind;
+            pods[i].key  = &keys[i];
+            pods[i].text = &rows[i].text;
         }
-        panelBuildSeh(g_panel.panel, &ps);
+        for (int i = 0; i < MAX_PICK; ++i) g_pickIds[i] = pickIds[i];
+        panelBuildSeh(g_panel.panel, &title, pods, (int)rows.size(), &empty);
 
-        // Delegate assignment + white-colouring live OUTSIDE the SEH frame (pointer
+        // Delegate assignment + colouring live OUTSIDE the SEH frame (pointer
         // targets are valid post-build; assignment can't fault) so no delegate
         // temporary lands in it.
-        if (g_roleBtn)    g_roleBtn->callback    = MyGUI::newDelegate(&onRoleBtn);
-        if (g_transBtn)   g_transBtn->callback   = MyGUI::newDelegate(&onTransBtn);
-        if (g_connBtn)    g_connBtn->callback    = MyGUI::newDelegate(&onConnBtn);
-        if (g_copyIdBtn)  g_copyIdBtn->callback  = MyGUI::newDelegate(&onCopyIdBtn);
-        if (g_pasteIdBtn) g_pasteIdBtn->callback = MyGUI::newDelegate(&onPasteIdBtn);
-        if (g_inviteBtn)  g_inviteBtn->callback  = MyGUI::newDelegate(&onInviteBtn);
-        if (g_copyModsBtn) g_copyModsBtn->callback = MyGUI::newDelegate(&onCopyModsBtn);
-        if (g_pickBtns[0]) g_pickBtns[0]->callback = MyGUI::newDelegate(&onPickBtn<0>);
-        if (g_pickBtns[1]) g_pickBtns[1]->callback = MyGUI::newDelegate(&onPickBtn<1>);
-        if (g_pickBtns[2]) g_pickBtns[2]->callback = MyGUI::newDelegate(&onPickBtn<2>);
-        if (g_pickBtns[3]) g_pickBtns[3]->callback = MyGUI::newDelegate(&onPickBtn<3>);
-        if (g_pickBtns[4]) g_pickBtns[4]->callback = MyGUI::newDelegate(&onPickBtn<4>);
-        if (g_pickBtns[5]) g_pickBtns[5]->callback = MyGUI::newDelegate(&onPickBtn<5>);
-        dbgColourSeh(g_debugLine, !transfer.empty()); // amber while streaming
-        dbgColourSeh(g_peerLine, false);
-        dbgColourSeh(g_selfLine, false);
-        dbgColourSeh(g_inviteLine, false);
-        dbgColourSeh(g_modsLine, st->modsWarn); // amber on mismatch
+        for (size_t i = 0; i < rows.size(); ++i) {
+            if (g_rowBtn[i]) bindButton(g_rowBtn[i], rows[i].act);
+            if (g_rowLine[i]) colourRow(g_rowLine[i], rows[i].col);
+        }
 
         g_panel.built = true;
         g_panel.needsRebuild = false;
-        g_panel.lastStatus = detail;
-        g_panel.lastTransfer = transfer;
-        g_panel.lastInvite = inviteSig;
-        g_panel.lastMods = modsSig;
+        g_panel.lastSig = sig;
     }
 
-    // Connect / disconnect on the Online/Offline toggle edge (edge, not level, so
-    // a connect that hasn't reported running yet is not re-fired every tick). The
+    // Connect / disconnect on the Online/Offline edge (edge, not level, so a
+    // connect that hasn't reported running yet is not re-fired every tick). The
     // pasted friend id (0 if none) is handed to the plugin, which lets a non-zero
     // value override the config steamPeer; UDP ip/port still come from the config.
     if (g_panel.connectedFlag != g_panel.lastChkVal) {
@@ -792,7 +802,7 @@ int overlayColorId(int state) { return state == 2 ? 0 : (state == 1 ? 2 : 1); }
 // Put the freshly-minted container in its pixel box and mint the label inside it.
 // createLabelAbs takes its text by const-ref and MyGUI::Align is a trivial int
 // wrapper (no destructor), so this whole frame is SEH-safe - the same rule
-// dbgColourSeh follows for MyGUI::Colour.
+// lineColourSeh follows for MyGUI::Colour.
 MyGUI::TextBox* overlayBuildSeh(MyGUI::Window* box, const std::string* text) {
     __try {
         box->setCoord(kOverlayX, kOverlayY, kOverlayW, kOverlayH);

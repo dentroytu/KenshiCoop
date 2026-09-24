@@ -84,28 +84,29 @@ inline ModDiff diffModLists(const std::vector<ModEntry>& mine,
     return d;
 }
 
-// One line for the F2 panel / log, e.g. "2 missing, 1 extra, order differs at #7".
-inline std::string summarizeModDiff(const ModDiff& d) {
-    if (d.same()) return "match";
+// One line for the F2 panel / log, e.g. "2 missing, 1 extra, order differs at #7"
+// (Spanish with es=true, for the panel; logs stay English).
+inline std::string summarizeModDiff(const ModDiff& d, bool es = false) {
+    if (d.same()) return es ? "iguales" : "match";
     std::string s;
     char b[48];
     if (!d.missing.empty()) {
-        _snprintf(b, sizeof(b) - 1, "%u missing", (unsigned)d.missing.size());
+        _snprintf(b, sizeof(b) - 1, es ? "te faltan %u" : "%u missing", (unsigned)d.missing.size());
         b[sizeof(b) - 1] = '\0'; s += b;
     }
     if (!d.extra.empty()) {
-        _snprintf(b, sizeof(b) - 1, "%s%u extra", s.empty() ? "" : ", ",
+        _snprintf(b, sizeof(b) - 1, es ? "%ste sobran %u" : "%s%u extra", s.empty() ? "" : ", ",
                   (unsigned)d.extra.size());
         b[sizeof(b) - 1] = '\0'; s += b;
     }
     if (!d.versionDiff.empty()) {
-        _snprintf(b, sizeof(b) - 1, "%s%u other version", s.empty() ? "" : ", ",
-                  (unsigned)d.versionDiff.size());
+        _snprintf(b, sizeof(b) - 1, es ? "%s%u con otra versi\xC3\xB3n" : "%s%u other version",
+                  s.empty() ? "" : ", ", (unsigned)d.versionDiff.size());
         b[sizeof(b) - 1] = '\0'; s += b;
     }
     if (d.orderAt != 0) {
-        _snprintf(b, sizeof(b) - 1, "%sorder differs at #%d", s.empty() ? "" : ", ",
-                  d.orderAt);
+        _snprintf(b, sizeof(b) - 1, es ? "%sorden distinto desde el #%d" : "%sorder differs at #%d",
+                  s.empty() ? "" : ", ", d.orderAt);
         b[sizeof(b) - 1] = '\0'; s += b;
     }
     return s;

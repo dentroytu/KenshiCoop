@@ -1181,6 +1181,8 @@ static void testModList() {
           coop::modTextHash(mine, (unsigned)std::strlen(mine)) !=
           coop::modTextHash(theirs, (unsigned)std::strlen(theirs)));
     CHECK("mods.cfg text", coop::modsCfgText(vb) == "C.mod\r\nA.mod\r\nB.mod\r\n");
+    CHECK("diff summary (es)", coop::summarizeModDiff(d, true) ==
+          "te faltan 1, te sobran 1, 1 con otra versi\xC3\xB3n, orden distinto desde el #1");
 
     // Same set, different order only.
     const char* reord = "B.mod|3\nA.mod|1\nC.mod|2\n";
