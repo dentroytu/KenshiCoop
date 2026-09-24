@@ -21,6 +21,7 @@
 
 #include <enet/enet.h>
 #include <windows.h>
+#include "../netproto/Wire.h" // refusal codes carried in DISCONNECT data
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
@@ -51,6 +52,7 @@ static unsigned int g_dropped = 0; // datagrams eaten by simulated loss
 static unsigned int g_oversize = 0;// datagrams REJECTED for busting the cap
 static unsigned int g_maxSeen = 0; // largest accepted datagram
 static unsigned int g_lossPct = 0; // simulated loss (deterministic PRNG)
+static unsigned int g_dropServerNext = 0; // drop the server's next N datagrams outright
 
 static unsigned int nextRand() { // xorshift32, deterministic run-to-run
     static unsigned int s = 0xC0FFEEu;
@@ -83,6 +85,7 @@ static int ENET_CALLBACK hookSend(ENetSocket s, const ENetAddress* addr,
     ++g_sent;
     if ((int)len > STEAM_MAX_DATAGRAM) { ++g_oversize; return -1; } // Steam would reject
     if (len > g_maxSeen) g_maxSeen = len;
+    if (s == SOCK_SERVER && g_dropServerNext > 0) { --g_dropServerNext; ++g_dropped; return (int)len; }
     if (g_lossPct > 0 && (nextRand() % 100u) < g_lossPct) { ++g_dropped; return (int)len; }
     Datagram d;
     d.bytes.assign(buf, buf + len);
@@ -129,15 +132,18 @@ struct Got {
     std::vector<unsigned char> lastPacket;
     enet_uint8 lastChannel;
     unsigned int packets;
-    Got() : connected(false), disconnected(false), lastChannel(0xFF), packets(0) {}
+    ENetPeer* peer;            // the remote end, from the CONNECT event
+    enet_uint32 disconnectData; // ev.data of the DISCONNECT event
+    Got() : connected(false), disconnected(false), lastChannel(0xFF), packets(0),
+            peer(0), disconnectData(0) {}
 };
 
 static void pump(ENetHost* h, Got& got) {
     ENetEvent ev;
     while (enet_host_service(h, &ev, 0) > 0) {
         switch (ev.type) {
-        case ENET_EVENT_TYPE_CONNECT:    got.connected = true; break;
-        case ENET_EVENT_TYPE_DISCONNECT: got.disconnected = true; break;
+        case ENET_EVENT_TYPE_CONNECT:    got.connected = true; got.peer = ev.peer; break;
+        case ENET_EVENT_TYPE_DISCONNECT: got.disconnected = true; got.disconnectData = ev.data; break;
         case ENET_EVENT_TYPE_RECEIVE:
             got.lastPacket.assign(ev.packet->data, ev.packet->data + ev.packet->dataLength);
             got.lastChannel = ev.channelID;
@@ -238,14 +244,33 @@ int main() {
         check(g_oversize == 0, b);
     }
 
-    // 5) Clean disconnect over the tunnel.
+    // 5) The host refuses the peer over the tunnel, under loss: the refusal
+    //    code in ENet's DISCONNECT data must reach the client unchanged, since
+    //    it is how a client learns why it was refused (Wire.h refuseEncode).
+    //    The first datagram carrying the DISCONNECT is dropped on purpose, so
+    //    the code has to arrive by retransmission; wall-clock loop again.
     {
-        enet_peer_disconnect(peer, 0);
-        for (i = 0; i < 2000 && !(cGot.disconnected && sGot.disconnected); ++i) {
-            pump(server, sGot); pump(client, cGot); Sleep(0);
+        const enet_uint32 code =
+            coop::refuseEncode(coop::REFUSE_VERSION, false, coop::PROTOCOL_VERSION);
+        check(sGot.peer != 0, "server kept its peer from the CONNECT event");
+        const unsigned int droppedBefore = g_dropped;
+        g_dropServerNext = 1;
+        if (sGot.peer) enet_peer_disconnect(sGot.peer, code);
+        g_lossPct = 15;
+        DWORD deadline = GetTickCount() + 20000;
+        while (GetTickCount() < deadline && !(cGot.disconnected && sGot.disconnected)) {
+            pump(server, sGot); pump(client, cGot); Sleep(1);
         }
+        g_lossPct = 0;
         check(cGot.disconnected, "client DISCONNECT event");
         check(sGot.disconnected, "server DISCONNECT event");
+        check(g_dropServerNext == 0 && g_dropped > droppedBefore,
+              "  ... the first DISCONNECT datagram was really dropped");
+        char b[96];
+        _snprintf(b, sizeof(b) - 1, "  ... refusal code intact after retransmission (got 0x%08X)",
+                  (unsigned)cGot.disconnectData);
+        b[sizeof(b) - 1] = '\0';
+        check(cGot.disconnectData == code, b);
     }
 
     enet_host_destroy(client);
