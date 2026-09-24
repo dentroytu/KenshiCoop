@@ -2469,6 +2469,30 @@ void installTitleHook() {
     }
 }
 
+// Process-exit hook (MSVCR100!exit). Every normal quit - the menu's Exit, the
+// window's X, quitting from in-game - leaves WinMain and exits through the CRT,
+// whose static destructors tear the engine GUI down. Our F2 panel must be gone
+// by then or that teardown faults (see coopUiShutdown in game/EngineUi.h).
+typedef void (__cdecl* CrtExitFn)(int);
+CrtExitFn g_crtExit_orig = 0;
+
+void __cdecl crtExit_hook(int code) {
+    coop::engine::coopUiShutdown();
+    g_crtExit_orig(code);
+}
+
+void installExitHook() {
+    HMODULE crt = GetModuleHandleA("MSVCR100.dll");
+    void* target = crt ? (void*)GetProcAddress(crt, "exit") : 0;
+    if (!target ||
+        KenshiLib::AddHook(target, (void*)&crtExit_hook,
+                           (void**)&g_crtExit_orig) != KenshiLib::SUCCESS) {
+        coopErr("KenshiCoop: could not install exit hook (quitting with the F2 panel open may crash)");
+        return;
+    }
+    coopLog("KenshiCoop: exit hook armed (co-op UI torn down before the engine GUI)");
+}
+
 __declspec(dllexport) void startPlugin() {
     coop::loadConfig(g_cfg);
     // The fake clock skew must be armed BEFORE the first log line so every
@@ -2499,6 +2523,8 @@ __declspec(dllexport) void startPlugin() {
     installEngineDetours();
 
     installTitleHook();
+
+    installExitHook();
 
     if (g_cfg.testSeconds > 0) {
         char b[96];
