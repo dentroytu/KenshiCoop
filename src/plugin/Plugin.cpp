@@ -107,6 +107,7 @@ struct SessionController {
     bool         autoLoadDone;     // title auto-load fired (settle gate)
     DWORD        titleFirstTick;   // first title tick (settle gate base)
     bool         peerPresent;      // a peer is connected right now
+    coop::u32    peerId;           // that peer's id (host: its id; join: 0 = the host)
     // Coordinated save (protocol 31).
     std::string  savePending;      // host: save name awaiting quiescence
     coop::u32    saveReqId;        // join: monotonic PKT_SAVE_REQ counter
@@ -140,7 +141,7 @@ struct SessionController {
 
     SessionController()
       : gameStarted(false), gameStartTick(0), autoLoadDone(false),
-        titleFirstTick(0), peerPresent(false),
+        titleFirstTick(0), peerPresent(false), peerId(0),
         saveReqId(0), bootstrapArmed(false),
         swapStartTick(0), swapHookTicks(0),
         loadSuppressOn(false), loadIdOut(0), loadIdSeen(0), loadReqId(0),
@@ -153,6 +154,7 @@ DWORD&       g_gameStartTick   = g_session.gameStartTick;
 bool&        g_autoLoadDone    = g_session.autoLoadDone;
 DWORD&       g_titleFirstTick  = g_session.titleFirstTick;
 bool&        g_peerPresent     = g_session.peerPresent;
+coop::u32&   g_peerId          = g_session.peerId;
 // Active-mod list check (protocol 56) state, shown on the F2 panel/banner.
 std::string  g_modsLine;        // F2 "Mods" row ("" until the peer's list arrives)
 bool         g_modsWarn = false;
@@ -247,7 +249,20 @@ void warnIfNoPortraits(const std::string& name) {
 // clearing the maps - else a reconnect leaves orphaned duplicates or bakes them
 // into the next save. Falls back to a plain map reset if no world has ticked yet.
 void sessionResetForUi() {
+    // Both callers have stopped the net thread, so nothing new can be queued:
+    // presence edges and mod lists still waiting belong to the session being
+    // torn down. Applied later, a stale connect would bring that peer back as a
+    // phantom (present again, save suppression back on).
+    { std::deque<coop::PresenceEdge> stale; g_inbound.drainPresence(stale); }
+    { std::deque<coop::InboundModList> stale; g_inbound.drainModLists(stale); }
+    // Save suppression is only lifted by a leave edge, and a local stop makes
+    // none: a JOIN that pressed Desconectar (or switched to HOST) kept skipping
+    // every later save - manual, quick and auto - in silence.
+    if (!g_cfg.isHost && g_cfg.saveSync)
+        coopLog("[save] JOIN save suppression OFF (session reset)");
+    coop::engine::setSaveSuppress(false);
     g_peerPresent = false;
+    g_peerId = 0;
     g_modsLine.clear();
     g_modsWarn = false;
     g_peerModsCfg.clear();
@@ -357,6 +372,16 @@ void checkModLists() {
     g_inbound.drainModLists(lists);
     for (std::deque<coop::InboundModList>::iterator it = lists.begin();
          it != lists.end(); ++it) {
+        // Only the friend connected right now may paint the Mods row: a list
+        // queued by a peer that left in the same batch must not bring the row
+        // back for someone who is gone.
+        if (!g_peerPresent || it->ownerId != g_peerId) {
+            char s[96];
+            _snprintf(s, sizeof(s) - 1, "[mods] ignored a list from id=%u (not the connected peer)",
+                      (unsigned)it->ownerId);
+            s[sizeof(s) - 1] = '\0'; coopLog(s);
+            continue;
+        }
         const coop::ModListPacket& theirs = it->pkt;
         coop::ModListPacket mine;
         bool mineOk = readOwnModList(mine);
@@ -414,15 +439,29 @@ void checkModLists() {
 // per event. The net thread already logs the handshake; this proves the event
 // reached the game thread cleanly (and is where later stages spawn/sweep).
 void processNetEvents(GameWorld* gw) {
-    std::deque<coop::u32> conns, leaves;
-    g_inbound.drainConnects(conns);
-    g_inbound.drainLeaves(leaves);
-    for (std::deque<coop::u32>::iterator it = conns.begin(); it != conns.end(); ++it) {
+    // Presence edges in ARRIVAL order: a friend's reconnect is leave(old id)
+    // then connect(new id), and it must end with the friend present. (The host
+    // only drains in game, so while it sits at the title a whole reconnect lands
+    // in one batch.)
+    std::deque<coop::PresenceEdge> edges;
+    g_inbound.drainPresence(edges);
+    // A leave's cleanup touches engine bodies (drops carries, despawns proxies).
+    // Those pointers are only safe while the world is live: during a load the
+    // bodies go down with the old world (touching one is the pure-virtual crash
+    // noted at the world-swap skip in mainLoop_hook), so a leave that lands
+    // mid-swap only clears the maps, as the join's title-screen pump does. (A
+    // sub-second flicker counts as a swap too; its proxies are then left
+    // standing - rare, and far better than a crash.)
+    GameWorld* liveGw = (gw && g_gameStarted && g_swapStartTick == 0 &&
+                         coop::engine::gameplayLive(gw)) ? gw : 0;
+    for (std::deque<coop::PresenceEdge>::iterator it = edges.begin(); it != edges.end(); ++it) {
+      if (it->connect) {
         char b[96];
         _snprintf(b, sizeof(b) - 1, "handshake: peer present id=%u (local id=%u)",
-                  (unsigned)*it, (unsigned)g_net.localId());
+                  (unsigned)it->id, (unsigned)g_net.localId());
         b[sizeof(b) - 1] = '\0';
         coopLog(b);
+        g_peerId = it->id;
         // Connect-edge resync (protocol 30): re-announce placed buildings and
         // force an immediate resend pass across all change-gated channels, so
         // a late joiner / reconnector converges now instead of waiting out
@@ -444,17 +483,17 @@ void processNetEvents(GameWorld* gw) {
         // mainLoop_hook arms this instead - covers either connect ordering.
         if (g_cfg.isHost && g_cfg.saveSync && g_gameStarted)
             armConnectPush();
-    }
-    for (std::deque<coop::u32>::iterator it = leaves.begin(); it != leaves.end(); ++it) {
+      } else {
         char b[64];
-        _snprintf(b, sizeof(b) - 1, "handshake: peer left id=%u", (unsigned)*it);
+        _snprintf(b, sizeof(b) - 1, "handshake: peer left id=%u", (unsigned)it->id);
         b[sizeof(b) - 1] = '\0';
         coopLog(b);
         // Carried-body sync (protocol 18) + furniture occupancy (protocol 19):
         // the departed peer's stream will never author its drop/exit edges -
         // release any carry or occupancy its driven copies still hold.
-        if (gw && (g_cfg.carrySync || g_cfg.furnSync)) g_repl.sweepCarries(gw);
+        if (liveGw && (g_cfg.carrySync || g_cfg.furnSync)) g_repl.sweepCarries(liveGw);
         g_peerPresent = false;
+        g_peerId = 0;
         g_modsLine.clear();
         g_modsWarn = false;
         g_peerModsCfg.clear();
@@ -463,16 +502,16 @@ void processNetEvents(GameWorld* gw) {
             coop::engine::setSaveSuppress(false);
             coopLog("[save] JOIN save suppression OFF (peer left)");
         }
-    }
-    // Phase 2 crash hardening: a peer drop leaves this side's minted proxies
-    // standing AND its drive maps pointing at bodies with no fresh authority
-    // (the engine will eventually reap them, and the next drive touches a freed
-    // pointer - the "join crash -> host follow-on crash" chain). Despawn the
-    // minted proxies and clear the peer maps, mirroring coopUiDisconnect(). Runs
-    // once per leave batch (we support a single peer).
-    if (!leaves.empty()) {
-        g_repl.clearPeerReplicationState(gw);
+        // Phase 2 crash hardening: a peer drop leaves this side's minted proxies
+        // standing AND its drive maps pointing at bodies with no fresh authority
+        // (the engine will eventually reap them, and the next drive touches a
+        // freed pointer - the "join crash -> host follow-on crash" chain).
+        // Despawn the minted proxies and clear the peer maps, mirroring
+        // coopUiDisconnect(). Done at the leave's own place in the batch, so a
+        // connect that follows it (a reconnect) keeps its fresh session.
+        g_repl.clearPeerReplicationState(liveGw);
         g_inbound.flushWorldState();
+      }
     }
     checkModLists();
 }
@@ -2517,6 +2556,13 @@ void __cdecl crtExit_hook(int code) {
         _snprintf(b, sizeof(b) - 1, "[exit] detached %d RE_Kenshi window listener(s)", n);
         b[sizeof(b) - 1] = '\0';
         coopLog(b);
+    }
+    // Quitting Kenshi mid-session: a join says goodbye (NetLink's stop path) so
+    // the host sees its friend leave at once instead of after a 5-30 s timeout.
+    // Bounded: a stuck net thread must not hang the close.
+    if (g_net.isRunning()) {
+        coopLog(g_net.stopForExit(1000) ? "[exit] network stopped"
+                                        : "[exit] network still stopping after 1 s; exiting anyway");
     }
     g_crtExit_orig(code);
 }

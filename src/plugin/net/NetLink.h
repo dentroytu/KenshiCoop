@@ -35,6 +35,11 @@ public:
     bool startHost(int port, Inbound* inbound);
     bool startClient(const std::string& ip, int port, Inbound* inbound);
     void stop();
+    // MAIN thread, process exit: like stop() - a connected client says goodbye
+    // so the host frees its slot at once - but never waits longer than
+    // maxWaitMs, so a stuck worker cannot hang the game's close. false = the
+    // worker did not finish in time and was left running.
+    bool stopForExit(DWORD maxWaitMs);
 
     // MAIN thread: publish this peer's owned entities (copied under lock). The
     // net thread re-broadcasts the latest snapshot each tick. Pass count 0 to

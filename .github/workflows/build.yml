@@ -111,6 +111,13 @@ jobs:
           call scripts\build_prototest.cmd || exit /b 1
           dist\prototest.exe
 
+      - name: Build tunneltest and run it; build kcprobe
+        shell: cmd
+        run: |
+          call scripts\build_tunneltest.cmd || exit /b 1
+          dist\tunneltest.exe || exit /b 1
+          call scripts\build_kcprobe.cmd
+
       - name: Build plugin (Harness)
         shell: cmd
         run: call scripts\build_plugin.cmd Harness

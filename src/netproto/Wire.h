@@ -129,6 +129,58 @@ enum EventType {
 // every driven body at once).
 const u32 OWNER_ID_ALL = 0xFFFFFFFFu;
 
+// Refusal codes, carried in the u32 that ENet's own DISCONNECT command already
+// has (enet_peer_disconnect(peer, data) -> ev.data on the other side, unchanged
+// through the Steam tunnel). No packet or struct changes, so no protocol bump:
+// a host tells a refused peer WHY, and a client can tell a refusal from a
+// timeout or a host teardown, which both arrive as data 0.
+//
+//   bits 31..24  REFUSE_TAG 0x4B ('K'); any other top byte means "no reason"
+//   bit  23      RETRY: set = soft (the client keeps retrying), clear = final
+//   bits 22..16  RefuseReason
+//   bits 15..0   the SENDER's PROTOCOL_VERSION
+//
+// Every code stays below 0x80000000, so it fits a positive LONG.
+//
+// RULE: a host never calls enet_peer_disconnect with data 0. Builds before these
+// codes refuse a version mismatch with data 0 (and never disconnect a peer any
+// other way), so a data-0 drop right after HELLO can only mean an older host
+// refused us; a newer host sending 0 would break that inference.
+const u32 REFUSE_TAG       = 0x4B000000u;
+const u32 REFUSE_TAG_MASK  = 0xFF000000u;
+const u32 REFUSE_RETRY_BIT = 0x00800000u;
+
+enum RefuseReason {
+    REFUSE_NONE        = 0, // not a refusal (untagged data)
+    REFUSE_VERSION     = 1, // final: the peers run different PROTOCOL_VERSIONs
+    REFUSE_FULL        = 2, // soft: the host already has its friend admitted
+    REFUSE_MODS        = 3, // reserved, not sent: the mod check stays advisory
+    REFUSE_HOST_CLOSED = 4  // reserved, not sent: a host going offline; soft
+};
+
+inline u32 refuseEncode(u8 reason, bool retry, u16 version) {
+    return REFUSE_TAG | (retry ? REFUSE_RETRY_BIT : 0u) |
+           ((u32)(reason & 0x7Fu) << 16) | (u32)version;
+}
+inline u8 refuseReason(u32 data) {
+    return (data & REFUSE_TAG_MASK) == REFUSE_TAG ? (u8)((data >> 16) & 0x7Fu) : (u8)0;
+}
+inline bool refuseRetry(u32 data) {
+    return refuseReason(data) != 0 && (data & REFUSE_RETRY_BIT) != 0;
+}
+inline u16 refuseVersion(u32 data) {
+    return refuseReason(data) != 0 ? (u16)(data & 0xFFFFu) : (u16)0;
+}
+
+// The host's answer to a HELLO: 0 = admit, otherwise the code to disconnect the
+// peer with. Version first, so a different build is always told the real cause
+// even when the session is also full.
+inline u32 hostRefusal(u16 peerVersion, u16 ourVersion, unsigned admittedOthers) {
+    if (peerVersion != ourVersion) return refuseEncode(REFUSE_VERSION, false, ourVersion);
+    if (admittedOthers > 0)        return refuseEncode(REFUSE_FULL, true, ourVersion);
+    return 0;
+}
+
 #pragma pack(push, 1)
 
 struct HelloPacket {
