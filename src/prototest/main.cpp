@@ -1193,6 +1193,83 @@ static void testModList() {
           d.versionDiff.empty() && d.orderAt == 1 && !d.same());
 }
 
+static void testRefusal() {
+    std::printf("== refusal codes in ENet DISCONNECT data (Wire.h) ==\n");
+
+    // The handshake every build ever shipped relies on: ids and the WELCOME
+    // version offset must never move, or builds could not even tell each other
+    // their versions.
+    CHECK_EQ("PKT_HELLO == 1", (int)PKT_HELLO, 1);
+    CHECK_EQ("PKT_WELCOME == 2", (int)PKT_WELCOME, 2);
+    unsigned char welcome[7] = { (unsigned char)PKT_WELCOME,
+                                 (unsigned char)(PROTOCOL_VERSION & 0xFF),
+                                 (unsigned char)((PROTOCOL_VERSION >> 8) & 0xFF),
+                                 1, 0, 0, 0 };
+    WelcomePacket w;
+    CHECK("WELCOME parses from raw bytes", readPacket(welcome, 7, &w));
+    CHECK_EQ("WELCOME version field offset", w.version, PROTOCOL_VERSION);
+    CHECK_EQ("WELCOME playerId field offset", w.playerId, 1u);
+
+    // Exact codes a protocol-56 host sends; clients of every later build decode
+    // these, so the layout is frozen.
+    const u32 ver56  = refuseEncode(REFUSE_VERSION, false, 56);
+    const u32 full56 = refuseEncode(REFUSE_FULL, true, 56);
+    CHECK_EQ("VERSION code (final, v56)", ver56, 0x4B010038u);
+    CHECK_EQ("FULL code (retry, v56)", full56, 0x4B820038u);
+    CHECK("codes fit a positive LONG",
+          refuseEncode(0x7F, true, 0xFFFF) < 0x80000000u && (LONG)full56 > 0);
+
+    CHECK_EQ("decode reason VERSION", refuseReason(ver56), (int)REFUSE_VERSION);
+    CHECK("decode VERSION is final", !refuseRetry(ver56));
+    CHECK_EQ("decode VERSION sender version", refuseVersion(ver56), 56);
+    CHECK_EQ("decode reason FULL", refuseReason(full56), (int)REFUSE_FULL);
+    CHECK("decode FULL is soft", refuseRetry(full56));
+    CHECK_EQ("decode FULL sender version", refuseVersion(full56), 56);
+    CHECK_EQ("round trip max fields", refuseVersion(refuseEncode(0x7F, false, 0xFFFF)), 0xFFFF);
+    CHECK_EQ("round trip reason 127", refuseReason(refuseEncode(0x7F, false, 1)), 127);
+
+    // Untagged data is never a refusal: timeouts, host teardown and every host
+    // before these codes arrive as 0; nothing else may alias.
+    CHECK_EQ("data 0 is no reason", refuseReason(0), 0);
+    CHECK("data 0 is not soft", !refuseRetry(0));
+    CHECK_EQ("data 0 carries no version", refuseVersion(0), 0);
+    CHECK_EQ("wrong tag is no reason", refuseReason(0x4C010038u), 0);
+    CHECK_EQ("OWNER_ID_ALL is no reason", refuseReason(OWNER_ID_ALL), 0);
+    CHECK_EQ("untagged low bits are no reason", refuseReason(0x00010038u), 0);
+    CHECK("tag with reason 0 is not soft", !refuseRetry(REFUSE_TAG | REFUSE_RETRY_BIT));
+
+    // The host's HELLO verdict: version first, then the one-friend rule.
+    CHECK_EQ("same version, nobody admitted -> admit", hostRefusal(56, 56, 0), 0u);
+    CHECK_EQ("same version, friend admitted -> FULL", hostRefusal(56, 56, 1), full56);
+    CHECK_EQ("older peer -> VERSION with OUR version", hostRefusal(55, 56, 0), ver56);
+    CHECK_EQ("newer peer -> VERSION with OUR version", hostRefusal(57, 56, 0), ver56);
+    CHECK_EQ("other version wins over FULL", hostRefusal(55, 56, 1), ver56);
+    CHECK("the host never refuses with data 0",
+          hostRefusal(55, 56, 0) != 0 && hostRefusal(56, 56, 3) != 0);
+}
+
+// Presence edges keep their arrival order (Inbound.h PresenceEdge): a reconnect
+// is leave(old) then connect(new), and the game thread must end with the peer
+// present. With separate connect/leave queues it applied every connect first.
+static void testPresenceOrder() {
+    std::printf("== presence edges keep arrival order (Inbound.h) ==\n");
+    Inbound in;
+    in.pushLeave(1);    // the friend's old connection is released...
+    in.pushConnect(2);  // ...then its reconnect is admitted
+    in.pushConnect(3);
+    in.pushLeave(3);    // a peer that came and went within one batch
+    std::deque<PresenceEdge> out;
+    in.drainPresence(out);
+    CHECK_EQ("four edges drained", out.size(), 4);
+    CHECK("edge 1 = leave(1)",   out.size() == 4 && !out[0].connect && out[0].id == 1);
+    CHECK("edge 2 = connect(2)", out.size() == 4 &&  out[1].connect && out[1].id == 2);
+    CHECK("edge 3 = connect(3)", out.size() == 4 &&  out[2].connect && out[2].id == 3);
+    CHECK("edge 4 = leave(3)",   out.size() == 4 && !out[3].connect && out[3].id == 3);
+    std::deque<PresenceEdge> again;
+    in.drainPresence(again);
+    CHECK("drain empties the queue", again.empty());
+}
+
 static void testSteamIdParse() {
     std::printf("== SteamID64 parse (SteamId.h) ==\n");
     unsigned long long id = 0;
@@ -1554,10 +1631,8 @@ static void testFlushWorldStateContract() {
     #define SP_KEPT(name, type, drain) do { \
         std::deque<type> out; in.drain(out); \
         CHECK("session-preserving kept: " name, out.size() == 1); } while (0)
-    { std::deque<u32> out; in.drainConnects(out);
-      CHECK("session-preserving kept: connect", out.size() == 1); }
-    { std::deque<u32> out; in.drainLeaves(out);
-      CHECK("session-preserving kept: leave", out.size() == 1); }
+    { std::deque<PresenceEdge> out; in.drainPresence(out);
+      CHECK("session-preserving kept: connect + leave", out.size() == 2); }
     SP_KEPT("saveReq",   InboundSaveReq,   drainSaveReqs);
     SP_KEPT("saveBegin", InboundSaveBegin, drainSaveBegins);
     SP_KEPT("saveFile",  InboundSaveFile,  drainSaveFiles);
@@ -1843,6 +1918,8 @@ int main() {
     testOwnRanks();
     testSteamIdParse();
     testModList();
+    testRefusal();
+    testPresenceOrder();
     testWorkPoseMatch();
     testTaskClear();
     testDeathRekey();

@@ -362,6 +362,16 @@ struct InboundCellClaim {
     CellClaimPacket pkt;
 };
 
+// A peer joining or leaving. Connects and leaves share one queue so the game
+// thread sees them in the order the net thread produced them: a friend's
+// reconnect is leave(old id) then connect(new id), and applying every connect
+// before every leave (two separate queues) ended that batch with the friend
+// marked absent while connected.
+struct PresenceEdge {
+    bool connect; // true = a peer joined, false = a peer left
+    u32  id;      // the peer's id (a leave may be OWNER_ID_ALL)
+};
+
 // --- Structural world-state classification (Phase 4) -------------------------
 // Every inbound queue is exactly one of two kinds, chosen at its DECLARATION:
 //   WorldQ<T>   - describes the CURRENT world; dropped on a session-reset edge
@@ -446,12 +456,16 @@ public:
     }
     ~Inbound() { DeleteCriticalSection(&cs_); }
 
-    // NET thread: a peer joined (id) / a peer left (id, or OWNER_ID_ALL).
+    // NET thread: a peer joined (id) / a peer left (id, or OWNER_ID_ALL). Both
+    // go into ONE queue so the game thread applies them in the order they
+    // happened (see PresenceEdge).
     void pushConnect(u32 id) {
-        EnterCriticalSection(&cs_); conn_.push_back(id); LeaveCriticalSection(&cs_);
+        PresenceEdge e; e.connect = true; e.id = id;
+        EnterCriticalSection(&cs_); presence_.push_back(e); LeaveCriticalSection(&cs_);
     }
     void pushLeave(u32 id) {
-        EnterCriticalSection(&cs_); leave_.push_back(id); LeaveCriticalSection(&cs_);
+        PresenceEdge e; e.connect = false; e.id = id;
+        EnterCriticalSection(&cs_); presence_.push_back(e); LeaveCriticalSection(&cs_);
     }
     // NET thread: one received entity transform, owner-tagged + send-stamped.
     void pushEntity(u32 ownerId, u32 sendMs, const EntityState& e) {
@@ -707,11 +721,8 @@ public:
     }
 
     // MAIN thread: move all pending items into 'out' (empty on entry).
-    void drainConnects(std::deque<u32>& out) {
-        EnterCriticalSection(&cs_); out.swap(conn_); LeaveCriticalSection(&cs_);
-    }
-    void drainLeaves(std::deque<u32>& out) {
-        EnterCriticalSection(&cs_); out.swap(leave_); LeaveCriticalSection(&cs_);
+    void drainPresence(std::deque<PresenceEdge>& out) {
+        EnterCriticalSection(&cs_); out.swap(presence_); LeaveCriticalSection(&cs_);
     }
     void drainEntities(std::deque<InboundEntity>& out) {
         EnterCriticalSection(&cs_); out.swap(ent_); LeaveCriticalSection(&cs_);
@@ -877,8 +888,7 @@ private:
     std::vector<IClearableQueue*> worldReset_;
 
     // SESSION-PRESERVING: presence edges (the connection persists across a swap).
-    SessionQ<u32>                  conn_;
-    SessionQ<u32>                  leave_;
+    SessionQ<PresenceEdge>         presence_;
 
     // WORLD-STATE: describe the current world; auto-cleared on a session reset.
     WorldQ<InboundEntity>          ent_;

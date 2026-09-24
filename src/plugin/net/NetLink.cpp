@@ -75,6 +75,40 @@ void pushLocked(CRITICAL_SECTION& cs, std::vector<T>& q, const T& v) {
     q.push_back(v);
     LeaveCriticalSection(&cs);
 }
+
+// Net-thread throttle for the host lines a refused peer triggers on every
+// attempt. A client built before the refusal codes never stops retrying (every
+// ~2 s, forever), so these would otherwise flood the log: the first occurrence
+// logs, then at most one line a minute, carrying how many were held back.
+struct LogThrottle {
+    DWORD    last;
+    unsigned held;
+    bool     any;
+    LogThrottle() : last(0), held(0), any(false) {}
+    // true = log now; *heldOut = occurrences held back since the last line.
+    bool pass(DWORD now, unsigned* heldOut) {
+        if (!any || (now - last) >= 60000u) {
+            any = true; last = now; *heldOut = held; held = 0;
+            return true;
+        }
+        ++held;
+        return false;
+    }
+};
+
+// Host: peers admitted (HELLO accepted, id in ->data) other than 'except'. A peer
+// stays admitted until its DISCONNECT event clears ->data - ENet raises that
+// event for every peer that ever reached CONNECTED - so a friend whose previous
+// connection has not been released yet still counts, and its late leave can
+// never land on top of a newer session.
+unsigned admittedPeersExcept(const ENetHost* host, const ENetPeer* except) {
+    unsigned n = 0;
+    for (size_t i = 0; i < host->peerCount; ++i) {
+        const ENetPeer* p = &host->peers[i];
+        if (p != except && p->data != 0) ++n;
+    }
+    return n;
+}
 } // namespace
 
 NetLink::NetLink()
@@ -131,6 +165,20 @@ void NetLink::stop() {
         thread_ = 0;
         enet_deinitialize();
     }
+}
+
+bool NetLink::stopForExit(DWORD maxWaitMs) {
+    if (!thread_) return true;
+    InterlockedExchange(&stopFlag_, 1);
+    if (WaitForSingleObject(thread_, maxWaitMs) != WAIT_OBJECT_0) {
+        // Leave it: the process is ending, and the destructor's stop() finds
+        // the thread already gone once ExitProcess has terminated it.
+        return false;
+    }
+    CloseHandle(thread_);
+    thread_ = 0;
+    enet_deinitialize();
+    return true;
 }
 
 void NetLink::setOwnedEntities(u32 ownerId, const EntityState* arr, unsigned int count) {
@@ -403,6 +451,10 @@ void NetLink::threadLoop() {
     u32   nextId = 1;
     DWORD lastConnectAttempt = GetTickCount();
 
+    // Host log throttles for what refused peers repeat on every attempt.
+    LogThrottle thrConnecting, thrMismatch, thrFull, thrGate, thrUnadmittedLeave;
+    unsigned    held = 0;
+
     // Wall-clock time-sync state (client only). The join pings every ~2 s; each
     // pong yields an (rtt, offset) sample; the minimum-RTT sample wins (NTP
     // filter). CLOCKSYNC is logged every ~5 s so the oracles can align this
@@ -445,16 +497,36 @@ void NetLink::threadLoop() {
         while (enet_host_service(enetHost_, &ev, TICK_MS) > 0) {
             switch (ev.type) {
                 case ENET_EVENT_TYPE_CONNECT: {
-                    // A fresh connection restarts the peer's epoch sequence (a
-                    // reconnecting peer may resume at a lower epoch than the one
-                    // we last saw); forget prior per-owner epochs so the new
-                    // session's first batch is never mistaken for stale (v44).
-                    epochSeen_.clear();
                     if (isHost_) {
                         // Wait for the client's HELLO before assigning an id, so
-                        // a version mismatch is rejected before we admit it.
-                        netLog("peer connecting (awaiting HELLO)");
+                        // a version mismatch is rejected before we admit it. A
+                        // fresh connection is never admitted yet: ENet does not
+                        // clear ->data when it reuses a slot, so make sure.
+                        if (ev.peer->data != 0) {
+                            char b[96];
+                            _snprintf(b, sizeof(b) - 1,
+                                      "slot reused while still marked admitted (id=%u); cleared",
+                                      (unsigned)(size_t)ev.peer->data);
+                            b[sizeof(b) - 1] = '\0';
+                            netErr(b);
+                            ev.peer->data = 0;
+                        }
+                        if (thrConnecting.pass(GetTickCount(), &held)) {
+                            char b[96];
+                            if (held) _snprintf(b, sizeof(b) - 1,
+                                                "peer connecting (awaiting HELLO) (+%u more)", held);
+                            else      _snprintf(b, sizeof(b) - 1, "peer connecting (awaiting HELLO)");
+                            b[sizeof(b) - 1] = '\0';
+                            netLog(b);
+                        }
                     } else {
+                        // A fresh connection restarts the host's epoch sequence
+                        // (a reconnect may resume at a lower epoch than the one
+                        // we last saw); forget prior per-owner epochs so the new
+                        // session's first batch is never mistaken for stale
+                        // (v44). The host does this when it ADMITS a peer, so a
+                        // refused peer's attempts never reset the friend's.
+                        epochSeen_.clear();
                         // Introduce ourselves with our protocol version.
                         HelloPacket h;
                         h.type = (u8)PKT_HELLO; h.version = PROTOCOL_VERSION; h.nameLen = 0;
@@ -466,29 +538,67 @@ void NetLink::threadLoop() {
                 }
                 case ENET_EVENT_TYPE_RECEIVE: {
                     const u8 type = packetType(ev.packet->data, (unsigned)ev.packet->dataLength);
+                    // Host receive gate: until a peer's HELLO is accepted, HELLO
+                    // is the only packet it may send. Everything else from it is
+                    // dropped - a different build's packets must never reach the
+                    // game thread, whose layouts may not match.
+                    if (isHost_ && ev.peer->data == 0 && type != PKT_HELLO) {
+                        if (thrGate.pass(GetTickCount(), &held)) {
+                            char b[128];
+                            _snprintf(b, sizeof(b) - 1,
+                                      "dropped packet type %u from a peer not admitted yet (+%u more)",
+                                      (unsigned)type, held);
+                            b[sizeof(b) - 1] = '\0';
+                            netLog(b);
+                        }
+                        enet_packet_destroy(ev.packet);
+                        break;
+                    }
                     if (isHost_ && type == PKT_HELLO) {
                         HelloPacket h;
-                        if (readPacket(ev.packet->data, (unsigned)ev.packet->dataLength, &h)) {
-                            if (h.version != PROTOCOL_VERSION) {
-                                char b[128];
-                                _snprintf(b, sizeof(b) - 1,
-                                          "protocol mismatch: peer v%u, ours v%u; rejecting",
-                                          (unsigned)h.version, (unsigned)PROTOCOL_VERSION);
-                                b[sizeof(b) - 1] = '\0';
-                                netErr(b);
-                                enet_peer_disconnect(ev.peer, 0);
+                        if (ev.peer->data != 0) {
+                            // One HELLO per connection; a repeat must not admit the
+                            // same peer twice.
+                            netLog("ignored a repeated HELLO from an admitted peer");
+                        } else if (readPacket(ev.packet->data, (unsigned)ev.packet->dataLength, &h)) {
+                            // TWO-PLAYER MODEL: host + ONE join. Join-authored
+                            // events/inventory/conservation intents reach only the
+                            // host and are NOT relayed to other joins, and
+                            // OWNER_ID_ALL sweeps assume a single peer, so a second
+                            // concurrent peer is refused as FULL rather than admitted
+                            // into a session that would desync. FULL is soft: the
+                            // same friend reconnecting before its old connection is
+                            // released gets in once ENet times that one out.
+                            const u32 refuse = hostRefusal(h.version, PROTOCOL_VERSION,
+                                                           admittedPeersExcept(enetHost_, ev.peer));
+                            if (refuseReason(refuse) == REFUSE_VERSION) {
+                                if (thrMismatch.pass(GetTickCount(), &held)) {
+                                    char b[160];
+                                    if (held) _snprintf(b, sizeof(b) - 1,
+                                                        "protocol mismatch: peer v%u, ours v%u; rejecting (+%u more)",
+                                                        (unsigned)h.version, (unsigned)PROTOCOL_VERSION, held);
+                                    else      _snprintf(b, sizeof(b) - 1,
+                                                        "protocol mismatch: peer v%u, ours v%u; rejecting",
+                                                        (unsigned)h.version, (unsigned)PROTOCOL_VERSION);
+                                    b[sizeof(b) - 1] = '\0';
+                                    netErr(b);
+                                }
+                                enet_peer_disconnect(ev.peer, refuse);
+                            } else if (refuse != 0) {
+                                if (thrFull.pass(GetTickCount(), &held)) {
+                                    char b[160];
+                                    _snprintf(b, sizeof(b) - 1,
+                                              "session full: refusing a second peer while one is "
+                                              "admitted; it retries (+%u more)", held);
+                                    b[sizeof(b) - 1] = '\0';
+                                    netLog(b);
+                                }
+                                enet_peer_disconnect(ev.peer, refuse);
                             } else {
                                 u32 id = nextId++;
-                                // TWO-PLAYER ASSUMPTION (step-6 guard): the sync model
-                                // is host + ONE join. Join-authored events/inventory/
-                                // conservation intents reach only the host and are NOT
-                                // relayed to other joins, and OWNER_ID_ALL sweeps assume
-                                // a single peer. A third player connects at the wire
-                                // level but will silently desync - fail loudly instead.
-                                if (id >= 2) {
-                                    netErr("3+ players unsupported: join-authored state is "
-                                           "not relayed peer-to-peer; expect desync");
-                                }
+                                // Admitting starts this peer's epoch sequence; see
+                                // the client's CONNECT note (v44).
+                                epochSeen_.clear();
                                 ev.peer->data = (void*)(size_t)id;
                                 WelcomePacket w;
                                 w.type = (u8)PKT_WELCOME; w.version = PROTOCOL_VERSION; w.playerId = id;
@@ -982,16 +1092,28 @@ void NetLink::threadLoop() {
                     break;
                 }
                 case ENET_EVENT_TYPE_DISCONNECT: {
-                    epochSeen_.clear(); // peer gone; its epoch sequence ends (v44)
                     if (isHost_) {
                         u32 id = (u32)(size_t)ev.peer->data;
                         ev.peer->data = 0;
-                        if (inbound_) inbound_->pushLeave(id);
-                        char b[64];
-                        _snprintf(b, sizeof(b) - 1, "peer disconnected id=%u", (unsigned)id);
-                        b[sizeof(b) - 1] = '\0';
-                        netLog(b);
+                        if (id != 0) {
+                            epochSeen_.clear(); // peer gone; its epoch sequence ends (v44)
+                            if (inbound_) inbound_->pushLeave(id);
+                            char b[64];
+                            _snprintf(b, sizeof(b) - 1, "peer disconnected id=%u", (unsigned)id);
+                            b[sizeof(b) - 1] = '\0';
+                            netLog(b);
+                        } else if (thrUnadmittedLeave.pass(GetTickCount(), &held)) {
+                            // Refused, or gone before its HELLO: it never joined,
+                            // so the game thread has no leave to process (a
+                            // leave here used to reset the live friend's session).
+                            char b[96];
+                            _snprintf(b, sizeof(b) - 1,
+                                      "peer disconnected before being admitted (+%u more)", held);
+                            b[sizeof(b) - 1] = '\0';
+                            netLog(b);
+                        }
                     } else {
+                        epochSeen_.clear(); // host gone; its epoch sequence ends (v44)
                         serverPeer_ = 0;
                         if (inbound_) inbound_->pushLeave(OWNER_ID_ALL);
                         netLog("disconnected from host");
@@ -1887,6 +2009,26 @@ void NetLink::threadLoop() {
                 }
             }
         }
+    }
+
+    // Client goodbye. enet_host_destroy sends nothing, so without this the host
+    // keeps our slot until ENet times it out (5-30 s), and a quick
+    // Desconectar -> Conectar would be refused as FULL for that long. Disconnect
+    // properly and give the ack up to 250 ms (stop() waits on this thread).
+    if (!isHost_ && enetHost_ && serverPeer_ &&
+        serverPeer_->state == ENET_PEER_STATE_CONNECTED) {
+        enet_peer_disconnect(serverPeer_, 0);
+        const DWORD t0 = GetTickCount();
+        ENetEvent ge;
+        bool acked = false;
+        while (!acked && (GetTickCount() - t0) < 250) {
+            const int r = enet_host_service(enetHost_, &ge, 25);
+            if (r < 0) break;
+            if (r > 0 && ge.type == ENET_EVENT_TYPE_RECEIVE) enet_packet_destroy(ge.packet);
+            if (r > 0 && ge.type == ENET_EVENT_TYPE_DISCONNECT) acked = true;
+        }
+        netLog(acked ? "said goodbye to host" : "goodbye to host not acknowledged in 250 ms");
+        serverPeer_ = 0;
     }
 
     if (enetHost_) { enet_host_destroy(enetHost_); enetHost_ = 0; }
