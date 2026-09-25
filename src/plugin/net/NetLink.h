@@ -255,6 +255,10 @@ public:
     // thread only drains presence edges in game, so at the title screen this
     // is the only sign that a friend is already in.
     unsigned admittedPeers() const { return (unsigned)admitted_; }
+    // Bytes queued to the peer and not yet acknowledged (in flight + waiting in
+    // ENet's outgoing queues, all channels; the host takes its busiest peer).
+    // Written by the NET thread every loop; the save sender paces on it.
+    u32 sendBacklog() const { return (u32)backlog_; }
 
 private:
     static DWORD WINAPI threadEntry(LPVOID self);
@@ -383,6 +387,7 @@ private:
     volatile LONG peerRefused_;
     volatile LONG peerRefusedTick_;
     volatile LONG admitted_;
+    volatile LONG backlog_;
     u16           wireVer_;
 
     // Session epoch (protocol 44). sendEpoch_ is bumped by the MAIN thread

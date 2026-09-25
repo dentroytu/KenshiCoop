@@ -85,6 +85,9 @@ int tickWatch(unsigned int* outFiles, unsigned __int64* outBytes,
 // abandons the previous one (the join drops stale xferIds).
 bool beginSend(NetLink& net, u32 localId, const std::string& name);
 bool sending();
+// Progress of the active send (bytes queued so far / total), for the F2 panel.
+unsigned __int64 sendBytes();
+unsigned __int64 sendTotalBytes();
 // Pump the active transfer (call every main-loop tick; internally throttled).
 // Logs "[save] XFER-SENT ..." and returns true on the tick the DONE goes out.
 bool tickSend(NetLink& net, u32 localId);
