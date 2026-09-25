@@ -1120,7 +1120,7 @@ MyGUI::TextBox* g_overlay      = 0; // the label that actually draws the text
 int             g_overlayState = -1;
 std::string     g_overlayText;
 
-int overlayColorId(int state) { return state == 2 ? 0 : (state == 1 ? 2 : 1); }
+int overlayColorId(int state) { return state == 2 ? 0 : (state == 1 ? 2 : (state == 3 ? 3 : 1)); }
 
 // Put the freshly-minted container in its pixel box and mint the label inside it.
 // createLabelAbs takes its text by const-ref and MyGUI::Align is a trivial int
@@ -1134,6 +1134,10 @@ MyGUI::TextBox* overlayBuildSeh(MyGUI::Window* box, const std::string* text) {
                                                   *text, MyGUI::Align::Left);
         if (l) {
             l->setTextAlign(MyGUI::Align::Left);
+            // A dark drop shadow keeps the text readable over the bright title
+            // art and daylight terrain (Colour is trivial: SEH-safe here).
+            l->setTextShadowColour(MyGUI::Colour(0.0f, 0.0f, 0.0f, 1.0f));
+            l->setTextShadow(true);
             l->setVisible(true);
         }
         return l;

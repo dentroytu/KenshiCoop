@@ -87,11 +87,11 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
 // Persistent co-op connection-status banner: a single screen-space label fixed 10
 // px in from the top-left corner (a createFloatingLabel MyGUI::Window on the
 // spike-48 screenshot-proven "Info" layer) whose caption shows the live session
-// status, colored by state (0 = offline/red, 1 = waiting/yellow, 2 =
-// connected/green). Needs no player character, so it also shows at the title
-// screen; updated in place when the text/state changes and re-minted if the GUI
-// destroyed the widget (world load). Pass show=false to remove it. Main-thread
-// only; SEH-guarded.
+// status, colored by state (0 = problem/red, 1 = waiting/yellow, 2 =
+// connected/green, 3 = co-op off/grey). Needs no player character, so it also
+// shows at the title screen; updated in place when the text/state changes and
+// re-minted if the GUI destroyed the widget (world load). Pass show=false to
+// remove it. Main-thread only; SEH-guarded.
 void coopOverlayTick(const char* text, int state, bool show);
 
 // Process exit: destroy the F2 panel and the banner while the engine's GUI is
