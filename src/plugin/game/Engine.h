@@ -1228,7 +1228,12 @@ bool recruitNpc(GameWorld* gw, Character* c);
 // keeps the hand pinned peer-owned, so this side never streams/controls it and
 // the host's kinematic drive wins. Idempotent; SEH-guarded. Returns true if the
 // body is a player-squad member afterwards.
-bool joinPlayerSquadAt(GameWorld* gw, Character* c, const unsigned int newHand[5]);
+// fallbackHand: a squad member of the SAME owner, whose tab takes the body when
+// the reported tab does not exist here (the author just created it). Without one
+// the body went into playerCharacters[0]'s tab - usually the other player's, so
+// a squad the friend made landed inside the host's, and was saved there.
+bool joinPlayerSquadAt(GameWorld* gw, Character* c, const unsigned int newHand[5],
+                       const unsigned int* fallbackHand = 0);
 
 // AI decision-layer suspension (the faction-safe alternative to recruit): detour
 // Character::periodicUpdate so that, for NPCs in the suspended set, the AI "think"

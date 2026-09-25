@@ -2279,6 +2279,9 @@ private:
     // path, the ok=0 post-mint drain, and the control-flip transfer.
     void insertPeerMember(GameWorld* gw, Character* c, const Key& newK,
                           const char* tag, bool ownIt = false);
+    // The hand of a squad member we own (ours=true) or the peer owns (false):
+    // the tab insertPeerMember falls back to when the reported one is not here.
+    bool squadMemberOf(bool ours, unsigned int out[5]) const;
     // Hard-snap attribution diagnostics (rubber-banding investigation): one
     // throttled [snap] line per applyRaw teleport with everything needed to
     // classify the cause (gap, source speed+velocity, game speed, slew,
