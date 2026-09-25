@@ -726,6 +726,16 @@ int moveItemBetweenContainers(GameWorld* gw, const unsigned int srcHand[5],
                               const char* sid, unsigned int typeCat, int qty,
                               bool suspendVeto = true);
 
+// SEH-guarded (protocol 37 settlement): destroy up to `qty` units of (sid, typeCat)
+// held by the container at cHand - loose stacks only when looseOnly, else loose
+// first, then worn copies. For a take the other client refused after we had already
+// performed it: it still holds the units, so ours are the extra copy. Never touches
+// a container item (a bag would go with everything inside it). The trade veto is
+// suspended for the call. Returns the units removed.
+int removeItemsFromContainerBySid(GameWorld* gw, const unsigned int cHand[5],
+                                  const char* sid, unsigned int typeCat, int qty,
+                                  bool looseOnly = true);
+
 // ---- Cross-owner trade veto (block direct squad-to-squad transfers) --------
 // The engine has no single "drag" entry point (the squad-move problem), so a
 // UI item drag is remove-then-add: Inventory::removeItemDontDestroy_returnsItem
@@ -760,6 +770,13 @@ bool installXferBlockHook();
 // outStringID. Returns the number added (0 = every candidate refused / no inv).
 int probeAddAnyToContainer(GameWorld* gw, const unsigned int cHand[5], int qty,
                            char* outStringID, unsigned int outLen);
+
+// Harness (trade_burst): add `qty` of each of the first `n` base-game ITEM templates,
+// in stringID-number order, that the container accepts, and write their stringIDs
+// to out[0..n-1]. Chosen by stringID rather than by name so the pick does not
+// depend on the game's language or on the installed mods. Returns templates added.
+int seedDistinctBaseItems(GameWorld* gw, const unsigned int cHand[5], int n, int qty,
+                          char (*out)[48]);
 
 // ---- Phase W0: world-item (ground drop) diagnostic hooks -------------------
 // SEH-guarded: drop `qty` of the LOOSE (sid,type) the object at cHand holds onto the

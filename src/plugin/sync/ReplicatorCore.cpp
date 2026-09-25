@@ -253,6 +253,7 @@ void Replicator::resetSession() {
     invRecv_.clear();
     ownedContainers_.clear();
     censusContainers_.clear(); // protocol 34: re-censused in the new world
+    censusEver_.clear();
     worldTrack_.clear();
     worldProxies_.clear();
     worldSeeded_ = false; // re-baseline the reloaded world's save-native items
@@ -267,6 +268,8 @@ void Replicator::resetSession() {
     xferPend_.clear();
     xferLatch_.clear();
     xferDefer_.clear();
+    xferLastSeen_.clear();
+    xferHoldSince_.clear();
     xferOut_.clear();
     appliedXfers_.clear();
     wdSuppress_.clear();

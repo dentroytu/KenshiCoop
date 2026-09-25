@@ -2088,6 +2088,19 @@
             Tier = 'full'; WanVariant = $true
         }
 
+        # trade_burst: three different items dragged across the two bags in ONE tick,
+        # then back (protocol 37 pairing fix, 2026-09-25). One fire per container per
+        # scan used to fold the rest of such a burst away unannounced: duplicates on a
+        # take, lost items on a give. Smoke tier - it is the chest session players have.
+        trade_burst = @{
+            DiagEnv = @{ KENSHICOOP_INV_SYNC = '1' }
+            Save = 'squad1'; Setup = ''; Tolerance = 3.0
+            PrimaryGate = 'trade_burst'
+            Gating   = @('trade_burst', 'clock_sync')
+            Advisory = @('smoothness', 'anim_truth', 'march')
+            Tier = 'smoke'; WanVariant = $true
+        }
+
         # weapon_loot: weapon-fabrication sync validation (the last trading loss
         # vector). The HOST's owned leader ACQUIRES a weapon that exists in NO
         # shared-save inventory (novel sid, engine-fabricated - the loot/vendor-buy

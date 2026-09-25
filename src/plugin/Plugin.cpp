@@ -1279,8 +1279,13 @@ void tickHostRearm(GameWorld* gw) {
         if (GetTickCount() - lastInvReg >= (DWORD)CRAFT_REARM_MS) {
             lastInvReg = GetTickCount();
             unsigned int ch[5];
-            if (coop::engine::pickInventoryContainer(gw, ch))
-                g_repl.setOwnedContainerHand(ch);
+            // pickInventoryContainer is playerCharacters[0], which can be the
+            // FRIEND's character: registering it made the host author that bag as
+            // well as its owner - two writers, and the friend's gear edits undone.
+            if (coop::engine::pickInventoryContainer(gw, ch)) {
+                if (g_repl.ownerClassForHand(ch) != 2) g_repl.setOwnedContainerHand(ch);
+                else g_repl.clearOwnedContainers(); // registered before the squads were known
+            }
         }
     }
 }
