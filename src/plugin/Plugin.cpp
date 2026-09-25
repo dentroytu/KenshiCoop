@@ -33,6 +33,7 @@
 #include "core/OwnRanks.h"
 #include "core/Inbound.h"
 #include "core/ModList.h"      // protocol 56: active-mod list diff
+#include "core/Refusal.h"      // why a connection is not up, worded for the player
 #include "core/UiLang.h"       // L(es, en): player-facing text language
 #include "net/NetLink.h"
 #include "net/SteamP2P.h"
@@ -940,7 +941,41 @@ void coopPanelDrive() {
         detail = coop::L("Co-op: sin conectar (pulsa F2)", "Co-op: not connected (press F2)");
         ostate = 0;
     }
-    ps.detail = detail.c_str();
+    // Why the connection is not up (core/Refusal.h). JOIN: the host's refusal,
+    // or nobody answering for 6 s. HOST: someone refused for another version in
+    // the last 2 minutes (an old client keeps retrying every ~2 s, so a stale
+    // notice would otherwise stay after the friend gave up).
+    coop::RefusalText rt;
+    if (g_net.isRunning() && !g_peerPresent) {
+        const bool  es  = coop::uiSpanish();
+        const DWORD now = GetTickCount();
+        if (!g_cfg.isHost) {
+            const coop::u32 code  = g_net.refusal();
+            const DWORD     since = g_net.noAnswerSince();
+            const bool noAnswer = since != 0 && now - since > 6000;
+            // A soft refusal (session full) goes stale once the host stops
+            // answering: ENet only ends that attempt after ~30 s, so let "not
+            // answering" take over after 6 s. A final code never has a later
+            // unanswered attempt (the retries stopped).
+            if (code != 0 && !(coop::refuseRetry(code) && noAnswer))
+                rt = coop::joinRefusalText(code, g_net.wireVersion(), es);
+            else if (noAnswer)
+                rt = coop::joinNoAnswerText(es, g_net.steamTransport());
+        } else {
+            const coop::u32 pr = g_net.peerRefused();
+            if (pr != 0 && now - g_net.peerRefusedTick() < 120000)
+                rt = coop::hostRefusedText(coop::refuseVersion(pr), g_net.wireVersion(), es);
+        }
+    }
+    if (!rt.banner.empty()) {
+        detail = rt.banner;
+        ostate = rt.final ? 0 : 1;
+    }
+    ps.detail       = detail.c_str();
+    ps.refuseNotice = rt.notice.empty() ? (const char*)0 : rt.notice.c_str();
+    ps.refuseHint   = rt.hint.empty()   ? (const char*)0 : rt.hint.c_str();
+    ps.refuseLevel  = rt.level;
+    ps.refuseFinal  = rt.final;
 
     // Join save-transfer status for the panel: while a join streams the host's
     // world at the menu (no leader -> no screen overlay), show live progress on
@@ -1989,7 +2024,10 @@ void startNetworking() {
     // Steam P2P transport: connect by SteamID (NAT punch + Valve relay) with the
     // ENet protocol unchanged. Requires the partner's steamid64; falls back to
     // UDP loudly when Steam is unavailable so a misconfigured session still
-    // behaves like the stock build instead of silently doing nothing.
+    // behaves like the stock build instead of silently doing nothing. Cleared
+    // first: NetLink keeps the last peer, so a switch from Steam to UDP in the
+    // F2 panel (or a failed Steam init) used to tunnel over Steam anyway.
+    g_net.setSteamTransport(0);
     if (g_cfg.transport == "steam") {
         if (g_cfg.steamPeer == 0) {
             coopErr("[steam] KENSHICOOP_TRANSPORT=steam requires KENSHICOOP_STEAM_PEER=<partner steamid64>; falling back to UDP");
@@ -2000,6 +2038,18 @@ void startNetworking() {
             g_net.setSteamTransport(g_cfg.steamPeer);
             coopLog("[steam] transport=steam armed (connect by SteamID; no port forwarding)");
         }
+    }
+
+    // Harness test: claim another protocol version (KENSHICOOP_FAKE_PROTOCOL_*,
+    // always 0 in Release). Set on every start, since the role can change.
+    const unsigned int fakeProto = g_cfg.isHost ? g_cfg.fakeProtoHost : g_cfg.fakeProtoJoin;
+    g_net.setWireVersion((coop::u16)fakeProto);
+    if (fakeProto) {
+        char b[96];
+        _snprintf(b, sizeof(b) - 1, "KenshiCoop: FAKE protocol v%u for this %s (harness test; real v%u)",
+                  fakeProto, g_cfg.isHost ? "host" : "join", (unsigned)coop::PROTOCOL_VERSION);
+        b[sizeof(b) - 1] = '\0';
+        coopLog(b);
     }
 
     bool ok;

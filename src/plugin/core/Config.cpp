@@ -415,6 +415,13 @@ void loadConfig(Config& c) {
 
     c.fakeClockSkewMs = (long)std::atoi(envOr("KENSHICOOP_FAKE_CLOCK_SKEW_MS", "0").c_str());
 
+    c.fakeProtoHost = 0;
+    c.fakeProtoJoin = 0;
+#ifdef KENSHICOOP_HARNESS
+    c.fakeProtoHost = (unsigned int)std::atoi(envOr("KENSHICOOP_FAKE_PROTOCOL_HOST", "0").c_str()) & 0xFFFFu;
+    c.fakeProtoJoin = (unsigned int)std::atoi(envOr("KENSHICOOP_FAKE_PROTOCOL_JOIN", "0").c_str()) & 0xFFFFu;
+#endif
+
     int armTimeout = std::atoi(envOr("KENSHICOOP_ARM_TIMEOUT_MS", "45000").c_str());
     c.scenarioArmTimeoutMs = (armTimeout > 0) ? (unsigned long)armTimeout : 0ul;
 

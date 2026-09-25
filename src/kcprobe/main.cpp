@@ -23,6 +23,20 @@
 //   0 WELCOME, 2 refused VERSION, 3 refused FULL, 4 other refusal,
 //   5 disconnected without a reason code, 6 no answer, 1 usage/setup error.
 //
+//   kcprobe host [options]     listen like a KenshiCoop host (UDP) and answer
+//                              every HELLO the way --mode says, to test how a
+//                              real client (Kenshi) reacts.
+//
+// Host options:
+//   --port N        port to listen on                  (default 27800)
+//   --mode M        welcome      admit (WELCOME with this build's version)
+//                   version:N    WELCOME claiming protocol N (client-side check)
+//                   legacy       disconnect with data 0, like v0.53 and older
+//                   refuse:HEX   disconnect with this code (e.g. 4B010039)
+//   --seconds S     how long to listen                  (default 60)
+// Prints every event and, at the end, how many HELLOs arrived - a client that
+// stops retrying after a final refusal sends exactly one.
+//
 // VC10 / C++03, built like tunneltest (scripts\build_kcprobe.cmd).
 
 #define _CRT_SECURE_NO_WARNINGS 1
@@ -183,13 +197,80 @@ int attempt(const Opts& o, int n) {
 
 int usage() {
     std::printf("usage: kcprobe client [--ip A] [--port N] [--version N] [--hold MS]\n"
-                "                      [--exit goodbye|crash] [--junk] [--retry MS]\n");
+                "                      [--exit goodbye|crash] [--junk] [--retry MS]\n"
+                "       kcprobe host   [--port N] [--mode welcome|version:N|legacy|refuse:HEX]\n"
+                "                      [--seconds S]\n");
     return 1;
+}
+
+int runHost(int argc, char** argv) {
+    int port = 27800;
+    unsigned long seconds = 60;
+    std::string mode = "welcome";
+    for (int i = 2; i < argc; ++i) {
+        const char* a = argv[i];
+        const char* v = (i + 1 < argc) ? argv[i + 1] : 0;
+        if      (!std::strcmp(a, "--port") && v)    { port = std::atoi(v); ++i; }
+        else if (!std::strcmp(a, "--mode") && v)    { mode = v; ++i; }
+        else if (!std::strcmp(a, "--seconds") && v) { seconds = (unsigned long)std::atol(v); ++i; }
+        else return usage();
+    }
+    u32  refuseCode = 0;
+    u16  welcomeVer = PROTOCOL_VERSION;
+    bool refuse = false;
+    if (mode == "legacy") { refuse = true; refuseCode = 0; }
+    else if (mode.compare(0, 7, "refuse:") == 0) {
+        refuse = true; refuseCode = (u32)std::strtoul(mode.c_str() + 7, 0, 16);
+    } else if (mode.compare(0, 8, "version:") == 0) {
+        welcomeVer = (u16)std::atoi(mode.c_str() + 8);
+    } else if (mode != "welcome") return usage();
+
+    if (enet_initialize() != 0) { std::printf("enet_initialize failed\n"); return 1; }
+    ENetAddress addr; addr.host = ENET_HOST_ANY; addr.port = (enet_uint16)port;
+    ENetHost* h = enet_host_create(&addr, 8, CH_COUNT, 0, 0);
+    if (!h) { std::printf("cannot listen on port %d\n", port); enet_deinitialize(); return 1; }
+    g_start = GetTickCount();
+    std::printf("kcprobe host on port %d, mode %s, for %lu s\n", port, mode.c_str(), seconds);
+    unsigned int hellos = 0;
+    ENetEvent ev;
+    while (elapsed() < seconds * 1000ul) {
+        const int r = enet_host_service(h, &ev, 20);
+        if (r <= 0) continue;
+        if (ev.type == ENET_EVENT_TYPE_CONNECT) {
+            std::printf("[%6lu ms] CONNECT\n", elapsed());
+        } else if (ev.type == ENET_EVENT_TYPE_DISCONNECT) {
+            std::printf("[%6lu ms] DISCONNECT data=0x%08X\n", elapsed(), (unsigned)ev.data);
+        } else if (ev.type == ENET_EVENT_TYPE_RECEIVE) {
+            HelloPacket hp;
+            if (packetType(ev.packet->data, (unsigned)ev.packet->dataLength) == PKT_HELLO &&
+                readPacket(ev.packet->data, (unsigned)ev.packet->dataLength, &hp)) {
+                ++hellos;
+                if (refuse) {
+                    std::printf("[%6lu ms] HELLO v%u -> refuse with 0x%08X\n", elapsed(),
+                                (unsigned)hp.version, (unsigned)refuseCode);
+                    enet_peer_disconnect(ev.peer, refuseCode);
+                } else {
+                    WelcomePacket w;
+                    w.type = (u8)PKT_WELCOME; w.version = welcomeVer; w.playerId = 1;
+                    enet_peer_send(ev.peer, CH_RELIABLE,
+                                   enet_packet_create(&w, sizeof(w), ENET_PACKET_FLAG_RELIABLE));
+                    std::printf("[%6lu ms] HELLO v%u -> WELCOME v%u\n", elapsed(),
+                                (unsigned)hp.version, (unsigned)welcomeVer);
+                }
+            }
+            enet_packet_destroy(ev.packet);
+        }
+    }
+    std::printf("hellos=%u\n", hellos);
+    enet_host_destroy(h);
+    enet_deinitialize();
+    return 0;
 }
 
 } // namespace
 
 int main(int argc, char** argv) {
+    if (argc >= 2 && std::strcmp(argv[1], "host") == 0) return runHost(argc, argv);
     if (argc < 2 || std::strcmp(argv[1], "client") != 0) return usage();
     Opts o;
     for (int i = 2; i < argc; ++i) {

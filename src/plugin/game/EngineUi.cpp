@@ -166,8 +166,15 @@ void markerDestroy(void* label) {
 // accented letter, n-tilde and inverted mark as a gap (seen in game 2026-09-25).
 // We register a copy of each of those fonts named <font>_KC that also covers
 // 32-255 - built from the game's own file, so the TTF, size and hinting match -
-// and switch only OUR widgets to it. If that cannot be done, the text is folded
-// to plain ASCII instead (UiLang.h foldToAscii): never gaps either way.
+// and switch only OUR widgets to it; Kenshi's own fonts and widgets are never
+// touched (rebuilding Kenshi's fonts in place garbled its whole UI on a window
+// resize, 2026-09-25). Kenshi's font-size pass - on a resize, the title screen,
+// the font-size option - resizes the copies with its own, but also re-applies
+// every widget's font, which sends our EditBox lines back to the ASCII-only
+// default font: coopPanelTick re-applies ours to the rows every 500 ms.
+// (Buttons and the banner report their font, so that pass keeps our copy.)
+// If the copies cannot be made, text is folded to plain ASCII instead (UiLang.h
+// foldToAscii): never gaps either way.
 
 namespace {
 
@@ -199,11 +206,19 @@ bool loadAccentFonts(std::string* why) {
     }
 }
 
-// Once, on the main thread with the GUI up (first panel/banner tick).
+// SEH shell: loadAccentFonts holds C++ objects, so no __try of its own (C2712).
+bool loadAccentFontsSeh(std::string* why) {
+    __try { return loadAccentFonts(why); }
+    __except (EXCEPTION_EXECUTE_HANDLER) { *why = "fault while loading"; return false; }
+}
+
+// Once, on the main thread with the GUI up (first panel/banner tick). Marked
+// failed BEFORE trying, so a fault is never retried every frame.
 void ensureAccentFonts() {
     if (g_fontState != FONTS_UNTRIED || !::gui) return;
+    g_fontState = FONTS_FAILED;
     std::string why;
-    g_fontState = loadAccentFonts(&why) ? FONTS_OK : FONTS_FAILED;
+    if (loadAccentFontsSeh(&why)) g_fontState = FONTS_OK;
     if (g_fontState == FONTS_OK)
         coop::logLine("[coop-ui] accented fonts loaded (Kenshi fonts + Latin-1)");
     else
@@ -568,6 +583,16 @@ void rowTextWidgetsSeh(DataPanelLine* line, DataPanelLine_Button* btn, MyGUI::Te
         if (btn) out[2] = btn->button;
     } __except (EXCEPTION_EXECUTE_HANDLER) {}
 }
+// Put the accented copies on every text widget of the built panel (after a
+// build, and again every 500 ms: see "Accented text" on Kenshi's font pass).
+void accentPanelRows() {
+    for (int i = 0; i < MAX_ROWS; ++i) {
+        if (!g_rowLine[i] && !g_rowBtn[i]) continue;
+        MyGUI::TextBox* w[3] = { 0, 0, 0 };
+        rowTextWidgetsSeh(g_rowLine[i], g_rowBtn[i], w);
+        for (int k = 0; k < 3; ++k) useAccentFont(w[k]);
+    }
+}
 void colourRow(DataPanelLine* line, int col) {
     switch (col) {
     case COL_GREY:  lineColourSeh(line, 0.72f, 0.72f, 0.72f); break;
@@ -721,6 +746,9 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
         status = st->isHost ? L("Conectado: tu amigo est\xC3\xA1 en tu partida", "Connected: your friend is in your game")
                             : L("Conectado a la partida de tu amigo", "Connected to your friend's game");
         statusCol = COL_GREEN;
+    } else if (st->running && st->refuseFinal) {
+        status = L("No se pudo conectar", "Could not connect");
+        statusCol = COL_RED;
     } else if (st->running) {
         status = st->isHost ? L("Esperando a tu amigo...", "Waiting for your friend...")
                             : L("Conectando con tu amigo...", "Connecting to your friend...");
@@ -760,14 +788,24 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
         addButton(rows, L("Volver", "Back"), ACT_BACK);
     } else if (g_panel.view == VIEW_ADVANCED) {
         addLine(rows, status + (g_panel.steamFlag ? "  (Steam)" : "  (UDP)"), statusCol);
+        // The manual (Steam ID / UDP) connection is made from this view, so the
+        // reason has to show here too, not only on the main view.
+        if (st->refuseNotice) {
+            addLine(rows, st->refuseNotice, st->refuseLevel >= 2 ? COL_RED : COL_AMBER);
+            if (st->refuseHint) addLine(rows, st->refuseHint, COL_GREY);
+        }
         addSpace(rows);
         addButton(rows, std::string(L("Rol: ", "Role: ")) +
                         (g_panel.hostFlag ? L("ANFITRI\xC3\x93N", "HOST") : L("UNIRSE", "JOIN")) +
                         L("    (cambiar)", "    (switch)"), ACT_ROLE);
         addButton(rows, std::string(L("Conexi\xC3\xB3n por: ", "Transport: ")) +
                         (g_panel.steamFlag ? "STEAM" : "UDP") + L("    (cambiar)", "    (switch)"), ACT_TRANS);
+        // After a final refusal the link is still up (idle, not retrying), so
+        // "ONLINE" would contradict "could not connect" right above it.
         addButton(rows, std::string(L("Estado: ", "Connection: ")) +
-                        (g_panel.connectedFlag ? L("CONECTADO", "ONLINE") : L("DESCONECTADO", "OFFLINE")) +
+                        (!g_panel.connectedFlag ? L("DESCONECTADO", "OFFLINE")
+                         : st->refuseFinal      ? L("RECHAZADO", "REFUSED")
+                                                : L("CONECTADO", "ONLINE")) +
                         L("    (cambiar)", "    (switch)"), ACT_CONN);
         if (!g_panel.steamFlag)
             addLine(rows, L("UDP: la IP y el puerto est\xC3\xA1n en mods\\KenshiCoop\\coop_config.json",
@@ -795,8 +833,13 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
         addButton(rows, L("Volver", "Back"), ACT_BACK);
     } else {
         addLine(rows, status, statusCol);
+        if (st->refuseNotice) {
+            addLine(rows, st->refuseNotice, st->refuseLevel >= 2 ? COL_RED : COL_AMBER);
+            if (st->refuseHint) addLine(rows, st->refuseHint, COL_GREY);
+        }
         if (!transfer.empty()) addLine(rows, transfer, COL_AMBER);
-        if (!inviteText.empty() && st->inviteCode != 1) addLine(rows, inviteText, COL_WHITE);
+        if (!inviteText.empty() && st->inviteCode != 1 && !st->refuseFinal)
+            addLine(rows, inviteText, COL_WHITE);
         if (st->modsLine) {
             addLine(rows, st->modsLine, st->modsWarn ? COL_AMBER : COL_GREEN);
             if (st->modsWarn && !g_peerModsCfg.empty())
@@ -815,7 +858,8 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
             addLine(rows, L("\xC2\xBFTe han invitado? Acepta la invitaci\xC3\xB3n de Steam (con Kenshi abierto; vale el men\xC3\xBA).",
                             "Invited? Accept the Steam invite (with Kenshi open; the main menu is fine)."), COL_GREY);
         } else {
-            addButton(rows, st->peerPresent ? L("Desconectar", "Disconnect") : L("Cancelar", "Cancel"),
+            addButton(rows, st->refuseFinal ? L("Entendido", "OK")
+                            : st->peerPresent ? L("Desconectar", "Disconnect") : L("Cancelar", "Cancel"),
                       ACT_DISCONNECT);
         }
         addSpace(rows);
@@ -872,15 +916,21 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
         for (size_t i = 0; i < rows.size(); ++i) {
             if (g_rowBtn[i]) bindButton(g_rowBtn[i], rows[i].act);
             if (g_rowLine[i]) colourRow(g_rowLine[i], rows[i].col);
-            // Accented copies of Kenshi's fonts (see "Accented text" above).
-            MyGUI::TextBox* w[3] = { 0, 0, 0 };
-            rowTextWidgetsSeh(g_rowLine[i], g_rowBtn[i], w);
-            for (int k = 0; k < 3; ++k) useAccentFont(w[k]);
         }
+        accentPanelRows();
 
         g_panel.built = true;
         g_panel.needsRebuild = false;
         g_panel.lastSig = sig;
+    }
+    // Kenshi's font pass (a resize, the title screen, the font-size option)
+    // re-applies every widget's own font, which puts the EditBox lines back on
+    // the ASCII-only default font. Buttons and the banner report their font,
+    // so they keep the copy; only the rows need this.
+    {
+        static DWORD s_lastAccent = 0;
+        const DWORD now = GetTickCount();
+        if (g_panel.built && now - s_lastAccent >= 500) { s_lastAccent = now; accentPanelRows(); }
     }
 
     // Connect / disconnect on the Online/Offline edge (edge, not level, so a

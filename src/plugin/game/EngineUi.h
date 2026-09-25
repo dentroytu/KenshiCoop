@@ -61,6 +61,14 @@ struct CoopPanelState {
     const char*        inviteArg;    // steaminvite::statusArg() (invited friend's name)
     int                friendN;      // rows in friends (sorted in-Kenshi > online > offline)
     const CoopFriendRow* friends;
+    // Why the connection is not up (core/Refusal.h), worded by the plugin root:
+    // a notice (refuseLevel 1 = amber, still trying; 2 = red), a grey hint, and
+    // refuseFinal when the JOIN gave up (status "could not connect", button
+    // "OK" instead of "Cancel"). Null notice = nothing to explain.
+    const char*        refuseNotice;
+    const char*        refuseHint;
+    int                refuseLevel;
+    bool               refuseFinal;
 };
 // The panel's role/transport selections at the moment Connect is hit. peerId is the
 // Steam ID pasted in-panel this session (0 if none), and overrides the config
