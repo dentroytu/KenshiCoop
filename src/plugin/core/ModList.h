@@ -15,12 +15,20 @@
 namespace coop {
 
 struct ModEntry {
-    std::string file;
+    std::string file;    // file name only: a listed path's folder is dropped
     std::string version;
+    bool        builtIn; // listed with a path: the game's own data (gamedata.base, ...)
+    ModEntry() : builtIn(false) {}
 };
 
 // Split a ModListPacket text into entries. Tolerates a missing trailing
 // newline and a line without '|' (version left empty); skips empty lines.
+//
+// The engine lists the game's own data files by full path ("C:\...\Kenshi\data\
+// gamedata.base") and mods by name. Two installs in different folders are the
+// same game, so only the file name is compared - comparing paths reported the
+// four base files as "4 missing, 4 extra" for every friend whose Kenshi lives
+// elsewhere. Done on the receiving side so it also holds for older senders.
 inline void parseModText(const char* text, unsigned int len, std::vector<ModEntry>& out) {
     out.clear();
     std::string line;
@@ -33,6 +41,8 @@ inline void parseModText(const char* text, unsigned int len, std::vector<ModEntr
             std::string::size_type bar = line.rfind('|');
             if (bar == std::string::npos) { e.file = line; }
             else { e.file = line.substr(0, bar); e.version = line.substr(bar + 1); }
+            std::string::size_type slash = e.file.find_last_of("\\/");
+            if (slash != std::string::npos) { e.file = e.file.substr(slash + 1); e.builtIn = true; }
             out.push_back(e);
         }
         line.clear();
@@ -113,10 +123,14 @@ inline std::string summarizeModDiff(const ModDiff& d, bool es = false) {
 }
 
 // The peer's list as mods.cfg content (one file name per line, load order), so
-// a player can copy it and match their launcher's mod list.
+// a player can copy it and match their launcher's mod list. The game's own data
+// files are never in mods.cfg, so they are left out.
 inline std::string modsCfgText(const std::vector<ModEntry>& v) {
     std::string s;
-    for (size_t i = 0; i < v.size(); ++i) { s += v[i].file; s += "\r\n"; }
+    for (size_t i = 0; i < v.size(); ++i) {
+        if (v[i].builtIn) continue;
+        s += v[i].file; s += "\r\n";
+    }
     return s;
 }
 

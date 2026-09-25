@@ -1191,6 +1191,24 @@ static void testModList() {
     d = coop::diffModLists(va, vb);
     CHECK("order-only diff", d.missing.empty() && d.extra.empty() &&
           d.versionDiff.empty() && d.orderAt == 1 && !d.same());
+
+    // The engine lists the game's own data by full path, and each player's
+    // Kenshi lives in its own folder (run 20260925_042807: "4 missing, 4 extra"
+    // with identical mods). Same game in two folders = same list.
+    const char* hostL = "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Kenshi\\data\\gamedata.base|0\n"
+                        "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Kenshi\\data\\rebirth.mod|0\n"
+                        "Dust.mod|3\nKenshiCoop.mod|1\n";
+    const char* joinL = "D:\\Games\\Kenshi\\data\\gamedata.base|0\n"
+                        "D:/Games/Kenshi/data/rebirth.mod|0\n"
+                        "Dust.mod|3\nKenshiCoop.mod|1\n";
+    coop::parseModText(hostL, (unsigned)std::strlen(hostL), va);
+    coop::parseModText(joinL, (unsigned)std::strlen(joinL), vb);
+    CHECK("path dropped from a built-in file", va[0].file == "gamedata.base" && va[0].builtIn);
+    CHECK("forward-slash path dropped too", vb[1].file == "rebirth.mod" && vb[1].builtIn);
+    CHECK("a mod listed by name is not built-in", va[2].file == "Dust.mod" && !va[2].builtIn);
+    CHECK("same game in two folders -> same", coop::diffModLists(va, vb).same());
+    CHECK("mods.cfg text leaves the game's own files out",
+          coop::modsCfgText(vb) == "Dust.mod\r\nKenshiCoop.mod\r\n");
 }
 
 static void testRefusal() {
