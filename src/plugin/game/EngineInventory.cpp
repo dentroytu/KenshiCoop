@@ -1212,6 +1212,20 @@ int probeAddAnyToContainer(GameWorld* gw, const unsigned int cHand[5], int qty,
     // until tryAddItem accepts one. This mirrors the protocol-34 apply path,
     // which only ever fabricates items the AUTHOR's copy of the container
     // already holds - i.e. items the container accepts by definition.
+    // Items by stringID first: names are localized (see findCommonItemTemplate), and
+    // a Spanish Kenshi matched none of the names below. The common item, then the
+    // one the English names reach in the chest store_sync places (a storage chest
+    // accepts only some item types).
+    const char* fixedSids[] = { "42159-gamedata.base", "584-gamedata.base" };
+    for (unsigned int f = 0; f < sizeof(fixedSids) / sizeof(fixedSids[0]); ++f) {
+        if (createItemAndAdd(gw, inv, fixedSids[f], (unsigned int)ITEM, qty, 0, /*equip=*/false)) {
+            if (outStringID && outLen) {
+                strncpy(outStringID, fixedSids[f], outLen - 1);
+                outStringID[outLen - 1] = '\0';
+            }
+            return qty;
+        }
+    }
     const char* prefs[] = {
         "iron plate", "copper", "building materials", "raw meat", "dustwich",
         "foodcube", "ration", "rock", "cotton", "fabric"
