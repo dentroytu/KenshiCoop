@@ -1115,7 +1115,7 @@ void coopPanelDrive(bool atTitle) {
     // build is loaded: "TokelaCoop v0.54: conectado con tu amigo".
     const bool running = g_net.isRunning();
     const std::string banner = running ? brandBanner(detail) : std::string(TOKELACOOP_TITLE "  (F2)");
-    coop::engine::coopOverlayTick(banner.c_str(), running ? ostate : 0, true);
+    coop::engine::coopOverlayTick(banner.c_str(), running ? ostate : 3, true);   // 3: grey, co-op off
 }
 
 // Main-thread tick hook: the one safe point where we touch game state.
