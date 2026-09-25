@@ -26,6 +26,7 @@ $script:CoopDiagEnvKeys = @(
     # --- channel A/B knobs (Config.cpp reads these; DiagEnv carries the deltas) ---
     'TOKELACOOP_INV_SYNC'
     'TOKELACOOP_OWN_GUARD'
+    'TOKELACOOP_TAB_LEDGER'
     'TOKELACOOP_XFER_SYNC'
     'TOKELACOOP_BLOCK_XFER'
     'TOKELACOOP_WORLD_SYNC'

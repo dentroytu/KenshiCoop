@@ -78,7 +78,7 @@ Replicator::Replicator()
       poolSeen_(-1), poolSent_(-1), poolSentMs_(0), poolTotal_(-1),
       poolSeq_(0), poolAcked_(0),
       moneySync_(true), recruitSync_(true),
-      squadSync_(true), tabsSeeded_(0), ownGuardActive_(false),
+      squadSync_(true), tabsSeeded_(0), tabLedgerOn_(true), ownGuardActive_(false),
       cellAuth_(false), cellCollapse_(false), collapsed_(false),
       claimSendMs_(0), claimAssertMs_(0), claimMapMs_(0),
       facSeqOut_(1), facSampleMs_(0), factionSync_(true),
@@ -297,6 +297,8 @@ void Replicator::resetSession() {
     tabRank_.clear();
     tabOwned_.clear();
     tabSeenMs_.clear();
+    peerTabLocal_.clear();
+    pendingPeerTab_.clear();
     prevOwnHands_.clear();
     prevAllSquad_.clear();
     tabsSeeded_ = 0;
@@ -505,12 +507,23 @@ void Replicator::decideTabs(const EntityState* raw, unsigned int nSquad,
                             const std::vector<std::pair<u32, u32> >& ctnrs) {
     if (!squadSync_) return;   // legacy per-tick ranking owns nothing durably
     bool seeding = (tabsSeeded_ == 0);
+    // Owners recorded earlier - in the save (TokelaCoop_squads.txt, loaded with
+    // the world) or before a reconnect in this world - beat the rank rule, which
+    // gives every tab past the first two to the host: a squad the friend made
+    // would otherwise change hands. Only when they name one of these tabs as the
+    // friend's (core/TabLedger.h ledgerDecidesSeeding).
+    const bool byLedger = seeding && tabLedgerOn_ && ledgerDecidesSeeding(tabLedger_, ctnrs);
     for (unsigned int i = 0; i < ctnrs.size(); ++i) {
         if (tabOwned_.find(ctnrs[i]) != tabOwned_.end()) continue;
         unsigned int rank = tabRankFor(ctnrs[i], ctnrs);
         bool owned;
         const char* why;
-        if (seeding) {
+        const unsigned char myRole = isHostRole() ? (unsigned char)TAB_ROLE_HOST
+                                                  : (unsigned char)TAB_ROLE_JOIN;
+        if (byLedger) {
+            owned = (ledgerTabIsJoins(tabLedger_, ctnrs[i]) == !isHostRole());
+            why = "ledger";
+        } else if (seeding) {
             // The save's own tabs, ranked identically on both clients: each
             // player's own tab, and every further tab to the host so none is
             // left without an owner (core/OwnRanks.h seededTabOwned).
@@ -548,7 +561,10 @@ void Replicator::decideTabs(const EntityState* raw, unsigned int nSquad,
                                  : ((verdict == -1) ? "pin-peer" : "host-fallback");
         }
         tabOwned_[ctnrs[i]] = owned;
-        if (!seeding || rank >= 2u) { // the save's two player tabs stay silent
+        // Remember the verdict for the next reconnect and for the save file.
+        if (tabLedgerOn_)
+            tabLedger_[ctnrs[i]] = owned ? myRole : (unsigned char)(1 - myRole);
+        if (!seeding || rank >= 2u || why[0] == 'l') { // seeded rank 0/1 stay silent
             char b[128];
             _snprintf(b, sizeof(b) - 1, "[squad] TABOWN cont=%u,%u rank=%u own=%d via=%s",
                       ctnrs[i].first, ctnrs[i].second, rank, owned ? 1 : 0, why);

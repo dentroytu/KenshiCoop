@@ -14,10 +14,13 @@ TokelaCoop no se activa y avisa.
 > **Estado (2026-09-25):**
 > - Compilación verificada en CI (`windows-2022`): `prototest`, `tunneltest`, DLL Harness y Release, y kit con instalador.
 >   Releases publicadas: `v0.52` y `v0.53` (con el nombre KenshiCoop).
-> - **Sin probar en el juego (v0.54):** cargar como `TokelaCoop.dll` desde `mods\TokelaCoop`, la migración desde
->   `mods\KenshiCoop` (instalador y `deploy.cmd`), el banner/F2/descripción con "TokelaCoop v0.54", los inicios
->   renombrados y las partidas de prueba (`fixtures/saves`), que siguen listando el mod "KenshiCoop".
 > - **Verificado en el juego** (PC del autor del fork, Kenshi de Steam con RE_Kenshi):
+>   - v0.54 (2026-09-25): carga como `TokelaCoop.dll` desde `mods\TokelaCoop`, migración con `deploy.cmd` de las dos
+>     instalaciones, banner/F2 con "TokelaCoop v0.54" (gris con sombra cuando el co-op está apagado), inicios
+>     renombrados, partidas de `fixtures/saves` (listan "KenshiCoop") sin avisos y el aviso de doble carga;
+>   - cada jugador solo controla sus personajes (`own_guard` PASS, `own_guard_off` como control negativo) y las
+>     escuadras nuevas del join siguen siendo suyas tras guardar y cargar (`squad_persist` y `squad_persist_off`)
+>     (2026-09-25; los arreglos de la revisión posteriores, y la regresión completa, están pendientes de pasar en el juego);
 >   - el plugin carga;
 >   - el panel F2 abre en el menú principal, detecta el idioma (español) y colorea el estado (v0.53);
 >   - el botón de invitar aparece y lista amigos (v0.52);
@@ -217,6 +220,18 @@ powershell -ExecutionPolicy Bypass -File scripts\regress.ps1 -Tier full -SkipBui
 - **Autoridad:** el host es autoritativo del mundo (NPCs, facciones, tiempo, dinero, edificios);
   cada cliente lo es de **su propio squad**. Las acciones sobre cosas que no posees viajan como
   *intents* (p. ej. `PKT_INV_XFER`) al dueño.
+- **Personajes de cada jugador** (`ReplicatorCore.cpp` `decideTabs`, `game/EngineOwnGuard.cpp`):
+  - la propiedad va por pestaña de escuadra (contenedor `c,cs`), no por personaje: al cargar se decide por rango,
+    y las pestañas nuevas por los pines de quien las crea;
+  - la pantalla de escuadras, la selección y las órdenes rechazan los personajes del amigo (`TOKELACOOP_OWN_GUARD`);
+  - un movimiento de escuadra viaja como `EVT_SQUAD_MOVE`. Si el amigo crea una escuadra que aquí no existe, se crea
+    otra y se emparejan (`peerTabLocal_`, línea `[squad] PEER-TAB` del log): cada juego numera distinto las
+    escuadras creadas en partida, y tras guardar y cargar las dos usan los números del host;
+  - el host guarda de quién es cada pestaña en `<save>\TokelaCoop_squads.txt` (`core/TabLedger.h`) al guardar, y los
+    dos lo leen al cargar (`via=ledger` en `TABOWN`): así una escuadra nueva del join no pasa al host al recargar
+    (`TOKELACOOP_TAB_LEDGER=0` lo apaga). Solo decide si nombra como del join alguna pestaña que exista; si no, manda
+    la regla de rango, para que la segunda escuadra que el host separa en una partida de una sola escuadra siga siendo
+    del amigo (lo que dice el README).
 - **Escenarios** (`src/plugin/test/`): solo en las configuraciones Harness y Debug (`TOKELACOOP_HARNESS`).
 
 ## Reglas al tocar código

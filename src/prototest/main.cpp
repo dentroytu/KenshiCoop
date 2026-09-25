@@ -36,6 +36,7 @@
 #include "../plugin/core/Refusal.h" // how a client reads a refusal + its player text
 #include "../plugin/core/TextWrap.h" // F2 panel: one row per wrapped line
 #include "../plugin/core/Inbound.h" // Phase 0 queue-lifecycle fixes (header-only)
+#include "../plugin/core/TabLedger.h" // v0.54: squad-tab owners kept with the save
 #include "../plugin/game/EngineFaults.h" // Phase 5c: fault throttle (pure inline)
 #include "../plugin/game/EngineCaps.h"   // Phase 5d: capability registry (pure inline)
 #include "../plugin/sync/ChangeGate.h"   // Phase 6: change-gated send/accept policy
@@ -2085,6 +2086,57 @@ static void testEngineCaps() {
     CHECK("row unresolved (no slot)",  !capRowResolved(rNoSlot));
 }
 
+// v0.54: the squad-tab owners kept with the save (core/TabLedger.h).
+static void testTabLedger() {
+    std::printf("\n== squad-tab owners kept with the save (TabLedger.h) ==\n");
+    coop::TabLedger a;
+    a[std::make_pair(7u, 2303466752u)]  = (unsigned char)coop::TAB_ROLE_JOIN;
+    a[std::make_pair(1u, 3079467776u)]  = (unsigned char)coop::TAB_ROLE_HOST;
+    a[std::make_pair(43u, 1145996032u)] = (unsigned char)coop::TAB_ROLE_JOIN;
+    const std::string text = coop::formatTabLedger(a);
+    coop::TabLedger b;
+    CHECK_EQ("round trip: every row read back", coop::parseTabLedger(text, &b), 3u);
+    CHECK("round trip: same owners", a == b);
+    CHECK("file names the roles in words", text.find("43 1145996032 join") != std::string::npos &&
+                                           text.find("1 3079467776 host") != std::string::npos);
+    coop::TabLedger c;
+    CHECK_EQ("LF endings, comments, junk and unknown roles are skipped",
+             coop::parseTabLedger("# c\nv1\n5 6 join\nnot a row\n8 9 guest\n10 11 host\n", &c), 2u);
+    CHECK("... and the good rows land", c.size() == 2 &&
+          c[std::make_pair(5u, 6u)] == coop::TAB_ROLE_JOIN && c[std::make_pair(10u, 11u)] == coop::TAB_ROLE_HOST);
+    coop::TabLedger d;
+    CHECK_EQ("a file without the v1 line is another format: nothing read",
+             coop::parseTabLedger("5 6 join\n", &d), 0u);
+    CHECK_EQ("an empty file reads nothing", coop::parseTabLedger("", &d), 0u);
+
+    // Which rule seeds the tabs (ledgerDecidesSeeding).
+    typedef std::pair<unsigned int, unsigned int> Tab;
+    const Tab hostTab(1u, 3079467776u), joinTab(7u, 2303466752u), joinNew(22u, 471679680u),
+              hostNew(23u, 5u);
+    std::vector<Tab> tabs;
+    tabs.push_back(hostTab); tabs.push_back(joinTab); tabs.push_back(joinNew);
+    coop::TabLedger e;
+    e[hostTab] = (unsigned char)coop::TAB_ROLE_HOST;
+    e[joinTab] = (unsigned char)coop::TAB_ROLE_JOIN;
+    e[joinNew] = (unsigned char)coop::TAB_ROLE_JOIN;
+    CHECK("a friend's squad in the save: the ledger decides", coop::ledgerDecidesSeeding(e, tabs));
+    CHECK("... the friend's new squad stays theirs", coop::ledgerTabIsJoins(e, joinNew));
+    CHECK("... a tab without a row is the host's", !coop::ledgerTabIsJoins(e, hostNew));
+    // The README flow: one squad, the host splits a second one off for the friend.
+    // Recorded as the host's when it was made, it must still go to the friend.
+    std::vector<Tab> split;
+    split.push_back(hostTab); split.push_back(hostNew);
+    coop::TabLedger f;
+    f[hostTab] = (unsigned char)coop::TAB_ROLE_HOST;
+    f[hostNew] = (unsigned char)coop::TAB_ROLE_HOST;
+    CHECK("host rows only: the rank rule decides (rank 1 goes to the friend)",
+          !coop::ledgerDecidesSeeding(f, split));
+    // The friend's squads are all gone (rows left, tabs not): the rank rule again.
+    CHECK("the friend's recorded squads are gone: the rank rule decides",
+          !coop::ledgerDecidesSeeding(e, split));
+    CHECK("no ledger: the rank rule decides", !coop::ledgerDecidesSeeding(coop::TabLedger(), tabs));
+}
+
 // Phase 6: the shared change-gated send/accept policy (ChangeGate.h). This
 // locks the exact decisions the money + door channels used to inline by hand,
 // so a future consolidation can't silently drift the wire cadence.
@@ -2164,6 +2216,7 @@ int main() {
     testAccentText();
     testTextWrap();
     testRefusalClient();
+    testTabLedger();
     testWorkPoseMatch();
     testTaskClear();
     testDeathRekey();

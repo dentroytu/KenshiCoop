@@ -915,6 +915,150 @@ private:
 };
 const char* const LoadSyncScenario::SAVE_NAME = "coopresume";
 
+// squad_persist (v0.54, full tier): a squad the JOIN makes keeps its owner
+// across a save + reload. The join splits its character into a new squad (the
+// squad screen's "new squad" drop); the host must mirror it as a squad of its
+// own (not park the body in a host tab) and write the owners into the save
+// (TokelaCoop_squads.txt). The host then saves 'coopresume' and loads it, and
+// both reload. The oracle checks the new squad's TABOWN after the reload: seeded
+// "via=ledger", owned by the join on both sides. With TOKELACOOP_TAB_LEDGER=0
+// (squad_persist_off) the rank rule hands it to the host - the negative control.
+class SquadPersistScenario : public TimedScenario {
+public:
+    explicit SquadPersistScenario(const char* name)
+        : TimedScenario(name, 0), recruited_(false), recruitOk_(false), split_(false),
+          splitOk_(false), saveIssued_(false), saveOk_(false), ackSeen_(false), ackOk_(false),
+          loadIssued_(false), loadOk_(false), sigWas2_(false), swapDone_(false),
+          reportedAtMs_(0), dropStartMs_(0), sigClearedMs_(0), lastStatusMs_(0) {
+        memset(recruit_, 0, sizeof(recruit_));
+    }
+
+    virtual void onStart(const ScenarioContext& ctx) {
+        char b[80];
+        _snprintf(b, sizeof(b) - 1, "SCENARIO SQP start host=%d", ctx.isHost ? 1 : 0);
+        b[sizeof(b) - 1] = '\0'; coop::logLine(b);
+    }
+
+    virtual bool onTick(const ScenarioContext& ctx) {
+        const bool live = engine::gameplayLive(ctx.gw);
+        // JOIN: hire a bar NPC (it lands in the join's own squad), then split that
+        // recruit into a brand-new squad. The join's first squad keeps its
+        // character, so after the reload the new squad ranks THIRD - past the two
+        // the rank rule gives to their players - and only the saved owners can
+        // keep it the join's.
+        if (!ctx.isHost && !recruited_ && live && ctx.elapsedMs >= RECRUIT_AT_MS) {
+            recruited_ = true;
+            unsigned int hb[5] = { 0, 0, 0, 0, 0 };
+            const int res = engine::probeRecruit(ctx.gw, /*runtime*/ false, hb, recruit_);
+            recruitOk_ = (res == 1);
+            char b[200];
+            _snprintf(b, sizeof(b) - 1,
+                      "SCENARIO SQP recruit res=%d hand=%u,%u,%u,%u,%u t=%lu", res,
+                      recruit_[0], recruit_[1], recruit_[2], recruit_[3], recruit_[4], ctx.elapsedMs);
+            b[sizeof(b) - 1] = '\0'; coop::logLine(b);
+        }
+        if (!ctx.isHost && recruitOk_ && !split_ && live && ctx.elapsedMs >= SPLIT_AT_MS) {
+            split_ = true;
+            unsigned int hb[5] = { 0, 0, 0, 0, 0 }, ha[5] = { 0, 0, 0, 0, 0 };
+            const int rc = engine::probeMoveSquadMember(ctx.gw, recruit_, 0, /*lever: new squad*/ 0, hb, ha);
+            splitOk_ = (rc == 1);
+            char b[200];
+            _snprintf(b, sizeof(b) - 1,
+                      "SCENARIO SQP split rc=%d before=%u,%u,%u,%u,%u after=%u,%u,%u,%u,%u t=%lu",
+                      rc, hb[0], hb[1], hb[2], hb[3], hb[4], ha[0], ha[1], ha[2], ha[3], ha[4],
+                      ctx.elapsedMs);
+            b[sizeof(b) - 1] = '\0'; coop::logLine(b);
+        }
+        // HOST: save (streamed to the join, owners included), then load it.
+        if (ctx.isHost) {
+            if (!saveIssued_ && live && ctx.elapsedMs >= SAVE_AT_MS) {
+                saveIssued_ = true;
+                saveOk_ = engine::saveGameAs(SAVE_NAME);
+                logStep("save", saveOk_, ctx.elapsedMs);
+            }
+            if (saveIssued_ && !ackSeen_ && savexfer::lastAckXferId() != 0) {
+                ackSeen_ = true;
+                ackOk_ = (savexfer::lastAckOk() == 1);
+                logStep("ack", ackOk_, ctx.elapsedMs);
+            }
+            if (ackSeen_ && ackOk_ && !loadIssued_ && live) {
+                loadIssued_ = true;
+                loadOk_ = engine::loadSave(SAVE_NAME);
+                logStep("load", loadOk_, ctx.elapsedMs);
+            }
+        }
+        // Both: the world swap (async: a live drop and return; sync: the
+        // deferred LOADGAME signal consumed with no drop) - as load_sync.
+        if (!live && dropStartMs_ == 0) dropStartMs_ = ctx.elapsedMs;
+        else if (live && dropStartMs_ != 0) {
+            const unsigned long ms = ctx.elapsedMs - dropStartMs_;
+            dropStartMs_ = 0;
+            if (ms >= SWAP_MIN_MS && !swapDone_) markSwap(ctx.elapsedMs);
+        }
+        {
+            const int sig = engine::saveMgrSignal(0);
+            if (sig == 2) { sigWas2_ = true; sigClearedMs_ = 0; }
+            else if (sigWas2_ && sigClearedMs_ == 0) sigClearedMs_ = ctx.elapsedMs;
+            if (!swapDone_ && sigWas2_ && sigClearedMs_ != 0 && live && dropStartMs_ == 0 &&
+                ctx.elapsedMs >= sigClearedMs_ + SYNC_CONFIRM_MS)
+                markSwap(ctx.elapsedMs);
+        }
+        if (ctx.elapsedMs - lastStatusMs_ >= 5000) {
+            lastStatusMs_ = ctx.elapsedMs;
+            char b[176];
+            _snprintf(b, sizeof(b) - 1,
+                      "SCENARIO SQP state split=%d save=%d ack=%d load=%d swapDone=%d live=%d t=%lu",
+                      splitOk_ ? 1 : 0, saveOk_ ? 1 : 0, ackOk_ ? 1 : 0, loadOk_ ? 1 : 0,
+                      swapDone_ ? 1 : 0, live ? 1 : 0, ctx.elapsedMs);
+            b[sizeof(b) - 1] = '\0'; coop::logLine(b);
+        }
+        // The post-reload seeding happens on the first census of the new world;
+        // hold long enough for both sides' TABOWN lines, then report.
+        if ((swapDone_ && ctx.elapsedMs >= reportedAtMs_) || ctx.elapsedMs >= DURATION_MS) {
+            const bool legs = ctx.isHost ? (saveOk_ && ackOk_ && loadOk_ && swapDone_)
+                                         : (splitOk_ && swapDone_);
+            char b[160];
+            _snprintf(b, sizeof(b) - 1, "SCENARIO SQP verdict role=%s legs=%d t=%lu",
+                      ctx.isHost ? "host" : "join", legs ? 1 : 0, ctx.elapsedMs);
+            b[sizeof(b) - 1] = '\0'; coop::logLine(b);
+            passed_ = legs;   // ownership itself is the oracle's call (both logs)
+            return true;
+        }
+        return false;
+    }
+
+private:
+    static const unsigned long RECRUIT_AT_MS   = 8000;
+    static const unsigned long SPLIT_AT_MS     = 14000;
+    static const unsigned long SAVE_AT_MS      = 30000;  // after the 5 s tab-claim wait
+    static const unsigned long SWAP_MIN_MS     = 400;
+    static const unsigned long SYNC_CONFIRM_MS = 3000;
+    static const unsigned long REPORT_HOLD_MS  = 15000;
+    static const unsigned long DURATION_MS     = 130000;
+
+    void markSwap(unsigned long t) {
+        swapDone_ = true;
+        reportedAtMs_ = t + REPORT_HOLD_MS;
+        char b[96];
+        _snprintf(b, sizeof(b) - 1, "SCENARIO SQP reloaded t=%lu", t);
+        b[sizeof(b) - 1] = '\0'; coop::logLine(b);
+    }
+    static void logStep(const char* what, bool ok, unsigned long t) {
+        char b[112];
+        _snprintf(b, sizeof(b) - 1, "SCENARIO SQP %s name='%s' ok=%d t=%lu", what, SAVE_NAME, ok ? 1 : 0, t);
+        b[sizeof(b) - 1] = '\0'; coop::logLine(b);
+    }
+
+    bool          recruited_, recruitOk_, split_, splitOk_, saveIssued_, saveOk_;
+    bool          ackSeen_, ackOk_, loadIssued_, loadOk_;
+    unsigned int  recruit_[5];
+    bool          sigWas2_, swapDone_;
+    unsigned long reportedAtMs_, dropStartMs_, sigClearedMs_, lastStatusMs_;
+
+    static const char* const SAVE_NAME;
+};
+const char* const SquadPersistScenario::SAVE_NAME = "coopresume";
+
 // save_sync (protocol 31 phase 12c, full tier; saveSync ON) / save_stage1
 // (the resume_test.ps1 stage-1 variant: a building is placed FIRST so the
 // coordinated save bakes session-runtime state). The HOST issues one
@@ -1349,6 +1493,8 @@ Scenario* makeSessionScenario(const std::string& name) {
     if (name == "resume_check")   return new ResumeCheckScenario();
     if (name == "load_probe")     return new LoadProbeScenario();
     if (name == "load_sync")      return new LoadSyncScenario();
+    if (name == "squad_persist")     return new SquadPersistScenario("squad_persist");
+    if (name == "squad_persist_off") return new SquadPersistScenario("squad_persist_off");
     if (name == "money_persist")  return new MoneyPersistScenario();
     return 0;
 }

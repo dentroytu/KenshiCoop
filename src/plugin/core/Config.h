@@ -224,6 +224,10 @@ struct Config {
     // friend is connected, the friend's characters cannot stay selected here, so
     // they cannot be ordered or have their inventory opened from the selection.
     bool          ownGuard;
+    // Squad-tab owners kept with the save (TOKELACOOP_TAB_LEDGER, default ON):
+    // the host writes TokelaCoop_squads.txt into each save and a loaded world
+    // seeds its tabs from it, so a squad keeps its owner across a reload.
+    bool          tabLedger;
 
     // Peer-ready scenario arming (TOKELACOOP_ARM_TIMEOUT_MS). A scenario's clock
     // (onStart + elapsedMs) does not begin at gameplay start; it begins when this

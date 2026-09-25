@@ -2052,6 +2052,31 @@ void Replicator::publishSquadMoves(GameWorld* gw, NetLink& net, u32 ownerId) {
                     edges[i].after[0], edges[i].after[1], edges[i].after[2],
                     edges[i].after[3], edges[i].after[4]);
                 eb[sizeof(eb) - 1] = '\0'; coop::logLine(eb);
+                // A squad we made for a squad of the peer's (insertPeerMember):
+                // the body now shows its local container - pair the two, and
+                // keep the new hand the peer's.
+                std::map<u32, std::pair<u32, u32> >::iterator pp = pendingPeerTab_.find(serial);
+                if (pp == pendingPeerTab_.end()) pp = pendingPeerTab_.find(edges[i].after[4]);
+                const bool moved = (edges[i].after[0] | edges[i].after[1] | edges[i].after[2] |
+                                    edges[i].after[3] | edges[i].after[4]) != 0;
+                if (pp != pendingPeerTab_.end() && moved) {
+                    peerTabLocal_[pp->second] = std::make_pair((u32)edges[i].after[1], (u32)edges[i].after[2]);
+                    Key nk2; nk2.t = edges[i].after[0]; nk2.c = edges[i].after[1];
+                    nk2.cs = edges[i].after[2]; nk2.i = edges[i].after[3]; nk2.s = edges[i].after[4];
+                    pinOwned_.erase(nk2);
+                    pinPeer_.insert(nk2);
+                    char pb[160]; _snprintf(pb, sizeof(pb) - 1,
+                        "[squad] PEER-TAB peer=%u,%u -> local=%u,%u (a new squad for the friend's)",
+                        pp->second.first, pp->second.second, edges[i].after[1], edges[i].after[2]);
+                    pb[sizeof(pb) - 1] = '\0'; coop::logLine(pb);
+                    // insertPeerMember may have filed it under two serials.
+                    const std::pair<u32, u32> done = pp->second;
+                    for (std::map<u32, std::pair<u32, u32> >::iterator q = pendingPeerTab_.begin();
+                         q != pendingPeerTab_.end(); ) {
+                        if (q->second == done) pendingPeerTab_.erase(q++);
+                        else ++q;
+                    }
+                }
                 continue;
             }
         }

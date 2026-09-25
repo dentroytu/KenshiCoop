@@ -1256,6 +1256,18 @@ bool recruitNpc(GameWorld* gw, Character* c);
 bool joinPlayerSquadAt(GameWorld* gw, Character* c, const unsigned int newHand[5],
                        const unsigned int* fallbackHand = 0);
 
+// Put player-squad member 'c' alone in a NEW squad tab of the player faction
+// (Character::separateIntoMyOwnSquad - the squad_probe lever 0, which the squad
+// screen's "new squad" drop also produces). For a squad the peer created: the
+// tab does not exist here, and its runtime container number is the peer's own.
+// Only for a body that already is a player-squad member (a town NPC would get a
+// squad of its own faction). SEH-guarded; returns true if the call was made.
+bool separateIntoNewSquad(GameWorld* gw, Character* c);
+
+// True if a player character's hand sits in squad tab (ctnr, ctnrSerial) right
+// now - live, unlike a roster poll, so a tab made earlier this tick counts.
+bool playerTabHasMember(GameWorld* gw, unsigned int ctnr, unsigned int ctnrSerial);
+
 // AI decision-layer suspension (the faction-safe alternative to recruit): detour
 // Character::periodicUpdate so that, for NPCs in the suspended set, the AI "think"
 // tick is skipped (no autonomous re-tasking) while the body keeps animating and
