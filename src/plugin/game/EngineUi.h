@@ -69,6 +69,9 @@ struct CoopPanelState {
     const char*        refuseHint;
     int                refuseLevel;
     bool               refuseFinal;
+    // At the main menu, connected but not playing yet: 1 = HOST with a friend
+    // already in (it must load a game), 2 = JOIN waiting for the host's world.
+    int                waitNote;
 };
 // The panel's role/transport selections at the moment Connect is hit. peerId is the
 // Steam ID pasted in-panel this session (0 if none), and overrides the config

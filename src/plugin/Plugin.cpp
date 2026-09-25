@@ -918,7 +918,7 @@ void driveLoadSync(GameWorld* gw) {
 // the title-screen titleUpdate_hook so a join can go ONLINE (and copy/paste
 // Steam IDs) straight from the main menu, and so the banner reports status there
 // too.
-void coopPanelDrive() {
+void coopPanelDrive(bool atTitle) {
     if (!(g_cfg.scenario.empty() && g_cfg.testSeconds == 0)) return;
     coop::engine::CoopPanelState ps;
     ps.selfSteamId  = (unsigned long long)coop::steamp2p::selfId();
@@ -971,7 +971,6 @@ void coopPanelDrive() {
         detail = rt.banner;
         ostate = rt.final ? 0 : 1;
     }
-    ps.detail       = detail.c_str();
     ps.refuseNotice = rt.notice.empty() ? (const char*)0 : rt.notice.c_str();
     ps.refuseHint   = rt.hint.empty()   ? (const char*)0 : rt.hint.c_str();
     ps.refuseLevel  = rt.level;
@@ -990,17 +989,39 @@ void coopPanelDrive() {
             if (pct > 100) pct = 100;
             char tb[96];
             _snprintf(tb, sizeof(tb) - 1,
-                      "Streaming host world... %d%% (%.1f/%.1f MB)", pct,
+                      coop::L("Recibiendo el mundo de tu amigo... %d%% (%.1f/%.1f MB)",
+                              "Receiving your friend's world... %d%% (%.1f/%.1f MB)"), pct,
                       (double)got / (1024.0 * 1024.0),
                       (double)tot / (1024.0 * 1024.0));
             tb[sizeof(tb) - 1] = '\0';
             transfer = tb;
         } else if (!g_loadAfterCommit.empty()) {
             // NACK sent (host baking/streaming) or committed + about to load.
-            transfer = "Preparing host world...";
+            transfer = coop::L("Preparando el mundo de tu amigo...", "Preparing your friend's world...");
         }
     }
     ps.transferDetail = transfer.empty() ? (const char*)0 : transfer.c_str();
+
+    // Connected at the main menu but not playing yet. The HOST's game thread
+    // only drains presence edges in game, so a friend already in shows only on
+    // the net side, and the world goes out when the host loads one; the JOIN
+    // waits for that world. Without this both panels read as if nothing is
+    // left to do ("waiting for your friend" / "connected").
+    ps.waitNote = 0;
+    if (atTitle && g_net.isRunning() && rt.banner.empty()) {
+        if (g_cfg.isHost && !g_peerPresent && g_net.admittedPeers() > 0) {
+            ps.waitNote = 1;
+            detail = coop::L("Co-op: tu amigo ya est\xC3\xA1 conectado - carga una partida",
+                             "Co-op: your friend is in - load a game");
+            ostate = 2;
+        } else if (!g_cfg.isHost && g_peerPresent && g_cfg.saveSync && transfer.empty()) {
+            ps.waitNote = 2;
+            detail = coop::L("Co-op: conectado - esperando la partida de tu amigo",
+                             "Co-op: connected - waiting for your friend's game");
+            ostate = 2;
+        }
+    }
+    ps.detail = detail.c_str();
 
     // Pump Steam callbacks: an inbound "Join Game" (a friend inviting US) and the
     // host's lobby-membership poll both end in coopUiConnect. Then hand the F2
@@ -1734,7 +1755,7 @@ void mainLoop_hook(GameWorld* gw, float dt) {
     }
 #endif
 
-    coopPanelDrive();
+    coopPanelDrive(false);
 
     // Protocol 32 world-swap edge detection + session reset. Runs FIRST so the
     // reload edge lands before any sync code touches pointers from the torn-down
@@ -1929,7 +1950,7 @@ void mainLoop_hook(GameWorld* gw, float dt) {
 // live in titleUpdate_hook, but coopPanelDrive uses std::string internally, so
 // the guarded call lives in its own function (C2712).
 void coopPanelDriveSeh() {
-    __try { coopPanelDrive(); }
+    __try { coopPanelDrive(true); }
     __except (EXCEPTION_EXECUTE_HANDLER) {
         static bool s_warned = false;
         if (!s_warned) { s_warned = true;

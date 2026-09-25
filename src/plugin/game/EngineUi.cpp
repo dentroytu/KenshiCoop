@@ -25,10 +25,12 @@
 #include <mygui/MyGUI_ResourceManager.h> // accented fonts: register the copies
 #include <mygui/MyGUI_XmlDocument.h>     // accented fonts: parse them from memory
 #include <mygui/MyGUI_FontManager.h>     // accented fonts: MyGUI's default font
+#include <mygui/MyGUI_IFont.h>           // panel line wrapping: glyph advances
 #include <windows.h>
 
 #include "../core/SteamId.h" // parseSteamId64 (paste button) + maskSteamId64 (id rows)
 #include "../core/UiLang.h" // L(es, en): panel text in the player's language
+#include "../core/TextWrap.h" // one panel row per wrapped line
 #include <fstream>
 #include <iterator>
 #include <map>
@@ -386,11 +388,14 @@ struct CoopPanelUi {
     bool          needsRebuild;
     bool          f2Down;        // F2 held last tick (rising-edge toggle)
     int           view;          // VIEW_*
+    int           linePx;        // text width of a built row, for wrapping (0 = unknown)
+    int           rowPx;         // height of a built row (0 = unknown)
+    int           fontPx;        // the row font's own height (0 = unknown)
     std::string   lastSig;       // rows shown by the last build (refresh gate)
     CoopPanelUi()
         : panel(0), open(false), built(false), hostFlag(true), steamFlag(true),
           connectedFlag(false), lastConnected(false), lastChkVal(false),
-          needsRebuild(false), f2Down(false), view(VIEW_MAIN) {}
+          needsRebuild(false), f2Down(false), view(VIEW_MAIN), linePx(0), rowPx(0), fontPx(0) {}
 };
 
 CoopPanelUi             g_panel;
@@ -538,7 +543,7 @@ void addLine(std::vector<Row>& r, const std::string& t, int col) { r.push_back(R
 void addButton(std::vector<Row>& r, const std::string& t, int act) { r.push_back(Row(ROW_BUTTON, t, act, COL_WHITE)); }
 void addSpace(std::vector<Row>& r) { r.push_back(Row(ROW_SPACE, std::string(), ACT_NONE, COL_WHITE)); }
 
-const int              MAX_ROWS = 24;
+const int              MAX_ROWS = 32; // wrapped lines take a row each
 DataPanelLine*         g_rowLine[MAX_ROWS];
 DataPanelLine_Button*  g_rowBtn[MAX_ROWS];
 
@@ -583,16 +588,101 @@ void rowTextWidgetsSeh(DataPanelLine* line, DataPanelLine_Button* btn, MyGUI::Te
         if (btn) out[2] = btn->button;
     } __except (EXCEPTION_EXECUTE_HANDLER) {}
 }
+void setWidgetFontHeightSeh(MyGUI::TextBox* w, int px) {
+    if (!w) return;
+    __try { w->setFontHeight(px); } // virtual (EditBox forwards it to its text)
+    __except (EXCEPTION_EXECUTE_HANDLER) {}
+}
 // Put the accented copies on every text widget of the built panel (after a
 // build, and again every 500 ms: see "Accented text" on Kenshi's font pass).
+// In a small window a row is shorter than the font (11 px rows, 14 px font at
+// 944x700), which cut every descender ("amigo" read "amieo"): the text lines
+// then draw at the row's height. Buttons centre their text and are left alone.
+// Setting a font resets its height, so both are re-applied together.
 void accentPanelRows() {
+    const bool shrink = g_panel.rowPx > 0 && g_panel.fontPx > g_panel.rowPx;
     for (int i = 0; i < MAX_ROWS; ++i) {
         if (!g_rowLine[i] && !g_rowBtn[i]) continue;
         MyGUI::TextBox* w[3] = { 0, 0, 0 };
         rowTextWidgetsSeh(g_rowLine[i], g_rowBtn[i], w);
         for (int k = 0; k < 3; ++k) useAccentFont(w[k]);
+        if (shrink && g_rowLine[i]) {
+            setWidgetFontHeightSeh(w[0], g_panel.rowPx);
+            setWidgetFontHeightSeh(w[1], g_panel.rowPx);
+        }
     }
 }
+// How much narrower the lines draw than the font's own metrics (see above).
+float panelTextScale() {
+    return (g_panel.rowPx > 0 && g_panel.fontPx > g_panel.rowPx)
+         ? (float)g_panel.rowPx / (float)g_panel.fontPx : 1.0f;
+}
+// Line wrapping (core/TextWrap.h), measured with the font the rows draw with:
+// the default font's accented copy once it is in, else the default font.
+float glyphAdvanceSeh(MyGUI::IFont* f, unsigned int cp) {
+    __try {
+        MyGUI::GlyphInfo* g = f->getGlyphInfo((MyGUI::Char)cp); // virtual
+        if (g) return g->bearingX + g->advance;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {}
+    return 7.0f;
+}
+float panelGlyphAdvance(unsigned int cp, void* font) {
+    return glyphAdvanceSeh(static_cast<MyGUI::IFont*>(font), cp);
+}
+MyGUI::IFont* panelTextFont() {
+    std::string name = defaultFontName();
+    if (name.empty()) return 0;
+    if (g_fontState == FONTS_OK) {
+        const std::string& mine = accentFontFor(name);
+        if (!mine.empty()) name = mine;
+    }
+    try {
+        MyGUI::FontManager* fm = MyGUI::FontManager::getInstancePtr();
+        return fm ? fm->getByName(name) : 0;
+    } catch (...) { return 0; }
+}
+// Width of a built line's text widget: the width its EditBox wraps at.
+int lineTextWidthSeh(DataPanelLine* line) {
+    if (!line) return 0;
+    __try { return line->w1 ? line->w1->getWidth() : 0; }
+    __except (EXCEPTION_EXECUTE_HANDLER) { return 0; }
+}
+int lineTextHeightSeh(DataPanelLine* line) {
+    if (!line) return 0;
+    __try { return line->w1 ? line->w1->getHeight() : 0; }
+    __except (EXCEPTION_EXECUTE_HANDLER) { return 0; }
+}
+int fontHeightSeh(MyGUI::IFont* f) {
+    __try { return f->getDefaultHeight(); } // virtual
+    __except (EXCEPTION_EXECUTE_HANDLER) { return -1; }
+}
+// Re-read a built line's size and the row font's height; a change (first
+// build, a window resize, Kenshi's font-size pass) asks for a rebuild so the
+// rows are wrapped - and their text sized - for the new geometry.
+void refreshLineWidth() {
+    for (int i = 0; i < MAX_ROWS; ++i) {
+        if (!g_rowLine[i]) continue;
+        const int px = lineTextWidthSeh(g_rowLine[i]);
+        if (px <= 0) continue;
+        const int rowPx = lineTextHeightSeh(g_rowLine[i]);
+        MyGUI::IFont* f = panelTextFont();
+        const int fontPx = f ? fontHeightSeh(f) : 0;
+        if (px != g_panel.linePx || rowPx != g_panel.rowPx || fontPx != g_panel.fontPx) {
+            g_panel.linePx = px;
+            g_panel.rowPx  = rowPx;
+            g_panel.fontPx = fontPx;
+            g_panel.needsRebuild = true;
+            char b[160];
+            _snprintf(b, sizeof(b) - 1,
+                      "[coop-ui] panel rows %dx%d px, font %d px (text scale %.2f)",
+                      px, rowPx, fontPx, panelTextScale());
+            b[sizeof(b) - 1] = '\0';
+            coop::logLine(b);
+        }
+        return;
+    }
+}
+
 void colourRow(DataPanelLine* line, int col) {
     switch (col) {
     case COL_GREY:  lineColourSeh(line, 0.72f, 0.72f, 0.72f); break;
@@ -742,7 +832,18 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
     // ---- What the player sees ----------------------------------------------------
     std::string status;
     int statusCol;
-    if (st->running && st->peerPresent) {
+    std::string waitLine; // what to do next while connected at the main menu
+    if (st->running && st->waitNote == 1) {
+        status = L("Tu amigo ya est\xC3\xA1 conectado", "Your friend is connected");
+        statusCol = COL_GREEN;
+        waitLine = L("Carga una partida (o empieza una nueva) y entrar\xC3\xA1 contigo.",
+                     "Load a game (or start a new one) and your friend joins you.");
+    } else if (st->running && st->waitNote == 2) {
+        status = L("Conectado con tu amigo", "Connected to your friend");
+        statusCol = COL_GREEN;
+        waitLine = L("Esperando a que tu amigo cargue su partida...",
+                     "Waiting for your friend to load their game...");
+    } else if (st->running && st->peerPresent) {
         status = st->isHost ? L("Conectado: tu amigo est\xC3\xA1 en tu partida", "Connected: your friend is in your game")
                             : L("Conectado a la partida de tu amigo", "Connected to your friend's game");
         statusCol = COL_GREEN;
@@ -760,7 +861,7 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
     std::string transfer = st->transferDetail ? std::string(st->transferDetail) : std::string();
     std::string inviteText = inviteStatusText(st->inviteCode, st->inviteArg);
     bool canInvite = st->inviteReady && g_panel.steamFlag && !st->peerPresent &&
-                     (!st->running || st->isHost);
+                     st->waitNote == 0 && (!st->running || st->isHost);
     if (g_panel.view == VIEW_PICK && !canInvite) g_panel.view = VIEW_MAIN;
 
     std::vector<Row> rows;
@@ -837,6 +938,7 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
             addLine(rows, st->refuseNotice, st->refuseLevel >= 2 ? COL_RED : COL_AMBER);
             if (st->refuseHint) addLine(rows, st->refuseHint, COL_GREY);
         }
+        if (!waitLine.empty()) addLine(rows, waitLine, COL_AMBER);
         if (!transfer.empty()) addLine(rows, transfer, COL_AMBER);
         if (!inviteText.empty() && st->inviteCode != 1 && !st->refuseFinal)
             addLine(rows, inviteText, COL_WHITE);
@@ -859,11 +961,35 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
                             "Invited? Accept the Steam invite (with Kenshi open; the main menu is fine)."), COL_GREY);
         } else {
             addButton(rows, st->refuseFinal ? L("Entendido", "OK")
-                            : st->peerPresent ? L("Desconectar", "Disconnect") : L("Cancelar", "Cancel"),
+                            : (st->peerPresent || st->waitNote) ? L("Desconectar", "Disconnect")
+                                                                : L("Cancelar", "Cancel"),
                       ACT_DISCONNECT);
         }
         addSpace(rows);
         addButton(rows, L("Opciones avanzadas", "Advanced options"), ACT_ADVANCED);
+    }
+    // One row per wrapped line: the rows have a fixed height, so a line the
+    // EditBox wrapped by itself drew over the row below it (944x700 window,
+    // 2026-09-25). The width comes from a built row, so the first build of a
+    // panel is unwrapped for one tick.
+    if (g_panel.open && g_panel.linePx > 0) {
+        MyGUI::IFont* font = panelTextFont();
+        if (font) {
+            // EditBox text padding. Measured at the font's own size even when the
+            // rows draw it smaller (accentPanelRows): Kenshi sizes each row from
+            // that full-size layout, so a line that only fits when shrunk got a
+            // two-row slot with a blank gap under it.
+            const float budget = (float)g_panel.linePx - 12.0f;
+            std::vector<Row> wrapped;
+            std::vector<std::string> parts;
+            for (size_t i = 0; i < rows.size(); ++i) {
+                if (rows[i].kind != ROW_LINE) { wrapped.push_back(rows[i]); continue; }
+                coop::wrapTextPx(uiText(rows[i].text), budget, &panelGlyphAdvance, font, parts);
+                for (size_t k = 0; k < parts.size(); ++k)
+                    wrapped.push_back(Row(ROW_LINE, parts[k], ACT_NONE, rows[i].col));
+            }
+            rows.swap(wrapped);
+        }
     }
     if ((int)rows.size() > MAX_ROWS) rows.resize(MAX_ROWS);
 
@@ -882,7 +1008,7 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
     // and armed but attaches to nothing, so F2 logs open/close yet nothing draws.
     if (!g_panel.panel) {
         std::string layer = "Info";
-        g_panel.panel = g->createDatapanel(0.22f, 0.30f, 0.30f, 0.44f, false, layer, true);
+        g_panel.panel = g->createDatapanel(0.20f, 0.30f, 0.34f, 0.50f, false, layer, true);
         g_panel.built = false;
         if (!g_panel.panel) {
             coop::logErrLine("[coop-ui] createDatapanel FAILED");
@@ -922,6 +1048,7 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
         g_panel.built = true;
         g_panel.needsRebuild = false;
         g_panel.lastSig = sig;
+        refreshLineWidth();
     }
     // Kenshi's font pass (a resize, the title screen, the font-size option)
     // re-applies every widget's own font, which puts the EditBox lines back on
@@ -930,7 +1057,11 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
     {
         static DWORD s_lastAccent = 0;
         const DWORD now = GetTickCount();
-        if (g_panel.built && now - s_lastAccent >= 500) { s_lastAccent = now; accentPanelRows(); }
+        if (g_panel.built && now - s_lastAccent >= 500) {
+            s_lastAccent = now;
+            accentPanelRows();
+            refreshLineWidth(); // a window resize changes it
+        }
     }
 
     // Connect / disconnect on the Online/Offline edge (edge, not level, so a

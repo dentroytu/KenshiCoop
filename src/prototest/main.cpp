@@ -33,6 +33,7 @@
 #include "../plugin/core/ModList.h" // protocol 56: active-mod list diff (header-only)
 #include "../plugin/core/UiLang.h"  // accented fonts XML + ASCII fallback (header-only)
 #include "../plugin/core/Refusal.h" // how a client reads a refusal + its player text
+#include "../plugin/core/TextWrap.h" // F2 panel: one row per wrapped line
 #include "../plugin/core/Inbound.h" // Phase 0 queue-lifecycle fixes (header-only)
 #include "../plugin/game/EngineFaults.h" // Phase 5c: fault throttle (pure inline)
 #include "../plugin/game/EngineCaps.h"   // Phase 5d: capability registry (pure inline)
@@ -1275,6 +1276,39 @@ static void testPresenceOrder() {
 // Kenshi's fonts only rasterize 32-126, so accented panel text drew as gaps.
 // UiLang.h builds accented copies of the fonts from kenshi_fonts.xml, and folds
 // text to ASCII when those copies cannot be loaded.
+// Every code point 10 px wide: accented letters must count once, not per byte.
+static float tenPx(unsigned int, void*) { return 10.0f; }
+
+static void testTextWrap() {
+    std::printf("== F2 panel line wrapping (TextWrap.h) ==\n");
+    using coop::wrapTextPx;
+    std::vector<std::string> out;
+    size_t i = 0;
+    const std::string es = "est\xC3\xA1";
+    unsigned int cps[4];
+    for (int k = 0; k < 4; ++k) cps[k] = coop::utf8Next(es, &i);
+    CHECK("utf8 decodes a 2-byte letter", cps[3] == 0xE1 && i == es.size());
+    CHECK_EQ("width counts code points, not bytes", (int)coop::textWidthPx(es, &tenPx, 0), 40);
+    size_t j = 0;
+    const std::string bad = "\xC3";
+    CHECK("truncated sequence -> U+FFFD and advances",
+          coop::utf8Next(bad, &j) == 0xFFFD && j == 1);
+
+    wrapTextPx("corto", 100.0f, &tenPx, 0, out);
+    CHECK("fits -> one line, unchanged", out.size() == 1 && out[0] == "corto");
+    wrapTextPx("uno dos tres cuatro", 80.0f, &tenPx, 0, out);   // 8 glyphs per line
+    CHECK("breaks at spaces", out.size() == 3 && out[0] == "uno dos" &&
+          out[1] == "tres" && out[2] == "cuatro");
+    wrapTextPx("supercalifragilistico y", 50.0f, &tenPx, 0, out);
+    CHECK("a word wider than the line keeps its own line",
+          out.size() == 2 && out[0] == "supercalifragilistico" && out[1] == "y");
+    wrapTextPx("a b", 0.0f, &tenPx, 0, out);
+    CHECK("no budget -> no wrapping", out.size() == 1 && out[0] == "a b");
+    wrapTextPx("Carga una partida y entrar\xC3\xA1 contigo.", 200.0f, &tenPx, 0, out);
+    CHECK("accented line wraps by glyphs", out.size() == 2 &&
+          out[0] == "Carga una partida y" && out[1] == "entrar\xC3\xA1 contigo.");
+}
+
 static void testAccentText() {
     std::printf("== accented panel text (UiLang.h) ==\n");
     using coop::foldToAscii;
@@ -2046,6 +2080,7 @@ int main() {
     testRefusal();
     testPresenceOrder();
     testAccentText();
+    testTextWrap();
     testRefusalClient();
     testWorkPoseMatch();
     testTaskClear();

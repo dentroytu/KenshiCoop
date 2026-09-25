@@ -118,7 +118,7 @@ NetLink::NetLink()
       outOwner_(0), outStampMs_(0), haveOut_(false),
       thread_(0), running_(0), stopFlag_(0), myId_(0),
       refusal_(0), noAnswerSince_(0), peerRefused_(0), peerRefusedTick_(0),
-      wireVer_(PROTOCOL_VERSION),
+      admitted_(0), wireVer_(PROTOCOL_VERSION),
       sendEpoch_(0),
       steamPeer_(0),
       simDelayMs_(0), simJitterMs_(0), simLossPct_(0) {
@@ -132,13 +132,13 @@ NetLink::~NetLink() {
 
 bool NetLink::startHost(int port, Inbound* inbound) {
     isHost_ = true; port_ = port; inbound_ = inbound; myId_ = 0;
-    refusal_ = 0; noAnswerSince_ = 0; peerRefused_ = 0; peerRefusedTick_ = 0;
+    refusal_ = 0; noAnswerSince_ = 0; peerRefused_ = 0; peerRefusedTick_ = 0; admitted_ = 0;
     return launchThread();
 }
 
 bool NetLink::startClient(const std::string& ip, int port, Inbound* inbound) {
     isHost_ = false; ip_ = ip; port_ = port; inbound_ = inbound; myId_ = 0;
-    refusal_ = 0; noAnswerSince_ = 0; peerRefused_ = 0; peerRefusedTick_ = 0;
+    refusal_ = 0; noAnswerSince_ = 0; peerRefused_ = 0; peerRefusedTick_ = 0; admitted_ = 0;
     return launchThread();
 }
 
@@ -1219,6 +1219,7 @@ void NetLink::threadLoop() {
                     break;
             }
         }
+        if (isHost_) InterlockedExchange(&admitted_, (LONG)admittedPeersExcept(enetHost_, 0));
 
         // Release any WAN-sim-delayed inbound entities whose arrival time has come.
         // No-op (and cheap) when the sim is disabled / nothing is pending.
@@ -2128,6 +2129,7 @@ void NetLink::threadLoop() {
 
     if (enetHost_) { enet_host_destroy(enetHost_); enetHost_ = 0; }
     if (steam) steamp2p::removeEnetHooks();
+    InterlockedExchange(&admitted_, 0);
     InterlockedExchange(&running_, 0);
 }
 

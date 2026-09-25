@@ -251,6 +251,10 @@ public:
     // another version while no friend was admitted (0 = none), and when.
     u32   peerRefused()     const { return (u32)peerRefused_; }
     DWORD peerRefusedTick() const { return (DWORD)peerRefusedTick_; }
+    // HOST: friends admitted right now, as the net thread sees them. The game
+    // thread only drains presence edges in game, so at the title screen this
+    // is the only sign that a friend is already in.
+    unsigned admittedPeers() const { return (unsigned)admitted_; }
 
 private:
     static DWORD WINAPI threadEntry(LPVOID self);
@@ -378,6 +382,7 @@ private:
     volatile LONG noAnswerSince_;
     volatile LONG peerRefused_;
     volatile LONG peerRefusedTick_;
+    volatile LONG admitted_;
     u16           wireVer_;
 
     // Session epoch (protocol 44). sendEpoch_ is bumped by the MAIN thread
