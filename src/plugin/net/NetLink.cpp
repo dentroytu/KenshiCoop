@@ -3,6 +3,7 @@
 #include "NetLink.h"
 #include "SteamP2P.h"
 #include "../CoopLog.h"
+#include "../core/Refusal.h" // classifyDrop: why a client's attempt ended
 
 #include <cstring>
 #include <cstdio>
@@ -116,6 +117,8 @@ NetLink::NetLink()
       enetHost_(0), serverPeer_(0), inbound_(0),
       outOwner_(0), outStampMs_(0), haveOut_(false),
       thread_(0), running_(0), stopFlag_(0), myId_(0),
+      refusal_(0), noAnswerSince_(0), peerRefused_(0), peerRefusedTick_(0),
+      admitted_(0), wireVer_(PROTOCOL_VERSION),
       sendEpoch_(0),
       steamPeer_(0),
       simDelayMs_(0), simJitterMs_(0), simLossPct_(0) {
@@ -129,11 +132,13 @@ NetLink::~NetLink() {
 
 bool NetLink::startHost(int port, Inbound* inbound) {
     isHost_ = true; port_ = port; inbound_ = inbound; myId_ = 0;
+    refusal_ = 0; noAnswerSince_ = 0; peerRefused_ = 0; peerRefusedTick_ = 0; admitted_ = 0;
     return launchThread();
 }
 
 bool NetLink::startClient(const std::string& ip, int port, Inbound* inbound) {
     isHost_ = false; ip_ = ip; port_ = port; inbound_ = inbound; myId_ = 0;
+    refusal_ = 0; noAnswerSince_ = 0; peerRefused_ = 0; peerRefusedTick_ = 0; admitted_ = 0;
     return launchThread();
 }
 
@@ -451,6 +456,16 @@ void NetLink::threadLoop() {
     u32   nextId = 1;
     DWORD lastConnectAttempt = GetTickCount();
 
+    // Client: the connection attempt in flight, as classifyDrop (Refusal.h)
+    // needs it, and whether a final refusal has stopped the retries - until
+    // the player acts (Entendido/Cancel stops this thread; Connect restarts it).
+    DWORD attemptStart   = lastConnectAttempt;
+    bool  gotConnect     = false; // ENet connected on this attempt
+    bool  welcomed       = false; // ... and our HELLO got a matching WELCOME
+    bool  stopRetry      = false;
+    u32   lastSoftLogged = 0;     // soft code last logged (log on change only)
+    if (!isHost_) InterlockedExchange(&noAnswerSince_, (LONG)attemptStart);
+
     // Host log throttles for what refused peers repeat on every attempt.
     LogThrottle thrConnecting, thrMismatch, thrFull, thrGate, thrUnadmittedLeave;
     unsigned    held = 0;
@@ -473,8 +488,9 @@ void NetLink::threadLoop() {
         steamp2p::tick();
 
         // Client reconnect: if we have no live connection, retry every 2 s so
-        // dropping/relaunching the host re-establishes.
-        if (!isHost_) {
+        // dropping/relaunching the host re-establishes - unless the host refused
+        // us for good (another version), where retrying cannot help.
+        if (!isHost_ && !stopRetry) {
             bool disconnected =
                 (serverPeer_ == 0) ||
                 (serverPeer_->state == ENET_PEER_STATE_DISCONNECTED) ||
@@ -482,6 +498,10 @@ void NetLink::threadLoop() {
             DWORD now = GetTickCount();
             if (disconnected && (now - lastConnectAttempt) >= 2000) {
                 lastConnectAttempt = now;
+                attemptStart = now;
+                gotConnect = false;
+                welcomed = false;
+                if (noAnswerSince_ == 0) InterlockedExchange(&noAnswerSince_, (LONG)now);
                 if (serverPeer_) { enet_peer_reset(serverPeer_); serverPeer_ = 0; }
                 ENetAddress addr;
                 if (steam) enet_address_set_host_ip(&addr, "1.0.0.1");
@@ -527,9 +547,11 @@ void NetLink::threadLoop() {
                         // (v44). The host does this when it ADMITS a peer, so a
                         // refused peer's attempts never reset the friend's.
                         epochSeen_.clear();
+                        gotConnect = true;
+                        InterlockedExchange(&noAnswerSince_, 0);
                         // Introduce ourselves with our protocol version.
                         HelloPacket h;
-                        h.type = (u8)PKT_HELLO; h.version = PROTOCOL_VERSION; h.nameLen = 0;
+                        h.type = (u8)PKT_HELLO; h.version = wireVer_; h.nameLen = 0;
                         ENetPacket* out = enet_packet_create(&h, sizeof(h), ENET_PACKET_FLAG_RELIABLE);
                         enet_peer_send(ev.peer, CH_RELIABLE, out);
                         netLog("connected to host; sent HELLO");
@@ -569,17 +591,25 @@ void NetLink::threadLoop() {
                             // into a session that would desync. FULL is soft: the
                             // same friend reconnecting before its old connection is
                             // released gets in once ENet times that one out.
-                            const u32 refuse = hostRefusal(h.version, PROTOCOL_VERSION,
-                                                           admittedPeersExcept(enetHost_, ev.peer));
+                            const unsigned others = admittedPeersExcept(enetHost_, ev.peer);
+                            const u32 refuse = hostRefusal(h.version, wireVer_, others);
                             if (refuseReason(refuse) == REFUSE_VERSION) {
+                                // Tell the host player too - but only while nobody
+                                // is in: a stranger knocking must not raise a notice
+                                // about "your friend" during a live session.
+                                if (others == 0) {
+                                    InterlockedExchange(&peerRefused_,
+                                        (LONG)refuseEncode(REFUSE_VERSION, false, h.version));
+                                    InterlockedExchange(&peerRefusedTick_, (LONG)GetTickCount());
+                                }
                                 if (thrMismatch.pass(GetTickCount(), &held)) {
                                     char b[160];
                                     if (held) _snprintf(b, sizeof(b) - 1,
                                                         "protocol mismatch: peer v%u, ours v%u; rejecting (+%u more)",
-                                                        (unsigned)h.version, (unsigned)PROTOCOL_VERSION, held);
+                                                        (unsigned)h.version, (unsigned)wireVer_, held);
                                     else      _snprintf(b, sizeof(b) - 1,
                                                         "protocol mismatch: peer v%u, ours v%u; rejecting",
-                                                        (unsigned)h.version, (unsigned)PROTOCOL_VERSION);
+                                                        (unsigned)h.version, (unsigned)wireVer_);
                                     b[sizeof(b) - 1] = '\0';
                                     netErr(b);
                                 }
@@ -599,16 +629,18 @@ void NetLink::threadLoop() {
                                 // Admitting starts this peer's epoch sequence; see
                                 // the client's CONNECT note (v44).
                                 epochSeen_.clear();
+                                InterlockedExchange(&peerRefused_, 0); // a friend got in
+                                InterlockedExchange(&peerRefusedTick_, 0);
                                 ev.peer->data = (void*)(size_t)id;
                                 WelcomePacket w;
-                                w.type = (u8)PKT_WELCOME; w.version = PROTOCOL_VERSION; w.playerId = id;
+                                w.type = (u8)PKT_WELCOME; w.version = wireVer_; w.playerId = id;
                                 ENetPacket* out =
                                     enet_packet_create(&w, sizeof(w), ENET_PACKET_FLAG_RELIABLE);
                                 enet_peer_send(ev.peer, CH_RELIABLE, out);
                                 char b[96];
                                 _snprintf(b, sizeof(b) - 1,
                                           "peer connected id=%u (proto v%u)",
-                                          (unsigned)id, (unsigned)PROTOCOL_VERSION);
+                                          (unsigned)id, (unsigned)wireVer_);
                                 b[sizeof(b) - 1] = '\0';
                                 netLog(b);
                                 if (inbound_) inbound_->pushConnect(id);
@@ -617,19 +649,30 @@ void NetLink::threadLoop() {
                     } else if (!isHost_ && type == PKT_WELCOME) {
                         WelcomePacket w;
                         if (readPacket(ev.packet->data, (unsigned)ev.packet->dataLength, &w)) {
-                            if (w.version != PROTOCOL_VERSION) {
+                            if (w.version != wireVer_) {
+                                // A host that admits another version (none does
+                                // today) cannot sync with us: stop here, with the
+                                // exact reason. stopRetry is set BEFORE our own
+                                // disconnect, so the DISCONNECT that follows does
+                                // not overwrite this code with a guess.
                                 char b[128];
                                 _snprintf(b, sizeof(b) - 1,
-                                          "protocol mismatch: host v%u, ours v%u",
-                                          (unsigned)w.version, (unsigned)PROTOCOL_VERSION);
+                                          "protocol mismatch: host v%u, ours v%u; not retrying",
+                                          (unsigned)w.version, (unsigned)wireVer_);
                                 b[sizeof(b) - 1] = '\0';
                                 netErr(b);
+                                InterlockedExchange(&refusal_,
+                                    (LONG)refuseEncode(REFUSE_VERSION, false, w.version));
+                                stopRetry = true;
+                                enet_peer_disconnect(ev.peer, 0);
                             } else {
+                                welcomed = true;
+                                InterlockedExchange(&refusal_, 0);
                                 InterlockedExchange(&myId_, (LONG)w.playerId);
                                 char b[96];
                                 _snprintf(b, sizeof(b) - 1,
                                           "peer connected id=%u (proto v%u) - received WELCOME",
-                                          (unsigned)w.playerId, (unsigned)PROTOCOL_VERSION);
+                                          (unsigned)w.playerId, (unsigned)wireVer_);
                                 b[sizeof(b) - 1] = '\0';
                                 netLog(b);
                                 if (inbound_) inbound_->pushConnect(0); // host id = 0
@@ -1115,7 +1158,59 @@ void NetLink::threadLoop() {
                     } else {
                         epochSeen_.clear(); // host gone; its epoch sequence ends (v44)
                         serverPeer_ = 0;
-                        if (inbound_) inbound_->pushLeave(OWNER_ID_ALL);
+                        // Why did this attempt end? (A WELCOME mismatch already
+                        // stopped us with the exact code: keep it.)
+                        if (!stopRetry) {
+                            u32 latch = 0;
+                            const DropKind kind = classifyDrop(ev.data, gotConnect, welcomed,
+                                                               GetTickCount() - attemptStart, &latch);
+                            char b[200];
+                            b[0] = '\0';
+                            if (kind == DROP_FINAL) {
+                                const u8  r  = refuseReason(latch);
+                                const u16 hv = refuseVersion(latch);
+                                if (r == REFUSE_VERSION && hv != 0)
+                                    _snprintf(b, sizeof(b) - 1,
+                                              "protocol mismatch: host v%u, ours v%u; not retrying",
+                                              (unsigned)hv, (unsigned)wireVer_);
+                                else if (r == REFUSE_VERSION)
+                                    _snprintf(b, sizeof(b) - 1,
+                                              "protocol mismatch: host v?, ours v%u (dropped %lu ms "
+                                              "into the attempt with no reason code: probably an "
+                                              "older KenshiCoop); not retrying",
+                                              (unsigned)wireVer_,
+                                              (unsigned long)(GetTickCount() - attemptStart));
+                                else
+                                    _snprintf(b, sizeof(b) - 1,
+                                              "refused by host: reason=%u host v%u; not retrying",
+                                              (unsigned)r, (unsigned)hv);
+                                b[sizeof(b) - 1] = '\0';
+                                netErr(b);
+                                InterlockedExchange(&refusal_, (LONG)latch);
+                                stopRetry = true;
+                            } else if (kind == DROP_SOFT) {
+                                if (latch != lastSoftLogged) {
+                                    _snprintf(b, sizeof(b) - 1,
+                                              "deferred by host: reason=%u host v%u; retrying",
+                                              (unsigned)refuseReason(latch),
+                                              (unsigned)refuseVersion(latch));
+                                    b[sizeof(b) - 1] = '\0';
+                                    netLog(b);
+                                    lastSoftLogged = latch;
+                                }
+                                InterlockedExchange(&refusal_, (LONG)latch);
+                            } else {
+                                // No answer, or a real session ended: nothing to
+                                // explain beyond "connecting"; retry as before.
+                                InterlockedExchange(&refusal_, 0);
+                                lastSoftLogged = 0;
+                            }
+                        }
+                        // Only a session the game thread saw start (WELCOME ->
+                        // connect edge) has a leave to process; a refused or
+                        // unanswered attempt used to run the leave path each time.
+                        if (welcomed && inbound_) inbound_->pushLeave(OWNER_ID_ALL);
+                        welcomed = false;
                         netLog("disconnected from host");
                     }
                     break;
@@ -1124,6 +1219,7 @@ void NetLink::threadLoop() {
                     break;
             }
         }
+        if (isHost_) InterlockedExchange(&admitted_, (LONG)admittedPeersExcept(enetHost_, 0));
 
         // Release any WAN-sim-delayed inbound entities whose arrival time has come.
         // No-op (and cheap) when the sim is disabled / nothing is pending.
@@ -2033,6 +2129,7 @@ void NetLink::threadLoop() {
 
     if (enetHost_) { enet_host_destroy(enetHost_); enetHost_ = 0; }
     if (steam) steamp2p::removeEnetHooks();
+    InterlockedExchange(&admitted_, 0);
     InterlockedExchange(&running_, 0);
 }
 

@@ -191,6 +191,13 @@ struct Config {
     // a genuine two-machine clock disagreement. 0 = real clock.
     long          fakeClockSkewMs;
 
+    // Harness only (KENSHICOOP_FAKE_PROTOCOL_HOST / _JOIN): the protocol version
+    // this game claims in HELLO/WELCOME while hosting / joining, so the version
+    // refusal can be tested with two Kenshi instances on one PC. 0 = the real
+    // one. Parsed only in Harness/Debug builds: a Release DLL never fakes it.
+    unsigned int  fakeProtoHost;
+    unsigned int  fakeProtoJoin;
+
     // Step-2 pruning experiment (KENSHICOOP_NO_DETACH == "1", join only): skip the
     // sitter detachFromTownAI in applyRest, betting that default AI-suspend alone
     // stops town-AI re-tasking. Off by default; for manual A/B runs only.

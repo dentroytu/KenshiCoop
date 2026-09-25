@@ -21,10 +21,20 @@
 #include <kenshi/gui/DatapanelGUI.h>
 #include <kenshi/gui/DataPanelLine.h>
 #include <mygui/MyGUI_Delegate.h> // MyGUI::newDelegate + CDelegate* (free-fn callbacks)
+#include <mygui/MyGUI_DataManager.h>     // accented fonts: find kenshi_fonts.xml
+#include <mygui/MyGUI_ResourceManager.h> // accented fonts: register the copies
+#include <mygui/MyGUI_XmlDocument.h>     // accented fonts: parse them from memory
+#include <mygui/MyGUI_FontManager.h>     // accented fonts: MyGUI's default font
+#include <mygui/MyGUI_IFont.h>           // panel line wrapping: glyph advances
 #include <windows.h>
 
 #include "../core/SteamId.h" // parseSteamId64 (paste button) + maskSteamId64 (id rows)
 #include "../core/UiLang.h" // L(es, en): panel text in the player's language
+#include "../core/TextWrap.h" // one panel row per wrapped line
+#include <fstream>
+#include <iterator>
+#include <map>
+#include <sstream>
 #include <vector>
 
 namespace coop {
@@ -152,6 +162,124 @@ void markerDestroy(void* label) {
     markerDestroySeh(g, (ScreenLabel*)label);
 }
 
+// ---- Accented text (Kenshi's fonts are ASCII-only) ----------------------------
+// Every font in Kenshi's data/gui/fonts/kenshi_fonts.xml rasterizes only codes
+// 32-126 (plus a few quote marks), so the Spanish panel and banner drew every
+// accented letter, n-tilde and inverted mark as a gap (seen in game 2026-09-25).
+// We register a copy of each of those fonts named <font>_KC that also covers
+// 32-255 - built from the game's own file, so the TTF, size and hinting match -
+// and switch only OUR widgets to it; Kenshi's own fonts and widgets are never
+// touched (rebuilding Kenshi's fonts in place garbled its whole UI on a window
+// resize, 2026-09-25). Kenshi's font-size pass - on a resize, the title screen,
+// the font-size option - resizes the copies with its own, but also re-applies
+// every widget's font, which sends our EditBox lines back to the ASCII-only
+// default font: coopPanelTick re-applies ours to the rows every 500 ms.
+// (Buttons and the banner report their font, so that pass keeps our copy.)
+// If the copies cannot be made, text is folded to plain ASCII instead (UiLang.h
+// foldToAscii): never gaps either way.
+
+namespace {
+
+enum { FONTS_UNTRIED = 0, FONTS_OK = 1, FONTS_FAILED = 2 };
+int g_fontState = FONTS_UNTRIED;
+std::map<std::string, std::string> g_fontFor; // Kenshi font -> our copy ("" = none)
+
+bool loadAccentFonts(std::string* why) {
+    try {
+        MyGUI::DataManager*     dm = MyGUI::DataManager::getInstancePtr();
+        MyGUI::ResourceManager* rm = MyGUI::ResourceManager::getInstancePtr();
+        if (!dm || !rm) { *why = "MyGUI managers not up"; return false; }
+        const std::string path = dm->getDataPath("kenshi_fonts.xml");
+        if (path.empty()) { *why = "kenshi_fonts.xml not found"; return false; }
+        std::ifstream f(path.c_str(), std::ios::binary);
+        if (!f) { *why = "cannot open " + path; return false; }
+        std::string src((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+        int renamed = 0, widened = 0;
+        std::string xml = coop::accentFontXml(src, &renamed, &widened);
+        if (renamed == 0 || widened == 0) { *why = "unexpected kenshi_fonts.xml"; return false; }
+        std::istringstream in(xml);
+        MyGUI::xml::Document doc;
+        if (!doc.open(in) || !doc.getRoot()) { *why = "font XML did not parse"; return false; }
+        rm->loadFromXmlNode(doc.getRoot(), path, MyGUI::Version(1, 1, 0));
+        return true;
+    } catch (...) {
+        *why = "MyGUI threw while loading";
+        return false;
+    }
+}
+
+// SEH shell: loadAccentFonts holds C++ objects, so no __try of its own (C2712).
+bool loadAccentFontsSeh(std::string* why) {
+    __try { return loadAccentFonts(why); }
+    __except (EXCEPTION_EXECUTE_HANDLER) { *why = "fault while loading"; return false; }
+}
+
+// Once, on the main thread with the GUI up (first panel/banner tick). Marked
+// failed BEFORE trying, so a fault is never retried every frame.
+void ensureAccentFonts() {
+    if (g_fontState != FONTS_UNTRIED || !::gui) return;
+    g_fontState = FONTS_FAILED;
+    std::string why;
+    if (loadAccentFontsSeh(&why)) g_fontState = FONTS_OK;
+    if (g_fontState == FONTS_OK)
+        coop::logLine("[coop-ui] accented fonts loaded (Kenshi fonts + Latin-1)");
+    else
+        coop::logErrLine(("[coop-ui] accented fonts unavailable (" + why +
+                          "); showing panel text without accents").c_str());
+}
+
+// Text for our widgets: as written when the accented fonts are in, else ASCII.
+std::string uiText(const std::string& utf8) {
+    return g_fontState == FONTS_OK ? utf8 : coop::foldToAscii(utf8);
+}
+
+// Our copy of a Kenshi font, if one was registered ("" otherwise).
+const std::string& accentFontFor(const std::string& kenshiFont) {
+    std::map<std::string, std::string>::iterator it = g_fontFor.find(kenshiFont);
+    if (it != g_fontFor.end()) return it->second;
+    std::string mine = kenshiFont + coop::accentFontSuffix();
+    MyGUI::ResourceManager* rm = MyGUI::ResourceManager::getInstancePtr();
+    bool ok = false;
+    try { ok = rm && rm->isExist(mine); } catch (...) { ok = false; }
+    coop::logLine(("[coop-ui] font '" + kenshiFont + "' -> " +
+                   (ok ? "'" + mine + "'" : std::string("no accented copy"))).c_str());
+    return g_fontFor[kenshiFont] = ok ? mine : std::string();
+}
+
+// C2712 split: the string work stays out here, the widget calls in POD frames.
+const std::string* widgetFontSeh(MyGUI::TextBox* w) {
+    __try { return &w->getFontName(); } __except (EXCEPTION_EXECUTE_HANDLER) { return 0; }
+}
+void setWidgetFontSeh(MyGUI::TextBox* w, const std::string* font) {
+    __try { w->setFontName(*font); } __except (EXCEPTION_EXECUTE_HANDLER) {}
+}
+// An empty font name means MyGUI's default font. The panel's text lines are
+// EditBoxes, and an EditBox always reports an empty name (it keeps its font in
+// its own client text, which getFontName does not read) while setFontName does
+// work on it - so an empty name is resolved to the default font's copy. Only
+// the buttons report their font (Kenshi_StandardFont_Medium). Seen 2026-09-25.
+std::string defaultFontName() {
+    try {
+        MyGUI::FontManager* fm = MyGUI::FontManager::getInstancePtr();
+        return fm ? fm->getDefaultFont() : std::string();
+    } catch (...) { return std::string(); }
+}
+
+void useAccentFont(MyGUI::TextBox* w) {
+    if (!w || g_fontState != FONTS_OK) return;
+    const std::string* cur = widgetFontSeh(w);
+    if (!cur) return;
+    std::string font = cur->empty() ? defaultFontName() : *cur; // copy: *cur changes below
+    if (font.empty()) return;
+    const std::string suffix = coop::accentFontSuffix();
+    if (font.size() > suffix.size() &&
+        font.compare(font.size() - suffix.size(), suffix.size(), suffix) == 0) return;
+    std::string mine = accentFontFor(font);
+    if (!mine.empty()) setWidgetFontSeh(w, &mine);
+}
+
+} // namespace
+
 // ---- In-game co-op session panel (config-driven, spike-50 DatapanelGUI stack) -
 // A native DatapanelGUI window toggled with F2. The player picks role + transport
 // (toggle BUTTONS - the only DatapanelGUI control with a callable RVA callback;
@@ -260,11 +388,14 @@ struct CoopPanelUi {
     bool          needsRebuild;
     bool          f2Down;        // F2 held last tick (rising-edge toggle)
     int           view;          // VIEW_*
+    int           linePx;        // text width of a built row, for wrapping (0 = unknown)
+    int           rowPx;         // height of a built row (0 = unknown)
+    int           fontPx;        // the row font's own height (0 = unknown)
     std::string   lastSig;       // rows shown by the last build (refresh gate)
     CoopPanelUi()
         : panel(0), open(false), built(false), hostFlag(true), steamFlag(true),
           connectedFlag(false), lastConnected(false), lastChkVal(false),
-          needsRebuild(false), f2Down(false), view(VIEW_MAIN) {}
+          needsRebuild(false), f2Down(false), view(VIEW_MAIN), linePx(0), rowPx(0), fontPx(0) {}
 };
 
 CoopPanelUi             g_panel;
@@ -412,7 +543,7 @@ void addLine(std::vector<Row>& r, const std::string& t, int col) { r.push_back(R
 void addButton(std::vector<Row>& r, const std::string& t, int act) { r.push_back(Row(ROW_BUTTON, t, act, COL_WHITE)); }
 void addSpace(std::vector<Row>& r) { r.push_back(Row(ROW_SPACE, std::string(), ACT_NONE, COL_WHITE)); }
 
-const int              MAX_ROWS = 24;
+const int              MAX_ROWS = 32; // wrapped lines take a row each
 DataPanelLine*         g_rowLine[MAX_ROWS];
 DataPanelLine_Button*  g_rowBtn[MAX_ROWS];
 
@@ -448,6 +579,110 @@ void lineColourSeh(DataPanelLine* line, float r, float g, float b) {
         if (line->w2) line->w2->setTextColour(c);
     } __except (EXCEPTION_EXECUTE_HANDLER) {}
 }
+// The text widgets of one built row: w1/w2 of its line, plus a button row's
+// button (a MyGUI::Button is a TextBox). Unset entries stay 0.
+void rowTextWidgetsSeh(DataPanelLine* line, DataPanelLine_Button* btn, MyGUI::TextBox* out[3]) {
+    __try {
+        DataPanelLine* l = line ? line : btn;
+        if (l) { out[0] = l->w1; out[1] = l->w2; }
+        if (btn) out[2] = btn->button;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {}
+}
+void setWidgetFontHeightSeh(MyGUI::TextBox* w, int px) {
+    if (!w) return;
+    __try { w->setFontHeight(px); } // virtual (EditBox forwards it to its text)
+    __except (EXCEPTION_EXECUTE_HANDLER) {}
+}
+// Put the accented copies on every text widget of the built panel (after a
+// build, and again every 500 ms: see "Accented text" on Kenshi's font pass).
+// In a small window a row is shorter than the font (11 px rows, 14 px font at
+// 944x700), which cut every descender ("amigo" read "amieo"): the text lines
+// then draw at the row's height. Buttons centre their text and are left alone.
+// Setting a font resets its height, so both are re-applied together.
+void accentPanelRows() {
+    const bool shrink = g_panel.rowPx > 0 && g_panel.fontPx > g_panel.rowPx;
+    for (int i = 0; i < MAX_ROWS; ++i) {
+        if (!g_rowLine[i] && !g_rowBtn[i]) continue;
+        MyGUI::TextBox* w[3] = { 0, 0, 0 };
+        rowTextWidgetsSeh(g_rowLine[i], g_rowBtn[i], w);
+        for (int k = 0; k < 3; ++k) useAccentFont(w[k]);
+        if (shrink && g_rowLine[i]) {
+            setWidgetFontHeightSeh(w[0], g_panel.rowPx);
+            setWidgetFontHeightSeh(w[1], g_panel.rowPx);
+        }
+    }
+}
+// How much narrower the lines draw than the font's own metrics (see above).
+float panelTextScale() {
+    return (g_panel.rowPx > 0 && g_panel.fontPx > g_panel.rowPx)
+         ? (float)g_panel.rowPx / (float)g_panel.fontPx : 1.0f;
+}
+// Line wrapping (core/TextWrap.h), measured with the font the rows draw with:
+// the default font's accented copy once it is in, else the default font.
+float glyphAdvanceSeh(MyGUI::IFont* f, unsigned int cp) {
+    __try {
+        MyGUI::GlyphInfo* g = f->getGlyphInfo((MyGUI::Char)cp); // virtual
+        if (g) return g->bearingX + g->advance;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {}
+    return 7.0f;
+}
+float panelGlyphAdvance(unsigned int cp, void* font) {
+    return glyphAdvanceSeh(static_cast<MyGUI::IFont*>(font), cp);
+}
+MyGUI::IFont* panelTextFont() {
+    std::string name = defaultFontName();
+    if (name.empty()) return 0;
+    if (g_fontState == FONTS_OK) {
+        const std::string& mine = accentFontFor(name);
+        if (!mine.empty()) name = mine;
+    }
+    try {
+        MyGUI::FontManager* fm = MyGUI::FontManager::getInstancePtr();
+        return fm ? fm->getByName(name) : 0;
+    } catch (...) { return 0; }
+}
+// Width of a built line's text widget: the width its EditBox wraps at.
+int lineTextWidthSeh(DataPanelLine* line) {
+    if (!line) return 0;
+    __try { return line->w1 ? line->w1->getWidth() : 0; }
+    __except (EXCEPTION_EXECUTE_HANDLER) { return 0; }
+}
+int lineTextHeightSeh(DataPanelLine* line) {
+    if (!line) return 0;
+    __try { return line->w1 ? line->w1->getHeight() : 0; }
+    __except (EXCEPTION_EXECUTE_HANDLER) { return 0; }
+}
+int fontHeightSeh(MyGUI::IFont* f) {
+    __try { return f->getDefaultHeight(); } // virtual
+    __except (EXCEPTION_EXECUTE_HANDLER) { return -1; }
+}
+// Re-read a built line's size and the row font's height; a change (first
+// build, a window resize, Kenshi's font-size pass) asks for a rebuild so the
+// rows are wrapped - and their text sized - for the new geometry.
+void refreshLineWidth() {
+    for (int i = 0; i < MAX_ROWS; ++i) {
+        if (!g_rowLine[i]) continue;
+        const int px = lineTextWidthSeh(g_rowLine[i]);
+        if (px <= 0) continue;
+        const int rowPx = lineTextHeightSeh(g_rowLine[i]);
+        MyGUI::IFont* f = panelTextFont();
+        const int fontPx = f ? fontHeightSeh(f) : 0;
+        if (px != g_panel.linePx || rowPx != g_panel.rowPx || fontPx != g_panel.fontPx) {
+            g_panel.linePx = px;
+            g_panel.rowPx  = rowPx;
+            g_panel.fontPx = fontPx;
+            g_panel.needsRebuild = true;
+            char b[160];
+            _snprintf(b, sizeof(b) - 1,
+                      "[coop-ui] panel rows %dx%d px, font %d px (text scale %.2f)",
+                      px, rowPx, fontPx, panelTextScale());
+            b[sizeof(b) - 1] = '\0';
+            coop::logLine(b);
+        }
+        return;
+    }
+}
+
 void colourRow(DataPanelLine* line, int col) {
     switch (col) {
     case COL_GREY:  lineColourSeh(line, 0.72f, 0.72f, 0.72f); break;
@@ -543,6 +778,7 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
           char b[64]; _snprintf(b, sizeof(b) - 1, "[coop-ui] gui ptr=%p", (void*)g);
           b[sizeof(b) - 1] = '\0'; coop::logLine(b); } }
     if (!g) return;
+    ensureAccentFonts();
 
     // Cache the self id as a string for the Copy button (used by onCopyIdBtn).
     if (st->selfSteamId) {
@@ -596,10 +832,24 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
     // ---- What the player sees ----------------------------------------------------
     std::string status;
     int statusCol;
-    if (st->running && st->peerPresent) {
+    std::string waitLine; // what to do next while connected at the main menu
+    if (st->running && st->waitNote == 1) {
+        status = L("Tu amigo ya est\xC3\xA1 conectado", "Your friend is connected");
+        statusCol = COL_GREEN;
+        waitLine = L("Carga una partida (o empieza una nueva) y entrar\xC3\xA1 contigo.",
+                     "Load a game (or start a new one) and your friend joins you.");
+    } else if (st->running && st->waitNote == 2) {
+        status = L("Conectado con tu amigo", "Connected to your friend");
+        statusCol = COL_GREEN;
+        waitLine = L("Esperando a que tu amigo cargue su partida...",
+                     "Waiting for your friend to load their game...");
+    } else if (st->running && st->peerPresent) {
         status = st->isHost ? L("Conectado: tu amigo est\xC3\xA1 en tu partida", "Connected: your friend is in your game")
                             : L("Conectado a la partida de tu amigo", "Connected to your friend's game");
         statusCol = COL_GREEN;
+    } else if (st->running && st->refuseFinal) {
+        status = L("No se pudo conectar", "Could not connect");
+        statusCol = COL_RED;
     } else if (st->running) {
         status = st->isHost ? L("Esperando a tu amigo...", "Waiting for your friend...")
                             : L("Conectando con tu amigo...", "Connecting to your friend...");
@@ -611,7 +861,7 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
     std::string transfer = st->transferDetail ? std::string(st->transferDetail) : std::string();
     std::string inviteText = inviteStatusText(st->inviteCode, st->inviteArg);
     bool canInvite = st->inviteReady && g_panel.steamFlag && !st->peerPresent &&
-                     (!st->running || st->isHost);
+                     st->waitNote == 0 && (!st->running || st->isHost);
     if (g_panel.view == VIEW_PICK && !canInvite) g_panel.view = VIEW_MAIN;
 
     std::vector<Row> rows;
@@ -639,14 +889,24 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
         addButton(rows, L("Volver", "Back"), ACT_BACK);
     } else if (g_panel.view == VIEW_ADVANCED) {
         addLine(rows, status + (g_panel.steamFlag ? "  (Steam)" : "  (UDP)"), statusCol);
+        // The manual (Steam ID / UDP) connection is made from this view, so the
+        // reason has to show here too, not only on the main view.
+        if (st->refuseNotice) {
+            addLine(rows, st->refuseNotice, st->refuseLevel >= 2 ? COL_RED : COL_AMBER);
+            if (st->refuseHint) addLine(rows, st->refuseHint, COL_GREY);
+        }
         addSpace(rows);
         addButton(rows, std::string(L("Rol: ", "Role: ")) +
                         (g_panel.hostFlag ? L("ANFITRI\xC3\x93N", "HOST") : L("UNIRSE", "JOIN")) +
                         L("    (cambiar)", "    (switch)"), ACT_ROLE);
         addButton(rows, std::string(L("Conexi\xC3\xB3n por: ", "Transport: ")) +
                         (g_panel.steamFlag ? "STEAM" : "UDP") + L("    (cambiar)", "    (switch)"), ACT_TRANS);
+        // After a final refusal the link is still up (idle, not retrying), so
+        // "ONLINE" would contradict "could not connect" right above it.
         addButton(rows, std::string(L("Estado: ", "Connection: ")) +
-                        (g_panel.connectedFlag ? L("CONECTADO", "ONLINE") : L("DESCONECTADO", "OFFLINE")) +
+                        (!g_panel.connectedFlag ? L("DESCONECTADO", "OFFLINE")
+                         : st->refuseFinal      ? L("RECHAZADO", "REFUSED")
+                                                : L("CONECTADO", "ONLINE")) +
                         L("    (cambiar)", "    (switch)"), ACT_CONN);
         if (!g_panel.steamFlag)
             addLine(rows, L("UDP: la IP y el puerto est\xC3\xA1n en mods\\KenshiCoop\\coop_config.json",
@@ -674,8 +934,14 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
         addButton(rows, L("Volver", "Back"), ACT_BACK);
     } else {
         addLine(rows, status, statusCol);
+        if (st->refuseNotice) {
+            addLine(rows, st->refuseNotice, st->refuseLevel >= 2 ? COL_RED : COL_AMBER);
+            if (st->refuseHint) addLine(rows, st->refuseHint, COL_GREY);
+        }
+        if (!waitLine.empty()) addLine(rows, waitLine, COL_AMBER);
         if (!transfer.empty()) addLine(rows, transfer, COL_AMBER);
-        if (!inviteText.empty() && st->inviteCode != 1) addLine(rows, inviteText, COL_WHITE);
+        if (!inviteText.empty() && st->inviteCode != 1 && !st->refuseFinal)
+            addLine(rows, inviteText, COL_WHITE);
         if (st->modsLine) {
             addLine(rows, st->modsLine, st->modsWarn ? COL_AMBER : COL_GREEN);
             if (st->modsWarn && !g_peerModsCfg.empty())
@@ -694,11 +960,36 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
             addLine(rows, L("\xC2\xBFTe han invitado? Acepta la invitaci\xC3\xB3n de Steam (con Kenshi abierto; vale el men\xC3\xBA).",
                             "Invited? Accept the Steam invite (with Kenshi open; the main menu is fine)."), COL_GREY);
         } else {
-            addButton(rows, st->peerPresent ? L("Desconectar", "Disconnect") : L("Cancelar", "Cancel"),
+            addButton(rows, st->refuseFinal ? L("Entendido", "OK")
+                            : (st->peerPresent || st->waitNote) ? L("Desconectar", "Disconnect")
+                                                                : L("Cancelar", "Cancel"),
                       ACT_DISCONNECT);
         }
         addSpace(rows);
         addButton(rows, L("Opciones avanzadas", "Advanced options"), ACT_ADVANCED);
+    }
+    // One row per wrapped line: the rows have a fixed height, so a line the
+    // EditBox wrapped by itself drew over the row below it (944x700 window,
+    // 2026-09-25). The width comes from a built row, so the first build of a
+    // panel is unwrapped for one tick.
+    if (g_panel.open && g_panel.linePx > 0) {
+        MyGUI::IFont* font = panelTextFont();
+        if (font) {
+            // EditBox text padding. Measured at the font's own size even when the
+            // rows draw it smaller (accentPanelRows): Kenshi sizes each row from
+            // that full-size layout, so a line that only fits when shrunk got a
+            // two-row slot with a blank gap under it.
+            const float budget = (float)g_panel.linePx - 12.0f;
+            std::vector<Row> wrapped;
+            std::vector<std::string> parts;
+            for (size_t i = 0; i < rows.size(); ++i) {
+                if (rows[i].kind != ROW_LINE) { wrapped.push_back(rows[i]); continue; }
+                coop::wrapTextPx(uiText(rows[i].text), budget, &panelGlyphAdvance, font, parts);
+                for (size_t k = 0; k < parts.size(); ++k)
+                    wrapped.push_back(Row(ROW_LINE, parts[k], ACT_NONE, rows[i].col));
+            }
+            rows.swap(wrapped);
+        }
     }
     if ((int)rows.size() > MAX_ROWS) rows.resize(MAX_ROWS);
 
@@ -717,7 +1008,7 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
     // and armed but attaches to nothing, so F2 logs open/close yet nothing draws.
     if (!g_panel.panel) {
         std::string layer = "Info";
-        g_panel.panel = g->createDatapanel(0.22f, 0.30f, 0.30f, 0.44f, false, layer, true);
+        g_panel.panel = g->createDatapanel(0.20f, 0.30f, 0.34f, 0.50f, false, layer, true);
         g_panel.built = false;
         if (!g_panel.panel) {
             coop::logErrLine("[coop-ui] createDatapanel FAILED");
@@ -728,10 +1019,11 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
 
     // (Re)populate the rows when anything visible changed.
     if (g_panel.panel && (g_panel.needsRebuild || !g_panel.built)) {
-        std::string title = L("Co-op    -    F2 para cerrar", "Co-op    -    F2 to close");
+        std::string title = uiText(L("Co-op    -    F2 para cerrar", "Co-op    -    F2 to close"));
         std::string empty;
         std::vector<std::string> keys(rows.size());
         RowPod pods[MAX_ROWS];
+        for (size_t i = 0; i < rows.size(); ++i) rows[i].text = uiText(rows[i].text);
         for (size_t i = 0; i < rows.size(); ++i) {
             char k[16];
             _snprintf(k, sizeof(k) - 1, "kc_row%u", (unsigned)i);
@@ -751,10 +1043,25 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
             if (g_rowBtn[i]) bindButton(g_rowBtn[i], rows[i].act);
             if (g_rowLine[i]) colourRow(g_rowLine[i], rows[i].col);
         }
+        accentPanelRows();
 
         g_panel.built = true;
         g_panel.needsRebuild = false;
         g_panel.lastSig = sig;
+        refreshLineWidth();
+    }
+    // Kenshi's font pass (a resize, the title screen, the font-size option)
+    // re-applies every widget's own font, which puts the EditBox lines back on
+    // the ASCII-only default font. Buttons and the banner report their font,
+    // so they keep the copy; only the rows need this.
+    {
+        static DWORD s_lastAccent = 0;
+        const DWORD now = GetTickCount();
+        if (g_panel.built && now - s_lastAccent >= 500) {
+            s_lastAccent = now;
+            accentPanelRows();
+            refreshLineWidth(); // a window resize changes it
+        }
     }
 
     // Connect / disconnect on the Online/Offline edge (edge, not level, so a
@@ -862,7 +1169,8 @@ void coopOverlayTick(const char* text, int state, bool show) {
         return;
     }
 
-    std::string t = text ? std::string(text) : std::string();
+    ensureAccentFonts();
+    std::string t = uiText(text ? std::string(text) : std::string());
     if (!g_overlay) {
         // createFloatingLabel takes the layer BY VALUE (an unwindable temporary
         // => C2712), so the container mint stays outside SEH, exactly like
@@ -887,6 +1195,7 @@ void coopOverlayTick(const char* text, int state, bool show) {
             coop::logErrLine("[coop-ui] banner label FAILED");
             return;
         }
+        useAccentFont(g_overlay);
         g_overlayState = -1;   // no caller state is -1: forces the caption pass
         g_overlayText.clear();
     }

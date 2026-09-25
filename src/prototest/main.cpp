@@ -31,6 +31,9 @@
 #include "../plugin/core/WorkPose.h"
 #include "../plugin/core/DeathLatch.h"
 #include "../plugin/core/ModList.h" // protocol 56: active-mod list diff (header-only)
+#include "../plugin/core/UiLang.h"  // accented fonts XML + ASCII fallback (header-only)
+#include "../plugin/core/Refusal.h" // how a client reads a refusal + its player text
+#include "../plugin/core/TextWrap.h" // F2 panel: one row per wrapped line
 #include "../plugin/core/Inbound.h" // Phase 0 queue-lifecycle fixes (header-only)
 #include "../plugin/game/EngineFaults.h" // Phase 5c: fault throttle (pure inline)
 #include "../plugin/game/EngineCaps.h"   // Phase 5d: capability registry (pure inline)
@@ -1288,6 +1291,162 @@ static void testPresenceOrder() {
     CHECK("drain empties the queue", again.empty());
 }
 
+// Kenshi's fonts only rasterize 32-126, so accented panel text drew as gaps.
+// UiLang.h builds accented copies of the fonts from kenshi_fonts.xml, and folds
+// text to ASCII when those copies cannot be loaded.
+// Every code point 10 px wide: accented letters must count once, not per byte.
+static float tenPx(unsigned int, void*) { return 10.0f; }
+
+static void testTextWrap() {
+    std::printf("== F2 panel line wrapping (TextWrap.h) ==\n");
+    using coop::wrapTextPx;
+    std::vector<std::string> out;
+    size_t i = 0;
+    const std::string es = "est\xC3\xA1";
+    unsigned int cps[4];
+    for (int k = 0; k < 4; ++k) cps[k] = coop::utf8Next(es, &i);
+    CHECK("utf8 decodes a 2-byte letter", cps[3] == 0xE1 && i == es.size());
+    CHECK_EQ("width counts code points, not bytes", (int)coop::textWidthPx(es, &tenPx, 0), 40);
+    size_t j = 0;
+    const std::string bad = "\xC3";
+    CHECK("truncated sequence -> U+FFFD and advances",
+          coop::utf8Next(bad, &j) == 0xFFFD && j == 1);
+
+    wrapTextPx("corto", 100.0f, &tenPx, 0, out);
+    CHECK("fits -> one line, unchanged", out.size() == 1 && out[0] == "corto");
+    wrapTextPx("uno dos tres cuatro", 80.0f, &tenPx, 0, out);   // 8 glyphs per line
+    CHECK("breaks at spaces", out.size() == 3 && out[0] == "uno dos" &&
+          out[1] == "tres" && out[2] == "cuatro");
+    wrapTextPx("supercalifragilistico y", 50.0f, &tenPx, 0, out);
+    CHECK("a word wider than the line keeps its own line",
+          out.size() == 2 && out[0] == "supercalifragilistico" && out[1] == "y");
+    wrapTextPx("a b", 0.0f, &tenPx, 0, out);
+    CHECK("no budget -> no wrapping", out.size() == 1 && out[0] == "a b");
+    wrapTextPx("Carga una partida y entrar\xC3\xA1 contigo.", 200.0f, &tenPx, 0, out);
+    CHECK("accented line wraps by glyphs", out.size() == 2 &&
+          out[0] == "Carga una partida y" && out[1] == "entrar\xC3\xA1 contigo.");
+}
+
+static void testAccentText() {
+    std::printf("== accented panel text (UiLang.h) ==\n");
+    using coop::foldToAscii;
+    CHECK("ASCII unchanged", foldToAscii("Sin conectar (F2)") == "Sin conectar (F2)");
+    CHECK("a-acute folds", foldToAscii("Steam no est\xC3\xA1 disponible") == "Steam no esta disponible");
+    CHECK("inverted ? dropped", foldToAscii("\xC2\xBFTe han invitado?") == "Te han invitado?");
+    CHECK("n-tilde folds", foldToAscii("a\xC3\xB1o") == "ano");
+    CHECK("capital O-acute folds", foldToAscii("\xC3\x93rdenes") == "Ordenes");
+    CHECK("all five vowels", foldToAscii("\xC3\xA1\xC3\xA9\xC3\xAD\xC3\xB3\xC3\xBA\xC3\xBC") == "aeiouu");
+    CHECK("other symbol -> ?", foldToAscii("x\xE2\x80\xA6y") == "x?y");
+    CHECK("cut sequence -> ?", foldToAscii("ok\xC3") == "ok?");
+    // A two-font sample shaped like Kenshi's file (BOM, ASCII range + quotes).
+    const std::string src =
+        "\xEF\xBB\xBF<MyGUI type=\"Resource\" version=\"1.1\">"
+        "<Resource type=\"ResourceTrueTypeFont\" name=\"Kenshi_StandardFont_Small\">"
+        "<Property key=\"Source\" value=\"Exo2-SemiBold.ttf\"/>"
+        "<Codes><Code range=\"32 126\"/><Code range=\"8127 8217\"/></Codes></Resource>"
+        "<Resource type=\"ResourceTrueTypeFont\" name=\"Kenshi_UI_Messages\">"
+        "<Codes><Code range=\"65 90\"/></Codes></Resource></MyGUI>";
+    int renamed = -1, widened = -1;
+    const std::string out = coop::accentFontXml(src, &renamed, &widened);
+    CHECK_EQ("fonts renamed", renamed, 2);
+    CHECK_EQ("ASCII ranges widened", widened, 1);
+    CHECK("BOM dropped", out.compare(0, 7, "<MyGUI ") == 0);
+    CHECK("copy named _KC", out.find("name=\"Kenshi_StandardFont_Small_KC\"") != std::string::npos);
+    CHECK("original name gone", out.find("name=\"Kenshi_StandardFont_Small\"") == std::string::npos);
+    CHECK("Latin-1 range present", out.find("<Code range=\"32 255\"/>") != std::string::npos);
+    CHECK("ASCII-only range gone", out.find("<Code range=\"32 126\"/>") == std::string::npos);
+    CHECK("other ranges kept", out.find("<Code range=\"8127 8217\"/>") != std::string::npos &&
+                               out.find("<Code range=\"65 90\"/>") != std::string::npos);
+    CHECK("source untouched", out.find("value=\"Exo2-SemiBold.ttf\"") != std::string::npos);
+    int r2 = -1, w2 = -1;
+    coop::accentFontXml("<MyGUI/>", &r2, &w2);
+    CHECK("no fonts -> zero edits (caller refuses)", r2 == 0 && w2 == 0);
+
+}
+
+// Refusal.h: how a client classifies the end of an attempt, and what each side
+// is told. Wire codes: 0x4B | RETRY bit 23 | reason << 16 | sender protocol.
+static bool cleanText(const std::string& s) {
+    // Valid UTF-8 Latin-1 only (a hex escape that swallowed the next letter
+    // yields a stray byte, which folds to '?'); our refusal texts have no '?'.
+    return !s.empty() && coop::foldToAscii(s).find('?') == std::string::npos;
+}
+static void testRefusalClient() {
+    std::printf("== client refusal handling (Refusal.h) ==\n");
+    using namespace coop;
+    u32 latch = 1;
+    CHECK("no ENet connection -> no answer",
+          classifyDrop(0, false, false, 7000, &latch) == DROP_NO_ANSWER && latch == 0);
+    CHECK("VERSION code -> final, latched",
+          classifyDrop(0x4B010039u, true, false, 10, &latch) == DROP_FINAL && latch == 0x4B010039u);
+    CHECK("FULL code -> soft, latched",
+          classifyDrop(0x4B820038u, true, false, 10, &latch) == DROP_SOFT && latch == 0x4B820038u);
+    CHECK("unknown final reason -> final",
+          classifyDrop(0x4B050038u, true, false, 10, &latch) == DROP_FINAL);
+    CHECK("unknown soft reason -> soft",
+          classifyDrop(0x4B850038u, true, false, 10, &latch) == DROP_SOFT);
+    CHECK("older host (data 0, no WELCOME, 3999 ms) -> final VERSION, host version unknown",
+          classifyDrop(0, true, false, 3999, &latch) == DROP_FINAL &&
+          refuseReason(latch) == REFUSE_VERSION && refuseVersion(latch) == 0 && !refuseRetry(latch));
+    CHECK("data 0 at 4000 ms (could be a timeout) -> normal",
+          classifyDrop(0, true, false, 4000, &latch) == DROP_NORMAL && latch == 0);
+    CHECK("a welcomed session dropping -> normal",
+          classifyDrop(0, true, true, 100, &latch) == DROP_NORMAL && latch == 0);
+
+    for (int lang = 0; lang < 2; ++lang) {
+        const bool es = (lang == 0);
+        RefusalText newer = joinRefusalText(refuseEncode(REFUSE_VERSION, false, 57), 56, es);
+        RefusalText older = joinRefusalText(refuseEncode(REFUSE_VERSION, false, 55), 56, es);
+        RefusalText legacy = joinRefusalText(refuseEncode(REFUSE_VERSION, false, 0), 56, es);
+        RefusalText full = joinRefusalText(refuseEncode(REFUSE_FULL, true, 56), 56, es);
+        RefusalText closed = joinRefusalText(refuseEncode(REFUSE_HOST_CLOSED, true, 56), 56, es);
+        RefusalText unkFinal = joinRefusalText(refuseEncode(5, false, 56), 56, es);
+        RefusalText unkSoft = joinRefusalText(refuseEncode(5, true, 56), 56, es);
+        RefusalText none = joinRefusalText(0, 56, es);
+        RefusalText noAnsS = joinNoAnswerText(es, true), noAnsU = joinNoAnswerText(es, false);
+        RefusalText hOld = hostRefusedText(55, 56, es), hNew = hostRefusedText(57, 56, es);
+        RefusalText hSame = hostRefusedText(56, 56, es);
+        const char* tag = es ? " (es)" : " (en)";
+        std::string n;
+        n = std::string("host newer: final, red") + tag;
+        CHECK(n.c_str(), newer.final && newer.level == 2);
+        n = std::string("host newer: says newer, both numbers") + tag;
+        CHECK(n.c_str(), newer.notice.find(es ? "m\xC3\xA1s nueva" : "newer") != std::string::npos &&
+                         newer.hint.find(es ? "t\xC3\xBA 56, tu amigo 57" : "you 56, your friend 57") != std::string::npos);
+        n = std::string("host older: says older, then reconnect") + tag;
+        CHECK(n.c_str(), older.final && older.notice.find(es ? "m\xC3\xA1s antigua" : "older") != std::string::npos &&
+                         older.hint.find(es ? "Entendido" : "OK") != std::string::npos);
+        n = std::string("older host without a code: probably older") + tag;
+        CHECK(n.c_str(), legacy.final && legacy.notice.find(es ? "seguramente" : "probably") != std::string::npos);
+        n = std::string("FULL: amber, keeps trying, own stale connection first") + tag;
+        CHECK(n.c_str(), !full.final && full.level == 1 &&
+                         full.notice.find(es ? "conexi\xC3\xB3n anterior" : "previous connection") != std::string::npos);
+        n = std::string("HOST_CLOSED (reserved) worded as soft") + tag;
+        CHECK(n.c_str(), !closed.final && closed.level == 1);
+        n = std::string("unknown final reason: generic, stops") + tag;
+        CHECK(n.c_str(), unkFinal.final && unkFinal.notice.find("5") != std::string::npos);
+        n = std::string("unknown soft reason: never tells to update") + tag;
+        CHECK(n.c_str(), !unkSoft.final && unkSoft.level == 1 &&
+                         unkSoft.hint.find(es ? "Instala" : "install") == std::string::npos);
+        n = std::string("no code: nothing to show") + tag;
+        CHECK(n.c_str(), none.level == 0 && none.notice.empty());
+        n = std::string("no answer: hint depends on transport") + tag;
+        CHECK(n.c_str(), noAnsS.hint.find("Steam ID") != std::string::npos &&
+                         noAnsU.hint.find("coop_config.json") != std::string::npos);
+        n = std::string("host notice: older / newer / same") + tag;
+        CHECK(n.c_str(), hOld.level == 2 && hOld.notice.find(es ? "antigua" : "older") != std::string::npos &&
+                         hNew.notice.find(es ? "nueva" : "newer") != std::string::npos && hSame.level == 0);
+        n = std::string("every text is clean UTF-8 (no swallowed letters)") + tag;
+        CHECK(n.c_str(), cleanText(newer.notice) && cleanText(newer.hint) && cleanText(newer.banner) &&
+                         cleanText(older.hint) && cleanText(legacy.notice) && cleanText(legacy.hint) &&
+                         cleanText(full.notice) && cleanText(full.hint) && cleanText(full.banner) &&
+                         cleanText(closed.notice) && cleanText(unkFinal.notice) && cleanText(unkFinal.hint) &&
+                         cleanText(unkSoft.notice) && cleanText(noAnsS.notice) && cleanText(noAnsS.hint) &&
+                         cleanText(noAnsU.hint) && cleanText(hOld.notice) && cleanText(hOld.hint) &&
+                         cleanText(hNew.hint) && cleanText(hOld.banner));
+    }
+}
+
 static void testSteamIdParse() {
     std::printf("== SteamID64 parse (SteamId.h) ==\n");
     unsigned long long id = 0;
@@ -1938,6 +2097,9 @@ int main() {
     testModList();
     testRefusal();
     testPresenceOrder();
+    testAccentText();
+    testTextWrap();
+    testRefusalClient();
     testWorkPoseMatch();
     testTaskClear();
     testDeathRekey();

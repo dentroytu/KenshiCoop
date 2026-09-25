@@ -212,6 +212,14 @@ public:
     // hooks installed on the net thread; MTU clamped to Steam's 1200-byte
     // unreliable ceiling). Must be called before startHost/startClient. 0 = UDP.
     void setSteamTransport(unsigned long long peerSteamId);
+    // The session runs (or will run) over the Steam tunnel.
+    bool steamTransport() const { return steamPeer_ != 0; }
+
+    // Protocol version this link speaks in HELLO/WELCOME and its refusals.
+    // PROTOCOL_VERSION unless a Harness test fakes another (0 = keep). Must be
+    // called before startHost/startClient.
+    void setWireVersion(u16 v) { wireVer_ = v ? v : PROTOCOL_VERSION; }
+    u16  wireVersion() const   { return wireVer_; }
 
     // MAIN thread: advance this peer's session epoch (protocol 44). Called on
     // every session-reset edge (coordinated world reload, connect/disconnect
@@ -229,6 +237,24 @@ public:
     // atomic on x86/x64 and the volatile bars the compiler from caching a stale
     // value (Phase 4: myId_ cross-thread safety).
     u32  localId()   const { return (u32)myId_; }
+
+    // Why the connection is not up, for the F2 panel and banner. Written by the
+    // NET thread (InterlockedExchange), read on the MAIN thread; cleared by
+    // startHost/startClient, so they only mean something while isRunning().
+    // JOIN: the refusal code latched from the host (Wire.h refuseEncode; 0 =
+    // none). A final one also stops the retries until the player acts.
+    u32   refusal()       const { return (u32)refusal_; }
+    // JOIN: GetTickCount when the current run of unanswered attempts began (no
+    // ENet connection at all yet); 0 = the host is answering.
+    DWORD noAnswerSince() const { return (DWORD)noAnswerSince_; }
+    // HOST: VERSION code carrying the protocol of the last peer refused for
+    // another version while no friend was admitted (0 = none), and when.
+    u32   peerRefused()     const { return (u32)peerRefused_; }
+    DWORD peerRefusedTick() const { return (DWORD)peerRefusedTick_; }
+    // HOST: friends admitted right now, as the net thread sees them. The game
+    // thread only drains presence edges in game, so at the title screen this
+    // is the only sign that a friend is already in.
+    unsigned admittedPeers() const { return (unsigned)admitted_; }
 
 private:
     static DWORD WINAPI threadEntry(LPVOID self);
@@ -350,6 +376,14 @@ private:
     // Written by the NET thread on WELCOME (InterlockedExchange) and read on the
     // MAIN thread via localId(); volatile LONG so the read is atomic + uncached.
     volatile LONG myId_;
+    // Refusal / no-answer state for the UI (see refusal()). Codes stay below
+    // 0x80000000 and ticks are stored bit-for-bit, so a LONG holds either.
+    volatile LONG refusal_;
+    volatile LONG noAnswerSince_;
+    volatile LONG peerRefused_;
+    volatile LONG peerRefusedTick_;
+    volatile LONG admitted_;
+    u16           wireVer_;
 
     // Session epoch (protocol 44). sendEpoch_ is bumped by the MAIN thread
     // (InterlockedIncrement in bumpSessionEpoch) and read by the NET thread when
