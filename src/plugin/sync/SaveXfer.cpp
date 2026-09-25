@@ -38,6 +38,12 @@ const unsigned long WATCH_PORTRAIT_MS  = 10000; // bounded portrait-file wait
 // fixture at 3.7 MB / 35 files -> ~1.5 s in flight.
 const unsigned long SEND_BURST_MS         = 50;
 const unsigned int  SEND_CHUNKS_PER_BURST = 32;
+// Backpressure: queue more chunks only while less than this is pending to the
+// peer. ENet's reliable window and bandwidth are shared by every channel of a
+// peer, so a save's backlog (real saves are 30+ MB; a home uplink moves a few
+// hundred KB/s) delayed the game's events and starved the entity stream for
+// minutes - long enough for the friend's characters to be released.
+const unsigned int  SEND_BACKLOG_MAX      = 256 * 1024;
 
 // Join a folder and a child with exactly one separator.
 std::string pathJoin(const std::string& a, const std::string& b) {
@@ -450,11 +456,14 @@ bool beginSend(NetLink& net, u32 localId, const std::string& name) {
 }
 
 bool sending() { return g_sendActive; }
+unsigned __int64 sendBytes()      { return g_sendSentBytes; }
+unsigned __int64 sendTotalBytes() { return g_sendTotalBytes; }
 
 bool tickSend(NetLink& net, u32 localId) {
     if (!g_sendActive) return false;
     unsigned long now = GetTickCount();
     if (g_sendLastBurst != 0 && now - g_sendLastBurst < SEND_BURST_MS) return false;
+    if (net.sendBacklog() > SEND_BACKLOG_MAX) return false; // let the link drain first
     g_sendLastBurst = now;
 
     unsigned char buf[SAVE_CHUNK_MAX];

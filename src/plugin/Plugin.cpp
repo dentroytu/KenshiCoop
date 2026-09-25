@@ -579,6 +579,17 @@ void driveSaveSync() {
     for (unsigned int i = 0; i < nEdges; ++i) {
         std::string name = edges[i].name[0] ? edges[i].name : "coopresume";
         if (g_cfg.isHost) {
+            // An AUTOSAVE is not streamed. It came every few minutes as the
+            // whole save folder (real saves are 30+ MB), and over a home uplink
+            // each one held the connection for minutes. The friend loses nothing:
+            // a reconnect re-bakes and pushes the live world, and a coordinated
+            // load fetches the folder whenever the friend's copy differs.
+            if (edges[i].autosave && !(g_bootstrapArmed && name == g_bootstrapName)) {
+                char b[144];
+                _snprintf(b, sizeof(b) - 1, "[save] autosave '%s' not streamed", name.c_str());
+                b[sizeof(b) - 1] = '\0'; coopLog(b);
+                continue;
+            }
             g_savePending = name;
             coop::savexfer::armWatch(name);
         } else if (edges[i].suppressed && !edges[i].autosave) {
@@ -999,6 +1010,20 @@ void coopPanelDrive(bool atTitle) {
             // NACK sent (host baking/streaming) or committed + about to load.
             transfer = coop::L("Preparando el mundo de tu amigo...", "Preparing your friend's world...");
         }
+    } else if (g_cfg.isHost && coop::savexfer::sending()) {
+        // The host's side of the same transfer: a big save over a slow uplink
+        // takes a while, and the panel says so instead of looking idle.
+        unsigned __int64 got = coop::savexfer::sendBytes();
+        unsigned __int64 tot = coop::savexfer::sendTotalBytes();
+        int pct = (tot > 0) ? (int)((got * 100) / tot) : 0;
+        if (pct > 100) pct = 100;
+        char tb[112];
+        _snprintf(tb, sizeof(tb) - 1,
+                  coop::L("Enviando la partida a tu amigo... %d%% (%.1f/%.1f MB)",
+                          "Sending the game to your friend... %d%% (%.1f/%.1f MB)"), pct,
+                  (double)got / (1024.0 * 1024.0), (double)tot / (1024.0 * 1024.0));
+        tb[sizeof(tb) - 1] = '\0';
+        transfer = tb;
     }
     ps.transferDetail = transfer.empty() ? (const char*)0 : transfer.c_str();
 
