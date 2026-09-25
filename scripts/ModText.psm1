@@ -88,13 +88,56 @@ function Find-StringsIn([byte[]]$Bytes, [int]$From, [int]$To, [string]$Text) {
     return @($found.Values | Sort-Object Offset)
 }
 
-# Rewrite the strings of $Bytes[$From..$To) that contain a key of $Replace.
+# The display strings of the record at $Offset: its name and the VALUE of each
+# string field - never a field key, a reference category, a file path or an id,
+# which the game looks things up by. Walks the record's field blocks (bool,
+# float, int, vec3, vec4, string, file, references, instances) and throws unless
+# the walk ends exactly at the record's end (an unknown layout is not edited).
+# Returns a hashtable of the allowed string offsets (their length prefix).
+function Get-DisplayStrings([byte[]]$Bytes, [int]$Offset, [int]$Length) {
+    $allowed = @{}
+    $q = $Offset + 12                                   # length, type, id
+    $allowed[$q] = $true; [void](Read-ModString $Bytes ([ref]$q))   # name
+    [void](Read-ModString $Bytes ([ref]$q))             # StringId
+    $q += 4                                              # change type
+    foreach ($size in 1, 4, 4, 12, 16) {                 # bool, float, int, vec3, vec4
+        $n = [BitConverter]::ToInt32($Bytes, $q); $q += 4
+        for ($i = 0; $i -lt $n; $i++) { [void](Read-ModString $Bytes ([ref]$q)); $q += $size }
+    }
+    $n = [BitConverter]::ToInt32($Bytes, $q); $q += 4    # string fields: key, value
+    for ($i = 0; $i -lt $n; $i++) {
+        [void](Read-ModString $Bytes ([ref]$q))
+        $allowed[$q] = $true; [void](Read-ModString $Bytes ([ref]$q))
+    }
+    $n = [BitConverter]::ToInt32($Bytes, $q); $q += 4    # file fields: key, path
+    for ($i = 0; $i -lt $n; $i++) { [void](Read-ModString $Bytes ([ref]$q)); [void](Read-ModString $Bytes ([ref]$q)) }
+    $n = [BitConverter]::ToInt32($Bytes, $q); $q += 4    # reference categories
+    for ($i = 0; $i -lt $n; $i++) {
+        [void](Read-ModString $Bytes ([ref]$q))
+        $m = [BitConverter]::ToInt32($Bytes, $q); $q += 4
+        for ($j = 0; $j -lt $m; $j++) { [void](Read-ModString $Bytes ([ref]$q)); $q += 12 }
+    }
+    $n = [BitConverter]::ToInt32($Bytes, $q); $q += 4    # instances
+    for ($i = 0; $i -lt $n; $i++) {
+        [void](Read-ModString $Bytes ([ref]$q)); [void](Read-ModString $Bytes ([ref]$q)); $q += 28
+        $k = [BitConverter]::ToInt32($Bytes, $q); $q += 4
+        for ($j = 0; $j -lt $k; $j++) { [void](Read-ModString $Bytes ([ref]$q)) }
+    }
+    if ($q -ne $Offset + $Length) { throw "record at ${Offset}: unexpected layout (walk ended at $q, record ends at $($Offset + $Length))" }
+    return $allowed
+}
+
+# Rewrite the strings of $Bytes[$From..$To) that contain a key of $Replace; with
+# $Allowed, only strings whose length prefix is at one of those offsets.
 # Returns @{ Bytes = rewritten slice; Changed = list; Hits = keys matched }.
-function Edit-Slice([byte[]]$Bytes, [int]$From, [int]$To, $Replace) {
+function Edit-Slice([byte[]]$Bytes, [int]$From, [int]$To, $Replace, $Allowed = $null) {
     $targets = @{}
     $hits = @{}
     foreach ($k in $Replace.Keys) {
-        foreach ($h in @(Find-StringsIn $Bytes $From $To $k)) { $targets[$h.Offset] = $h; $hits[$k] = $true }
+        foreach ($h in @(Find-StringsIn $Bytes $From $To $k)) {
+            if ($null -ne $Allowed -and -not $Allowed.ContainsKey($h.Offset)) { continue }
+            $targets[$h.Offset] = $h; $hits[$k] = $true
+        }
     }
     $out = New-Object System.IO.MemoryStream
     $pos = $From
@@ -117,11 +160,13 @@ function Edit-Slice([byte[]]$Bytes, [int]$From, [int]$To, $Replace) {
 function Edit-ModFile {
     <#
     .SYNOPSIS
-      Replace display text in a .mod: every string containing a key of $Replace
-      (plain text, applied in order) in the header description and in every
-      record. -Description sets the whole header description instead. Record
-      lengths are recomputed. Throws if a key matches nothing, or if any record
-      name/StringId other than the intended ones would change a StringId.
+      Replace display text in a .mod: every DISPLAY string containing a key of
+      $Replace (plain text, applied in order) - the header description, each
+      record's name and the values of its string fields (Get-DisplayStrings);
+      field keys, reference categories, file paths and ids are never touched.
+      -Description sets the whole header description instead. Record lengths are
+      recomputed. Throws if a key matches nothing, if a record has a layout it
+      cannot walk, or if any StringId or id reference would change.
     #>
     param([Parameter(Mandatory = $true)][string]$Path,
           [System.Collections.Specialized.OrderedDictionary]$Replace = $null,
@@ -156,7 +201,8 @@ function Edit-ModFile {
     }
     $out.Write($b, $descEnd, $before.RecordsAt - $descEnd)   # deps, refs, lastId, count
     foreach ($rec in $before.Records) {
-        $r = Edit-Slice $b ($rec.Offset + 4) ($rec.Offset + $rec.Length) $Replace
+        $allowed = Get-DisplayStrings $b $rec.Offset $rec.Length
+        $r = Edit-Slice $b ($rec.Offset + 4) ($rec.Offset + $rec.Length) $Replace $allowed
         $out.Write([BitConverter]::GetBytes([int32]($r.Bytes.Length + 4)), 0, 4)
         $out.Write($r.Bytes, 0, $r.Bytes.Length)
         foreach ($k in $r.Hits) { $allHits[$k] = $true }

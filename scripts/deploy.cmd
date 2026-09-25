@@ -11,6 +11,9 @@ popd >nul
 
 set "KENSHI=%~1"
 if "%KENSHI%"=="" set "KENSHI=C:\Program Files (x86)\Steam\steamapps\common\Kenshi"
+REM No trailing backslash: in "%KENSHI%" it would escape the closing quote for
+REM powershell -File (migrate_install.ps1 below).
+if "%KENSHI:~-1%"=="\" set "KENSHI=%KENSHI:~0,-1%"
 
 REM Build config to deploy (Phase 1 build separation). Default = Harness (the
 REM test build with the scenario runner). Pass "Release" as the 2nd argument to

@@ -2248,9 +2248,10 @@ void warnOtherCopy(const char* other) {
     coopErr(b);
     const bool legacy = strcmp(other, "KenshiCoop") == 0;
     const wchar_t* text = legacy
-        ? L"También tienes instalado KenshiCoop, la versión antigua de este mod.\n\n"
-          L"Cierra Kenshi, desmarca KenshiCoop en la pestaña Mods del launcher (o borra la "
-          L"carpeta mods\\KenshiCoop) y vuelve a abrirlo. Hasta entonces el co-op no se activará.\n\n"
+        // UTF-16 escapes, never raw accents: VS2010 reads a BOM-less source as ANSI.
+        ? L"Tambi\x00E9n tienes instalado KenshiCoop, la versi\x00F3n antigua de este mod.\n\n"
+          L"Cierra Kenshi, desmarca KenshiCoop en la pesta\x00F1" L"a Mods del launcher (o borra la "
+          L"carpeta mods\\KenshiCoop) y vuelve a abrirlo. Hasta entonces el co-op no se activar\x00E1.\n\n"
           L"KenshiCoop, the old version of this mod, is also installed. Close Kenshi, untick "
           L"KenshiCoop in the launcher's Mods tab (or delete mods\\KenshiCoop) and start it again. "
           L"Co-op stays off until then."
@@ -2804,7 +2805,12 @@ void installExitHook() {
 }
 
 __declspec(dllexport) void startPlugin() {
+    // Another co-op plugin already loaded (the old KenshiCoop, or a second copy of
+    // this one)? Asked before anything opens a file: a second copy of THIS plugin
+    // shares the running copy's log name and would truncate that log.
+    const char* other = otherCopyLoaded();
     coop::loadConfig(g_cfg);
+    if (other && strcmp(other, TOKELACOOP_NAME) == 0) g_cfg.logPath += ".second-copy.log";
     // The fake clock skew must be armed BEFORE the first log line so every
     // timestamp in this run (and every time-sync packet) shares the skewed clock.
     coop::logSetFakeSkewMs(g_cfg.fakeClockSkewMs);
@@ -2814,7 +2820,8 @@ __declspec(dllexport) void startPlugin() {
     // own dump is written from a late filter and carries no usable frames, which is
     // where the 2026-08-03 crash investigation dead-ended; ours chains to RE_Kenshi's
     // filter afterwards, so its emergency save is unaffected. See core/CrashDump.h.
-    {
+    // (Not for a copy that stays out: the running one has its own.)
+    if (!other) {
         std::string dir = g_cfg.logPath;
         size_t cut = dir.find_last_of("\\/");
         dir = (cut == std::string::npos) ? std::string(".") : dir.substr(0, cut);
@@ -2823,9 +2830,8 @@ __declspec(dllexport) void startPlugin() {
 
     logStartupBanner();
 
-    // Another co-op plugin already loaded (the old KenshiCoop, or a second copy of
-    // this one): stay completely out - no hooks at all - and say why.
-    if (const char* other = otherCopyLoaded()) {
+    // ...then stay completely out - no hooks at all - and say why.
+    if (other) {
         g_otherCopy = true;
         warnOtherCopy(other);
         return;

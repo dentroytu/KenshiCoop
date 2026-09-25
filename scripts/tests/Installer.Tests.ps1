@@ -173,6 +173,12 @@ try {
     [void](Install-TokelaCoopFiles $kitMod $k2)
     Check 'an existing TokelaCoop config beats the old one' `
         ((Get-Content -LiteralPath (Join-Path $dst2 'coop_config.json') -Raw) -match '10\.9\.9\.9')
+    $kept = Save-LegacyConfig $k2
+    Check 'a different old config is kept aside, not deleted' `
+        ($kept -and ((Get-Content -LiteralPath $kept -Raw) -match '192\.168\.1\.50'))
+    Copy-Item -LiteralPath (Join-Path $oldDir 'coop_config.json') -Destination (Join-Path $dst2 'coop_config.json') -Force
+    Remove-Item -LiteralPath $kept
+    Check 'an identical old config is not duplicated' ((Save-LegacyConfig $k2) -eq '')
     Check 'old folder removed' ((Remove-LegacyKenshiCoop $k2) -ne '' -and -not (Test-Path -LiteralPath $oldDir))
     Check 'nothing to remove the second time' ((Remove-LegacyKenshiCoop $k2) -eq '')
     Check 'the new install is untouched' (Test-Path -LiteralPath (Join-Path $dst2 'TokelaCoop.dll'))
@@ -207,6 +213,24 @@ try {
     $info2 = Get-ModInfo $copy
     Check 'stamping another version keeps every record and StringId' `
         (($info2.Records | ForEach-Object { $_.StringId }) -join '|' -eq ($want -join '|') -and $info2.Description -match 'TokelaCoop v9\.99')
+    # A text edit reaches names and string VALUES only: the starts' reference
+    # category "squad" is a lookup key and must survive a replace of that word.
+    $copy2 = Join-Path $tmp 'keys.mod'
+    Copy-Item -LiteralPath $shipped -Destination $copy2
+    $asKey = {   # "squad" as a whole length-prefixed string (a key or category)
+        param($f)
+        $s = [Text.Encoding]::GetEncoding(28591).GetString([IO.File]::ReadAllBytes($f))
+        return ([regex]::Matches($s, [regex]::Escape([string][char]5 + [char]0 + [char]0 + [char]0 + 'squad'))).Count
+    }
+    $keysBefore = & $asKey $copy2
+    [void](Edit-ModFile -Path $copy2 -Replace ([ordered]@{ 'squad' = 'escuadra' }))
+    Check 'a replace never rewrites a field key or reference category' `
+        ($keysBefore -ge 2 -and (& $asKey $copy2) -eq $keysBefore -and
+         @((Get-ModInfo $copy2).Records | Where-Object { $_.Name -match 'escuadra' }).Count -eq 2)
+    $copy3 = Join-Path $tmp 'names.mod'
+    Copy-Item -LiteralPath $shipped -Destination $copy3
+    [void](Edit-ModFile -Path $copy3 -Replace ([ordered]@{ 'TokelaCoop+ (Wanderer x2)' = 'TokelaCoop+ (Wanderers)' }))
+    Check 'a replace still reaches record names' (@((Get-ModInfo $copy3).Records | Where-Object { $_.Name -eq 'TokelaCoop+ (Wanderers)' }).Count -eq 1)
 
     Write-Host '== pinned RE_Kenshi download =='
     $rel = Get-KcRelease

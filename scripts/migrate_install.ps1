@@ -35,6 +35,8 @@ try {
         Write-Host "Carried coop_config.json over from mods\KenshiCoop"
     }
     if (Enable-TokelaCoopMod $KenshiDir) { Write-Host "data\mods.cfg: TokelaCoop.mod enabled (KenshiCoop.mod removed)" }
+    $kept = Save-LegacyConfig $KenshiDir
+    if ($kept) { Write-Host "The old coop_config.json differed; kept it as $kept" }
     $gone = Remove-LegacyKenshiCoop $KenshiDir
     if ($gone) { Write-Host "Removed the old $gone" }
     exit 0

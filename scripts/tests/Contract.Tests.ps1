@@ -464,6 +464,12 @@ if ($unread.Count -gt 0) { Write-Host ("      not read by the DLL: " + ($unread 
 Check "every harness DiagEnv key is a literal the DLL reads" ($unread.Count -eq 0)
 $verLine = Select-String -Path (Join-Path $repoRoot "src\netproto\Version.h") -Pattern '#define\s+TOKELACOOP_VERSION\s+"[0-9]+\.[0-9]+"'
 Check "Version.h defines TOKELACOOP_VERSION as X.YY" ($null -ne $verLine)
+# VS2010 reads a BOM-less source in the ANSI code page, so a raw accent in a string
+# literal ships as mojibake. Player text uses escapes ("\xC3\xB3", L"\x00F3").
+$rawAccent = @(Get-ChildItem -Path (Join-Path $repoRoot "src") -Recurse -File -Include *.cpp, *.h |
+    Select-String -Pattern '[^\x00-\x7F]' | Where-Object { $_.Line -notmatch '^\s*(//|\*)' })
+if ($rawAccent.Count -gt 0) { $rawAccent | Select-Object -First 5 | ForEach-Object { Write-Host "      $($_.Path):$($_.LineNumber)" } }
+Check "no raw non-ASCII character in C++ code (only in comments)" ($rawAccent.Count -eq 0)
 
 # ---- cleanup ------------------------------------------------------------------
 Remove-Item -Path $tmpH, $tmpJ -Force -ErrorAction SilentlyContinue

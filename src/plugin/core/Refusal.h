@@ -175,8 +175,9 @@ inline RefusalText hostRefusedText(u16 friendVersion, u16 ours, bool es) {
     if (friendVersion == 0 || friendVersion == ours) return t;
     t.level = 2;
     if (friendVersion < ours) {
-        t.notice = es ? "Tu amigo intent\xC3\xB3 entrar con una versi\xC3\xB3n m\xC3\xA1s antigua de TokelaCoop."
-                      : "Your friend tried to join with an older TokelaCoop version.";
+        // Not "of TokelaCoop": an older friend may still run it as KenshiCoop.
+        t.notice = es ? "Tu amigo intent\xC3\xB3 entrar con una versi\xC3\xB3n m\xC3\xA1s antigua del mod."
+                      : "Your friend tried to join with an older version of the mod.";
         t.hint = (es ? std::string("P\xC3\xAD" "dele que instale la \xC3\xBAltima y vuelva a abrir Kenshi. ")
                      : std::string("Ask them to install the latest one and restart Kenshi. ")) +
                  protoNumbers(es, ours, friendVersion);

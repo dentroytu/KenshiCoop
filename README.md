@@ -183,9 +183,12 @@ is needed after an edit.
   order to paste into `data\mods.cfg` or match in the launcher. The check only
   warns, it never blocks the connection (new in this fork, not yet tested
   in-game).
-- **"your friend has another version" on the F2 panel** - one of you has an
-  older build; both players should re-install from the same release. A friend on
-  v0.53 or older still has it under its old name, KenshiCoop.
+- **"your friend has another version" on the F2 panel** - one of you has a build
+  with a different network protocol; both players should re-install from the
+  same release.
+- **"Mods: DIFFERENT" showing only KenshiCoop.mod against TokelaCoop.mod** - your
+  friend still has the old KenshiCoop (v0.53 or older, same network protocol, so
+  it connects): they should run the new installer, not copy mod lists.
 
 The kit's `README.txt` has the full setup + troubleshooting list.
 

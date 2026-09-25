@@ -1190,8 +1190,8 @@ void NetLink::threadLoop() {
                                 else if (r == REFUSE_VERSION)
                                     _snprintf(b, sizeof(b) - 1,
                                               "protocol mismatch: host v?, ours v%u (dropped %lu ms "
-                                              "into the attempt with no reason code: probably an "
-                                              "older TokelaCoop); not retrying",
+                                              "into the attempt with no reason code: probably "
+                                              "KenshiCoop v0.53 or older); not retrying",
                                               (unsigned)wireVer_,
                                               (unsigned long)(GetTickCount() - attemptStart));
                                 else

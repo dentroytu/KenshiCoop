@@ -46,6 +46,12 @@ function Switch-ToTokelaCoop {
     if (-not $have) { $out += "TokelaCoop.mod" }
     [System.IO.File]::WriteAllText($cfg, (($out -join $nl) + $nl), (New-Object System.Text.UTF8Encoding($false)))
     if (Test-Path $oldDir) {
+        $oldCfg = Join-Path $oldDir "coop_config.json"
+        if ((Test-Path $oldCfg) -and (Test-Path $newCfg) -and
+            ((Get-FileHash $oldCfg).Hash -ne (Get-FileHash $newCfg).Hash)) {
+            Copy-Item $oldCfg (Join-Path $newDir "coop_config.KenshiCoop.json") -Force
+            Write-Warning "The old coop_config.json differed; kept it as mods\TokelaCoop\coop_config.KenshiCoop.json"
+        }
         try { Remove-Item -Recurse -Force $oldDir; Write-Host "Removed the old mods\KenshiCoop." }
         catch { Write-Warning "Could not delete mods\KenshiCoop (it is disabled now): $($_.Exception.Message)" }
     }

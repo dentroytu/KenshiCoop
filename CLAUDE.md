@@ -165,9 +165,9 @@ Compatibilidad comprobada con análisis estático (2026-09-23), no ejecutando el
   Kenshi); para cambiar solo textos (nombres, descripciones) basta `scripts/ModText.psm1`, que recalcula la
   longitud de cada registro y se niega a tocar un StringId.
 - CI: cada push sube el artefacto `TokelaCoop-kit-<sha>`.
-- Release: sube `TOKELACOOP_VERSION` en `src/netproto/Version.h`, y luego
-  `git tag vX.YY && git push origin vX.YY` publica la Release con el zip y su `.sha256`
-  (el CI falla si la etiqueta no es `v` + esa versión).
+- Release: `scripts\set_version.ps1 -Version X.YY` (cambia `Version.h`, la descripción del `.mod` del repo, el
+  generador y el README a la vez), commit, y luego `git tag vX.YY && git push origin vX.YY` publica la Release con
+  el zip y su `.sha256` (el CI falla si la etiqueta no es `v` + esa versión).
 - Cambiar de versión de RE_Kenshi requiere tocar dos sitios de `TokelaCoopInstaller.psm1`:
   `$REKenshiRelease` (URL + SHA-256) y `$KnownKenshiLib` (hash de su `KenshiLib.dll`).
 

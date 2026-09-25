@@ -44,8 +44,9 @@ PREREQUISITES (both players)
   2. RE_Kenshi 0.3.4 or 0.3.5 - the installer takes care of it.
   3. For the Steam transport (recommended): Steam RUNNING and ONLINE on both
      machines. No port forwarding, no IPs, no config editing.
-  4. The SAME TokelaCoop version on both machines (the handshake rejects a
-     mismatch) - download the same zip.
+  4. The SAME TokelaCoop version on both machines - download the same zip. The
+     connection only refuses a different network protocol, and two releases can
+     share one, so compare the "TokelaCoop vX.YY" you both see in game.
 
 PLAY (Steam - recommended)
 --------------------------
@@ -102,9 +103,12 @@ TROUBLESHOOTING
     mods, versions or load order. <Kenshi>\TokelaCoop_mods_diff.txt lists every
     difference; "Copy friend's mod list" copies their load order. The check
     only warns, it never blocks the connection (new, not yet tested in-game).
+    If the only difference is KenshiCoop.mod against TokelaCoop.mod, your
+    friend still has the old KenshiCoop (v0.53 or older): they should run this
+    installer, not copy mod lists.
   * "your friend has another version" on the F2 panel: one player has an
-    older/newer build; both should use the same release (a friend on v0.53 or
-    older still calls it KenshiCoop).
+    older/newer build with a different network protocol; both should use the
+    same release.
   * A warning box at start, or "untick KenshiCoop" on the banner: the old
     KenshiCoop is still installed next to TokelaCoop. Run the installer again,
     or untick KenshiCoop in the launcher's Mods tab.

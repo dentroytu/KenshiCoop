@@ -161,6 +161,11 @@ try {
     # 5. The old KenshiCoop (the name up to v0.53) --------------------------------
     # Only after mods.cfg no longer lists it: if the removal fails, it is already off.
     try {
+        $kept = Save-LegacyConfig $kenshi
+        if ($kept) {
+            Warn "Tu configuración de KenshiCoop era distinta; la dejo en $kept por si la necesitas." `
+                 "Your KenshiCoop settings were different; kept them in $kept in case you need them."
+        }
         $old = Remove-LegacyKenshiCoop $kenshi
         if ($old) {
             Ok "Quitada la versión antigua (KenshiCoop): $old" "Removed the old version (KenshiCoop): $old"

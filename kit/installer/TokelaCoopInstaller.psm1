@@ -272,6 +272,22 @@ function Enable-TokelaCoopMod([string]$KenshiDir, [string]$ModFile = 'TokelaCoop
     return $true
 }
 
+# Before the old folder goes: when mods\TokelaCoop already had its own
+# coop_config.json (so the old one was not carried over) and the old one says
+# something else, keep the old one next to it as coop_config.KenshiCoop.json
+# instead of deleting the player's LAN settings. Returns that file, or ''.
+function Save-LegacyConfig([string]$KenshiDir) {
+    $old = Join-Path $KenshiDir ('mods\' + $script:LegacyName + '\coop_config.json')
+    $new = Join-Path $KenshiDir 'mods\TokelaCoop\coop_config.json'
+    if (-not (Test-Path -LiteralPath $old) -or -not (Test-Path -LiteralPath $new)) { return '' }
+    $a = [System.IO.File]::ReadAllBytes($old)
+    $b = [System.IO.File]::ReadAllBytes($new)
+    if ($a.Length -eq $b.Length -and -not (Compare-Object $a $b -SyncWindow 0)) { return '' }
+    $keep = Join-Path $KenshiDir ('mods\TokelaCoop\coop_config.' + $script:LegacyName + '.json')
+    Copy-Item -LiteralPath $old -Destination $keep -Force
+    return $keep
+}
+
 # Remove an old <Kenshi>\mods\KenshiCoop. Run it AFTER Enable-TokelaCoopMod, so
 # that even if the removal fails the old mod is no longer active. Returns the
 # removed folder, or '' when there was none. Throws if it cannot be removed.
