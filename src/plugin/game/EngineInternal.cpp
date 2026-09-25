@@ -2343,6 +2343,7 @@ void pollSquadRoster(GameWorld* gw) {
                 SquadMoveEdge e;
                 memcpy(e.before, it->second.h, sizeof(e.before));
                 memcpy(e.after, hs[i], sizeof(e.after));
+                e.c = cs[i];
                 g_squadMoveEdges.push_back(e);
             }
             memcpy(it->second.h, hs[i], sizeof(it->second.h));
@@ -2361,6 +2362,7 @@ void pollSquadRoster(GameWorld* gw) {
             SquadMoveEdge e;
             memcpy(e.before, it->second.h, sizeof(e.before));
             memset(e.after, 0, sizeof(e.after));
+            e.c = 0; // never hand out a pointer that may be freed
             g_squadMoveEdges.push_back(e);
         }
         g_squadRoster.erase(it++);
@@ -2377,6 +2379,7 @@ unsigned int drainSquadMoveEdges(SquadMoveEdge* out, unsigned int maxOut) {
     for (unsigned int i = 0; i < g_squadMoveEdges.size() && n < maxOut; ++i, ++n) {
         memcpy(out[n].before, g_squadMoveEdges[i].before, sizeof(out[n].before));
         memcpy(out[n].after,  g_squadMoveEdges[i].after,  sizeof(out[n].after));
+        out[n].c = g_squadMoveEdges[i].c;
     }
     g_squadMoveEdges.clear();
     return n;

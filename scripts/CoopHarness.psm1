@@ -25,6 +25,7 @@ Set-StrictMode -Version Latest
 $script:CoopDiagEnvKeys = @(
     # --- channel A/B knobs (Config.cpp reads these; DiagEnv carries the deltas) ---
     'KENSHICOOP_INV_SYNC'
+    'KENSHICOOP_OWN_GUARD'
     'KENSHICOOP_XFER_SYNC'
     'KENSHICOOP_BLOCK_XFER'
     'KENSHICOOP_WORLD_SYNC'

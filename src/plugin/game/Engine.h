@@ -187,6 +187,27 @@ Character* leader(GameWorld* gw);
 // attacker set (the join's owned melee that the host should apply authoritatively).
 unsigned int listPlayerChars(GameWorld* gw, Character** out, unsigned int maxOut);
 
+// ---- Own-characters-only control (EngineOwnGuard.cpp) ----------------------
+// Unselect every body in bodies[] the local player has selected; returns how many.
+unsigned int unselectBodies(GameWorld* gw, Character* const* bodies, unsigned int n);
+// Whether any body in bodies[] is currently selected.
+bool         anyBodySelected(GameWorld* gw, Character* const* bodies, unsigned int n);
+// Make c the player's selection (PlayerInterface::selectObject, no modifier).
+bool         selectBody(GameWorld* gw, Character* c);
+// Squad screen guard: detours the portrait drag checks. bodyClass maps a squad
+// member's hand ([type,container,containerSerial,index,serial]) and tabClass a
+// squad tab's container to 0 unknown / 1 ours / 2 the friend's.
+typedef int (*SquadBodyClassFn)(const unsigned int hand[5]);
+typedef int (*SquadTabClassFn)(unsigned int container, unsigned int containerSerial);
+bool installSquadScreenGuard(SquadBodyClassFn bodyClass, SquadTabClassFn tabClass);
+// Per tick: whether drags are refused now (ownGuard with a friend connected).
+void setSquadScreenGuard(GameWorld* gw, bool on);
+// World swap: forget which tab each squad was (the platoon pointers dangle).
+void clearSquadScreenPlatoons();
+// Drags refused since the last call: the friend's character picked up, and one
+// of ours dropped on the friend's squad.
+void drainSquadScreenRefusals(unsigned int* friendsChar, unsigned int* friendsTab);
+
 // SEH-guarded: read the LOCAL camera's world center into out[3] (x,y,z).
 // Returns false when the camera is absent or not yet initialised (pre-load).
 // Camera-anchored interest lever (spike 35): purely local read; the join
@@ -2113,7 +2134,8 @@ bool findFixtureByPosSid(GameWorld* gw, float x, float y, float z,
 // reports a zeroed after-hand (dismissal/death - the stored hand is reported
 // without dereferencing the possibly-freed pointer). Brand-NEW pointers are
 // NOT edges here: recruit ENTRY is the protocol-23 detour's story.
-struct SquadMoveEdge { unsigned int before[5]; unsigned int after[5]; };
+// c is the moved body (0 for an exit: that pointer may already be freed).
+struct SquadMoveEdge { unsigned int before[5]; unsigned int after[5]; Character* c; };
 // Poll the live roster against the pointer map, queueing edges (cap 64).
 // Call ~1 Hz from the main thread. An EMPTY roster skips the exit sweep (a
 // world swap mid-load must not report the whole squad as dismissed); the

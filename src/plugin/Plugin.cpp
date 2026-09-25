@@ -82,6 +82,15 @@ static int coopInvOwnerClass(const unsigned int h[5]) {
     return g_repl.ownerClassForHand(h);
 }
 
+// The squad screen guard's classifiers (engine SquadBodyClassFn / SquadTabClassFn),
+// free functions for the same reason.
+static int coopSquadBodyClass(const unsigned int h[5]) {
+    return g_repl.squadOwnerClassForHand(h);
+}
+static int coopSquadTabClass(unsigned int container, unsigned int containerSerial) {
+    return g_repl.tabOwnerClass(container, containerSerial);
+}
+
 // assault_mint's victim query (ScenarioContext::pickMintedProxy). Same shape and
 // same reason as the classifier above: the scenario layer must not know about the
 // Replicator, and only the Replicator knows which local bodies are mints.
@@ -201,6 +210,8 @@ bool            g_setupDone     = false;
 const DWORD     SETUP_DELAY_MS  = 4000; // let the world settle before spawning
 DWORD           g_lastCraftRearmTick = 0; // throttle host craft re-arm
 DWORD           g_bakeSaveTick  = 0;     // != 0: auto-bake save armed at this tick
+DWORD           g_ownNoticeUntil = 0;    // banner says "that character is your friend's" until then
+int             g_ownNoticeKind  = 1;    // 1: the friend's character, 2: the friend's squad
 const DWORD     CRAFT_REARM_MS  = 3000; // re-issue the work goal at most this often
 
 // Session-state timing constants (the mutable coordination state itself now
@@ -982,6 +993,14 @@ void coopPanelDrive(bool atTitle) {
         detail = rt.banner;
         ostate = rt.final ? 0 : 1;
     }
+    if (g_ownNoticeUntil != 0 && GetTickCount() < g_ownNoticeUntil) {
+        detail = (g_ownNoticeKind == 2)
+            ? coop::L("Co-op: esa escuadra es de tu amigo",
+                      "Co-op: that squad is your friend's")
+            : coop::L("Co-op: ese personaje es de tu amigo",
+                      "Co-op: that character is your friend's");
+        ostate = 1;
+    }
     ps.refuseNotice = rt.notice.empty() ? (const char*)0 : rt.notice.c_str();
     ps.refuseHint   = rt.hint.empty()   ? (const char*)0 : rt.hint.c_str();
     ps.refuseLevel  = rt.level;
@@ -1355,6 +1374,13 @@ void tickReplicatePublish(GameWorld* gw, bool worldLive) {
         g_repl.applyEvents(gw, g_inbound);
     }
     if (worldLive) {
+        // Own-characters-only control (game/EngineOwnGuard.cpp), with a friend
+        // connected: the squad screen refuses drags of the friend's characters,
+        // and publishSquadMoves never claims one. The selection scrub runs after
+        // publishSquadMoves below.
+        const bool ownGuardNow = g_cfg.ownGuard && g_peerPresent;
+        g_repl.setOwnGuardActive(ownGuardNow);
+        coop::engine::setSquadScreenGuard(gw, ownGuardNow);
         g_repl.publishOwned(gw, g_net, g_net.localId());
         // Phase W2: BOTH clients watch their OWNED characters for a WEAPON drop and author a
         // reliable conservation intent so the peer relocates its own copy of that weapon (a
@@ -1453,6 +1479,39 @@ void tickReplicatePublish(GameWorld* gw, bool worldLive) {
     // EVT_RECRUIT re-key path) lives in applyEvents above.
     if (g_cfg.squadSync)
         g_repl.publishSquadMoves(gw, g_net, g_net.localId());
+
+    // Own-characters-only control: the friend's characters never stay selected
+    // here. After publishOwned AND publishSquadMoves, so a body our player moved
+    // or recruited this tick is already pinned ours and is not taken away. When
+    // this took away the whole selection, one of our own characters is selected
+    // instead (a save loaded with the friend's character selected).
+    if (g_cfg.ownGuard && g_peerPresent) {
+        static Character* peers[160];   // main-thread only; publishOwned's bound
+        static Character* own[160];
+        unsigned int nOwn = 0;
+        const unsigned int nPeer = g_repl.splitSquad(gw, peers, 160, own, 160, &nOwn);
+        const unsigned int dropped = coop::engine::unselectBodies(gw, peers, nPeer);
+        unsigned int refusedChar = 0, refusedTab = 0;
+        coop::engine::drainSquadScreenRefusals(&refusedChar, &refusedTab);
+        if (dropped > 0 || refusedChar > 0) {
+            g_ownNoticeUntil = GetTickCount() + 2500;
+            g_ownNoticeKind = 1;
+        } else if (refusedTab > 0) {
+            g_ownNoticeUntil = GetTickCount() + 2500;
+            g_ownNoticeKind = 2;
+        }
+        if (dropped > 0) {
+            if (nOwn > 0 && !coop::engine::anyBodySelected(gw, own, nOwn))
+                coop::engine::selectBody(gw, own[0]);
+            static DWORD s_lastLog = 0;
+            if (GetTickCount() - s_lastLog > 2000) {
+                s_lastLog = GetTickCount();
+                char b[96];
+                _snprintf(b, sizeof(b) - 1, "[own] unselected %u friend character(s)", dropped);
+                b[sizeof(b) - 1] = '\0'; coopLog(b);
+            }
+        }
+    }
 
     // Change-gated sampled channels (Phase 6c): faction relations (protocol 24),
     // baked doors (26), placed buildings (27), placed-building doors (28),
@@ -2467,6 +2526,16 @@ void installEngineDetours() {
     // are the only cross-client transfer path. Retires Protocol 37 (Config forces
     // xferSync off when this is on). The classifier is always registered (cheap);
     // the detours install only when the veto is on or the xfer_block test runs.
+    // Own-characters-only control on the squad screen: the portrait drag checks
+    // are detoured once; setSquadScreenGuard arms them per tick while a friend
+    // is connected.
+    if (g_cfg.ownGuard) {
+        if (coop::engine::installSquadScreenGuard(&coopSquadBodyClass, &coopSquadTabClass))
+            coopLog("[own] squad screen detours installed");
+        else
+            coopLog("[own] FAILED to install the squad screen detours; drags are not guarded");
+    }
+
     coop::engine::setInvOwnerClassifier(&coopInvOwnerClass);
     coop::engine::setBlockXfer(g_cfg.blockXfer);
     if (g_cfg.blockXfer || g_cfg.scenario == "xfer_block") {

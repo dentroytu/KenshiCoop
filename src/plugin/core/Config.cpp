@@ -129,6 +129,7 @@ void loadConfig(Config& c) {
                   (envOr("KENSHICOOP_PROBE_AISUSPEND", "") == "1");
     c.noDetach  = envOr("KENSHICOOP_NO_DETACH", "") == "1";
     c.damageGuard = envOr("KENSHICOOP_DAMAGE_GUARD", "1") != "0";
+    c.ownGuard    = envOr("KENSHICOOP_OWN_GUARD", "1") != "0";
     // Divergence-gated authority promoted to DEFAULT ON (step-4 A/B, 2026-07-05:
     // trusted-set engaged in 4/4 runs - grants 5-8, trusted ~5 of 12 driven - with
     // npc_track/pose gates at parity; the single red run was a host crash that
@@ -464,7 +465,7 @@ std::string describeConfig(const Config& c) {
         { "store",   c.storeSync },    { "squad",   c.squadSync },
         { "latejoin",c.latejoinSync }, { "aiSuspend", c.aiSuspend },
         { "gateAuth",c.gateAuthority },{ "camInterest", c.camInterest },
-        { "censusFreezeAi", c.censusFreezeAi },
+        { "censusFreezeAi", c.censusFreezeAi }, { "ownGuard", c.ownGuard },
     };
     s += " on=[";
     bool first = true;

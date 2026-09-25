@@ -220,6 +220,8 @@ function Invoke-OneOracle {
         "add_equip"     { return (Test-AddEquip        -HostFile $HostLog -JoinFile $JoinLog) }
         "trade_probe"   { return (Test-TradeProbe      -HostFile $HostLog -JoinFile $JoinLog) }
         "trade_peer"    { return (Test-TradePeer       -HostFile $HostLog -JoinFile $JoinLog) }
+        "own_guard"     { return (Test-OwnGuard        -HostFile $HostLog -JoinFile $JoinLog) }
+        "own_guard_off" { return (Test-OwnGuard        -HostFile $HostLog -JoinFile $JoinLog -ExpectLeak -GateName "own_guard_off") }
         "trade_burst"   { return (Test-TradeBurst      -HostFile $HostLog -JoinFile $JoinLog) }
         "drop_probe"    { return (Test-DropProbe       -HostFile $HostLog) }
         "wi_sync"       { return (Test-WorldItemSync   -HostFile $HostLog -JoinFile $JoinLog -Tol $Tolerance) }

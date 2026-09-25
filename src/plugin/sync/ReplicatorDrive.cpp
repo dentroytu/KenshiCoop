@@ -36,6 +36,26 @@ void Replicator::logHardSnap(Character* c, const EntityState& out, const char* k
     skipped = 0;
 }
 
+unsigned int Replicator::splitSquad(GameWorld* gw, Character** peers, unsigned int maxPeers,
+                                    Character** own, unsigned int maxOwn,
+                                    unsigned int* nOwn) const {
+    if (nOwn) *nOwn = 0;
+    static Character* pcs[160];   // main-thread only; publishOwned's bound
+    const unsigned int np = engine::listPlayerChars(gw, pcs, 160);
+    unsigned int nPeer = 0;
+    for (unsigned int i = 0; i < np; ++i) {
+        unsigned int h[5];
+        if (!pcs[i] || !engine::readObjectHand(reinterpret_cast<RootObject*>(pcs[i]), h)) continue;
+        Key k; k.t = h[0]; k.c = h[1]; k.cs = h[2]; k.i = h[3]; k.s = h[4];
+        if (ownHands_.find(k) != ownHands_.end() || pinOwned_.find(k) != pinOwned_.end()) {
+            if (own && nOwn && *nOwn < maxOwn) own[(*nOwn)++] = pcs[i];
+        } else if (allSquad_.find(k) != allSquad_.end()) {
+            if (peers && nPeer < maxPeers) peers[nPeer++] = pcs[i];
+        }
+    }
+    return nPeer;
+}
+
 bool Replicator::ownsChar(Character* c) const {
     unsigned int h[5];
     if (!c || !engine::readObjectHand(reinterpret_cast<RootObject*>(c), h)) return false;

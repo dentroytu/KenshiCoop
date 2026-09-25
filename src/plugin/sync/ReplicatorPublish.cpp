@@ -47,9 +47,12 @@ void Replicator::publishOwned(GameWorld* gw, NetLink& net, u32 ownerId) {
     // appended tab's rank is outside ownRanks_ on both clients, so it belonged
     // to neither of them until this ran.
     decideTabs(raw, nSquad, ctnrs);
+    // Keep the previous split for publishSquadMoves (who owned a body before it moved).
+    prevOwnHands_.swap(ownHands_);
     ownHands_.clear();
     // Full squad roster (own + peer) for the trade veto's owner classifier: every
     // captured member, before the ownership partition below decides which we own.
+    prevAllSquad_.swap(allSquad_);
     allSquad_.clear();
     for (unsigned int i = 0; i < nSquad; ++i) allSquad_.insert(keyOf(raw[i]));
     unsigned int n = 0;

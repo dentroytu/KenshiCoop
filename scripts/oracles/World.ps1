@@ -759,6 +759,90 @@ function Test-SquadProbe {
 #      series - the re-keyed body is actually driven, not just bound);
 #   6. the rank latch held: the pre-existing tabs' census positions are
 #      IDENTICAL first-to-last sample on both sides (no ownership reshuffle).
+# own_guard (2026-09-25): each side selects the other side's tab leader five times
+# and samples the selection afterwards; the own-characters-only guard must have
+# taken every one away (leaks=0 on both sides) and logged that it did.
+# -ExpectLeak flips it for the KENSHICOOP_OWN_GUARD=0 negative control.
+function Test-OwnGuard {
+    param([string]$HostFile, [string]$JoinFile, [switch]$ExpectLeak, [string]$GateName = "own_guard")
+    $rx = "SCENARIO OWNG verdict role=(\w+) pass=(\d) tries=(\d+) resolved=(\d+) checks=(\d+) leaks=(\d+) landed=(\d+)"
+    $read = {
+        param($file)
+        if (-not (Test-Path $file)) { return $null }
+        $l = Select-String -Path $file -Pattern $rx | Select-Object -Last 1
+        if (-not $l) { return $null }
+        $null = $l.Line -match $rx
+        return [pscustomobject]@{ resolved = [int]$matches[4]; checks = [int]$matches[5]; leaks = [int]$matches[6]
+                                  landed = [int]$matches[7] }
+    }
+    $h = & $read $HostFile
+    $j = & $read $JoinFile
+    if (-not $h -or -not $j) {
+        Write-Host "  OWN-GUARD FAIL - missing verdict (host=$([bool]$h) join=$([bool]$j))"
+        return (Add-GateResult -Name $GateName -Status FAIL -Detail "missing verdict")
+    }
+    # Scrubs AFTER the scenario started: the guard also unselects the friend's
+    # character the save loads with, which says nothing about the scenario's selects.
+    $scrubsAfterStart = {
+        param($file)
+        $start = Select-String -Path $file -Pattern "SCENARIO OWNG start" | Select-Object -First 1
+        if (-not $start) { return 0 }
+        return @(Select-String -Path $file -Pattern "\[own\] unselected" |
+                 Where-Object { $_.LineNumber -gt $start.LineNumber }).Count
+    }
+    $hostScrubs = & $scrubsAfterStart $HostFile
+    $joinScrubs = & $scrubsAfterStart $JoinFile
+    # landed: selects that really selected, read back before the guard's next pass.
+    $exercised = ($h.resolved -ge 1) -and ($j.resolved -ge 1) -and ($h.checks -ge 1) -and ($j.checks -ge 1) -and
+                 ($h.landed -ge 1) -and ($j.landed -ge 1)
+
+    # The host's two squad moves. Both games load the same save, so a character's hand
+    # before a move is also the other game's key for it.
+    $readMove = {
+        param($what)
+        $m = Select-String -Path $HostFile -Pattern "SCENARIO OWNG $what rc=(-?\d+) before=([\d,]+) after=([\d,]+)" |
+             Select-Object -Last 1
+        if (-not $m) { return [pscustomobject]@{ rc = -9; before = "" } }
+        return [pscustomobject]@{ rc = [int]$m.Matches[0].Groups[1].Value; before = $m.Matches[0].Groups[2].Value }
+    }
+    # GIVE: one of the host's characters into the join's squad. The host still owns it,
+    # so the move is published, and the join must not take it over (control flip).
+    $give = & $readMove "give"
+    $gave = ($give.rc -eq 1)
+    $g = [regex]::Escape($give.before)
+    $givePub  = $gave -and @(Select-String -Path $HostFile -Pattern "\[squad\] EVT send old=$g ").Count -ge 1
+    $giveKept = $gave -and @(Select-String -Path $JoinFile -Pattern "\[own\] SQUAD-KEEP ").Count -ge 1
+    $flips    = @(Select-String -Path $JoinFile -Pattern "CONTROL-FLIP claim").Count
+    # TAKE: the join's character into the host's squad. The host must hold it (keep it
+    # the join's, publish nothing) and keep driving it under the join's key - an
+    # unresolved key would ask the join to describe it again (the duplicate-body path).
+    $take = & $readMove "move-friend"
+    $moved = ($take.rc -eq 1)
+    $b = [regex]::Escape($take.before)
+    $held      = $moved -and @(Select-String -Path $HostFile -Pattern "\[own\] SQUAD-HOLD friend's character old=$b ").Count -ge 1
+    $published = $moved -and @(Select-String -Path $HostFile -Pattern "\[squad\] EVT send old=$b ").Count -ge 1
+    $joinGot   = @(Select-String -Path $JoinFile -Pattern "\[event\] RECV id=\d+ ev=11 owner=\d+ hand=$b ").Count
+    $reqs      = if ($moved) { @(Select-String -Path $HostFile -Pattern "\[spawn\] REQ hand=$b ").Count } else { 0 }
+
+    if ($ExpectLeak) {
+        $ok = $exercised -and ($h.leaks -gt 0) -and ($j.leaks -gt 0) -and $gave -and ($flips -ge 1) -and $moved -and $published
+    } else {
+        $ok = $exercised -and ($h.leaks -eq 0) -and ($j.leaks -eq 0) -and ($hostScrubs -ge 1) -and ($joinScrubs -ge 1) -and
+              $gave -and $givePub -and $giveKept -and ($flips -eq 0) -and
+              $moved -and $held -and (-not $published) -and ($joinGot -eq 0) -and ($reqs -eq 0)
+    }
+    Write-Host ("  OWN-GUARD " + $(if ($ok) { "PASS" } else { "FAIL" }) +
+                " - host resolved=$($h.resolved) landed=$($h.landed) checks=$($h.checks) leaks=$($h.leaks) scrubs=$hostScrubs;" +
+                " join resolved=$($j.resolved) landed=$($j.landed) checks=$($j.checks) leaks=$($j.leaks) scrubs=$joinScrubs;" +
+                " give rc=$($give.rc) published=$givePub kept=$giveKept flips=$flips;" +
+                " take rc=$($take.rc) held=$held published=$published joinRecv=$joinGot reqs=$reqs" +
+                $(if ($ExpectLeak) { " (negative control: leaks, a control flip and a published take expected)" } else { "" }))
+    return (Add-GateResult -Name $GateName -Status $(if ($ok) { "PASS" } else { "FAIL" }) `
+                -Metrics @{ hostLeaks = $h.leaks; joinLeaks = $j.leaks; hostScrubs = $hostScrubs; joinScrubs = $joinScrubs
+                            giveRc = $give.rc; givePub = [int]$givePub; giveKept = [int]$giveKept; flips = $flips
+                            takeRc = $take.rc; held = [int]$held; published = [int]$published; joinRecv = $joinGot; reqs = $reqs })
+}
+
 function Test-SquadSync {
     param([string]$HostFile, [string]$JoinFile)
     $why = @()

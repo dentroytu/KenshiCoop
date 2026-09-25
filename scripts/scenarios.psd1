@@ -1158,7 +1158,11 @@
         # parity (a driven squad member reproduces the owner's RUN, not a walk)
         # and anti-phantom (a control-flip claim never mints a duplicate proxy).
         # Save 'sync': the bar town has recruitable NPCs and both squads.
+        # Runs with the own-characters guard OFF: since 2026-09-25 a move never
+        # changes a character's owner while the guard is on (own_guard gates that),
+        # so the control flip this measures is only reachable with it off.
         recruit_ctl = @{
+            DiagEnv = @{ KENSHICOOP_OWN_GUARD = '0' }
             Save = 'sync'; Setup = ''; Tolerance = 6.0
             PrimaryGate = 'recruit_ctl'
             Gating   = @('recruit_ctl', 'clock_sync')
@@ -2085,6 +2089,27 @@
             Gating   = @('trade_probe')
             Advisory = @('smoothness', 'anim_truth', 'march')
             Tier = 'none'; WanVariant = $false
+        }
+        # own_guard: each side selects the other side's tab leader five times and
+        # the own-characters-only guard must take every one away; then the host
+        # moves the join's character into its own squad, and that roster edge must
+        # be held (kept the join's, never published) - 2026-09-25. own_guard_off
+        # runs it with the guard off and must see the selection stick and the move
+        # published (the negative control: the gate can fail).
+        own_guard = @{
+            Save = 'squad1'; Setup = ''; Tolerance = 3.0
+            PrimaryGate = 'own_guard'
+            Gating   = @('own_guard', 'clock_sync')
+            Advisory = @('smoothness', 'anim_truth', 'march')
+            Tier = 'smoke'; WanVariant = $false
+        }
+        own_guard_off = @{
+            DiagEnv = @{ KENSHICOOP_OWN_GUARD = '0' }
+            Save = 'squad1'; Setup = ''; Tolerance = 3.0
+            PrimaryGate = 'own_guard_off'
+            Gating   = @('own_guard_off')
+            Advisory = @()
+            Tier = 'probe'; WanVariant = $false
         }
         # Protocol-37 VALIDATION of the transfer-intent channel (xferSync ON): the
         # same three cross-owner drags trade_probe baselined, now expected CLEAN -
