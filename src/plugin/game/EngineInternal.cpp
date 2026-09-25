@@ -1250,6 +1250,17 @@ std::map<Character*, ReportedDmg> g_reportedDmg;
 std::set<Character*>              g_reportAttackers;
 bool                              g_combatReport = false;
 
+// Host side of the same report. The friend's squad copies the host drives replay
+// the friend's fight, so their swings also landed NATIVELY on the host's real
+// NPCs - on top of the join's report of the very same swings: enemies died up to
+// twice as fast (audit, 2026-09-25). A swing BY one of these on a body outside the
+// player squad is cosmetic here; the report is its only damage. A swing on a
+// squad member (friendly fire) still lands natively - the host drops reports
+// aimed at its own bodies. Both sets are rebuilt each tick by the replicator.
+std::set<Character*>              g_remoteSwingers;
+std::set<Character*>              g_squadBodies;
+unsigned long                     g_remoteSwingsVetoed = 0;
+
 HitMaterialType __fastcall hitByMelee_hook(Character* self, CutDirection dir,
                                            Damages& damage, Character* who,
                                            CombatTechniqueData* attack, int comboID) {
@@ -1267,6 +1278,12 @@ HitMaterialType __fastcall hitByMelee_hook(Character* self, CutDirection dir,
             rd.blood += (damage.cut + damage.pierce) * 0.5f + damage.bleedMult;
         }
         return HIT_MISSED; // cosmetic fight: the local swing never lands
+    }
+    if (!g_remoteSwingers.empty() && who &&
+        g_remoteSwingers.find(who) != g_remoteSwingers.end() &&
+        g_squadBodies.find(self) == g_squadBodies.end()) {
+        ++g_remoteSwingsVetoed;
+        return HIT_MISSED; // the friend's own report carries this swing's damage
     }
     ++g_dmgPassedHits;
     return g_hitByMeleeOrig(self, dir, damage, who, attack, comboID);
@@ -2428,6 +2445,10 @@ void setCombatReport(bool on) {
 }
 void clearReportAttackers()          { g_reportAttackers.clear(); }
 void addReportAttacker(Character* c)  { if (c) g_reportAttackers.insert(c); }
+void clearRemoteSwingers()           { g_remoteSwingers.clear(); g_squadBodies.clear(); }
+void addRemoteSwinger(Character* c)  { if (c) g_remoteSwingers.insert(c); }
+void addSquadBody(Character* c)      { if (c) g_squadBodies.insert(c); }
+unsigned long remoteSwingsVetoed()   { return g_remoteSwingsVetoed; }
 bool takeReportedDamage(Character* c, float* outFlesh, float* outBlood) {
     std::map<Character*, ReportedDmg>::iterator it = g_reportedDmg.find(c);
     if (it == g_reportedDmg.end()) return false;

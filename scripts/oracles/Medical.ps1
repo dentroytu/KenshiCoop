@@ -107,9 +107,13 @@ function Test-NpcVitals {
 #   ground-item   - each side sees >= 1 severed ground item near the subject
 #                   after the cut, and no side ever sees more than the two
 #                   legitimate items (a dedupe failure shows 3+)
+# MaxItems is 1: a second severed item near the subject IS the duplicate. It was
+# 2, which passed the run where cell authority (the shipped default) made both
+# sides create the item and neither dedupe - 2 per side for the whole scene - while
+# every clean run, before and after the fix, never shows more than 1 (2026-09-25).
 function Test-LimbLoss {
     param([string]$HostFile, [string]$JoinFile,
-          [int]$MaxLatencyMs = 12000, [int]$GraceMs = 4000, [int]$MaxItems = 2)
+          [int]$MaxLatencyMs = 12000, [int]$GraceMs = 4000, [int]$MaxItems = 1)
     $dirs = @(
         @{ tag = "A"; ownerLog = $HostFile; copyLog = $JoinFile },
         @{ tag = "B"; ownerLog = $JoinFile; copyLog = $HostFile }

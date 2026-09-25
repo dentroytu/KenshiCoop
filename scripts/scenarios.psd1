@@ -789,6 +789,18 @@
             Advisory = @('smoothness', 'anim_truth', 'march')
             Tier = 'full'; WanVariant = $true
         }
+        # limb_loss_cellauth: the same scene with cell authority ON, which is what a
+        # real session runs (KENSHICOOP_CELL_AUTH defaults on; the harness turns it
+        # off). The join then streamed NPCs too, the severed-item author was chosen
+        # by that flag instead of by role, and nobody deduped: two limbs per side.
+        limb_loss_cellauth = @{
+            DiagEnv = @{ KENSHICOOP_WORLD_SYNC = '1'; KENSHICOOP_CELL_AUTH = '1' }
+            Save = 'squad1'; Setup = ''; Tolerance = 3.0
+            PrimaryGate = 'limb_loss'
+            Gating   = @('limb_loss', 'clock_sync')
+            Advisory = @('smoothness', 'anim_truth', 'march')
+            Tier = 'full'; WanVariant = $false
+        }
         # crawl_move: protocol-53 prone posture + crippled cause, both
         # directions - each side amputates a LEG on ITS OWN tab leader (A: host
         # member LEFT_LEG, B: join member RIGHT_LEG) and then keeps that body

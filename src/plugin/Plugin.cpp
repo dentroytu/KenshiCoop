@@ -1725,6 +1725,16 @@ void tickScenarioTick(GameWorld* gw) {
             // Stage 2: the receiver emits its interpolation smoothness summary
             // alongside the verdict so the runner can assert per-frame gliding.
             if (!g_cfg.isHost) g_repl.logSmoothSummary();
+            if (g_cfg.isHost && g_cfg.damageGuard) {
+                // Host half of the single-damage-source evidence: swings by the
+                // friend's squad copies that were NOT landed natively (the friend's
+                // report carries them).
+                char r[96];
+                _snprintf(r, sizeof(r) - 1, "SCENARIO DMGREMOTE vetoed=%lu",
+                          coop::engine::remoteSwingsVetoed());
+                r[sizeof(r) - 1] = '\0';
+                coopLog(r);
+            }
             bool ok = g_scenario->passed();
             char m[48];
             _snprintf(m, sizeof(m) - 1, "SCENARIO RESULT %s", ok ? "PASS" : "FAIL");

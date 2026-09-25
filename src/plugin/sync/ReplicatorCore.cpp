@@ -678,9 +678,10 @@ void Replicator::logSmoothSummary() {
     if (dmgGuard_) {
         unsigned long guarded = 0, passed = 0;
         engine::damageGuardStats(&guarded, &passed);
-        char dg[112];
+        char dg[140];
         _snprintf(dg, sizeof(dg) - 1,
-                  "SCENARIO DMGGUARD guarded=%lu passed=%lu", guarded, passed);
+                  "SCENARIO DMGGUARD guarded=%lu passed=%lu remote=%lu", guarded, passed,
+                  engine::remoteSwingsVetoed());
         dg[sizeof(dg) - 1] = '\0';
         coop::logLine(dg);
     }

@@ -598,6 +598,9 @@ const float CrawlMoveScenario::LEG = 20.0f;
 Scenario* makeMedicalScenario(const std::string& name) {
     if (name == "medic_order")  return new MedicOrderScenario();
     if (name == "limb_loss")    return new LimbLossScenario();
+    // The same scene with cell authority on (its manifest DiagEnv): the shipped
+    // default, and the one where the join stopped deduping severed limbs.
+    if (name == "limb_loss_cellauth") return new LimbLossScenario();
     if (name == "crawl_move")   return new CrawlMoveScenario();
     if (name == "stats_sync")   return new StatsSyncScenario();
     return 0;
