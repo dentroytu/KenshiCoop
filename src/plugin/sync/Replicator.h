@@ -14,8 +14,8 @@
 // transform is still committed via a raw teleport (no walk animation yet - that
 // is Stage 3).
 
-#ifndef KENSHICOOP_REPLICATOR_H
-#define KENSHICOOP_REPLICATOR_H
+#ifndef TOKELACOOP_REPLICATOR_H
+#define TOKELACOOP_REPLICATOR_H
 
 #include <deque>
 #include <map>
@@ -45,7 +45,7 @@ public:
     // Stage 4: also stream nearby host-authoritative world NPCs (host side).
     void setStreamNpcs(bool v) { streamNpcs_ = v; }
 
-    // Protocol 36 live-tuning knobs (KENSHICOOP_INTERP_* / _CATCHUP_K /
+    // Protocol 36 live-tuning knobs (TOKELACOOP_INTERP_* / _CATCHUP_K /
     // _SNAP_DIST): override the interp buffer's delay/extrapolation window and
     // the walk-drive's hard-snap / catch-up gains for WAN A/B runs without a
     // rebuild. Defaults match the historical constants.
@@ -65,10 +65,10 @@ public:
         if (slideMax > 0.0f)    combatSlideMax_    = slideMax;
         if (convergeMs > 0)     combatConvergeMs_  = convergeMs;
     }
-    // KENSHICOOP_SEND_STAMP=0: ignore the batch sendMs and index interp rings
+    // TOKELACOOP_SEND_STAMP=0: ignore the batch sendMs and index interp rings
     // on arrival time (the legacy scheme) - a receiver-local A/B lever.
     void setSendStamp(bool v) { sendStamp_ = v; }
-    // KENSHICOOP_STARVE_HOLD_MS: how long a driven body whose stream went
+    // TOKELACOOP_STARVE_HOLD_MS: how long a driven body whose stream went
     // STALE keeps its mutation guards (AI suspend + damage guard) before it
     // is released to local simulation. A brief WAN stall must not become an
     // authority transfer (architecture review 2026-07-10); 0 restores the
@@ -125,7 +125,7 @@ public:
     // universal quieting layer; per-class apply levers sit on top.
     void setAiSuspend(bool v) { aiSuspend_ = v; }
 
-    // Step-2 experiment (KENSHICOOP_NO_DETACH=1): skip the sitter detachFromTownAI
+    // Step-2 experiment (TOKELACOOP_NO_DETACH=1): skip the sitter detachFromTownAI
     // in applyRest, betting that AI-suspend alone stops town-AI re-tasking. Off by
     // default; flip for a manual A/B before deleting the detach lever for good.
     void setNoDetach(bool v) { noDetach_ = v; }
@@ -135,7 +135,7 @@ public:
     // no local damage - outcomes stay host-authoritative (KO/death events).
     void setDamageGuard(bool v) { dmgGuard_ = v; }
 
-    // Step 4 (KENSHICOOP_GATE_AUTHORITY=1, default off): divergence-gated authority.
+    // Step 4 (TOKELACOOP_GATE_AUTHORITY=1, default off): divergence-gated authority.
     // A world NPC whose LOCAL AI has agreed with the host's rawTask for a sustained
     // streak while staying in position enters TRUSTED mode - no suspend, no drive,
     // cheap monitor only; re-engaged instantly on divergence or drift (doctrine 18).
@@ -143,7 +143,7 @@ public:
 
     // Carried-body sync (protocol 18, default ON): reliable pickup/drop edges +
     // self-healing carried state for player-squad members, executed engine-
-    // native on each machine's local pair. KENSHICOOP_CARRY_SYNC=0 disables.
+    // native on each machine's local pair. TOKELACOOP_CARRY_SYNC=0 disables.
     void setCarrySync(bool v) { carrySync_ = v; }
 
     // Peer-left sweep (carried-body sync): any driven (peer-owned) copy still
@@ -154,31 +154,31 @@ public:
     // Furniture occupancy sync (protocol 19, default ON): reliable enter/exit
     // edges + self-healing BODY_IN_BED/BODY_IN_CAGE state, executed engine-
     // native (setBedMode/setPrisonMode) on each machine's local pair.
-    // KENSHICOOP_FURN_SYNC=0 disables.
+    // TOKELACOOP_FURN_SYNC=0 disables.
     void setFurnSync(bool v) { furnSync_ = v; }
 
     // Chained/pole prisoner sync (protocol 41, default ON): rides the furniture
     // pipeline as kind=3 (Character::isChained -> setChainedMode). A captive on
     // a prisoner pole is shackled, not caged, so the cage path never saw it.
-    // KENSHICOOP_CHAIN_SYNC=0 disables JUST the chain kind (beds/cages keep
+    // TOKELACOOP_CHAIN_SYNC=0 disables JUST the chain kind (beds/cages keep
     // working) - the A/B escape hatch if it ever freezes a walking slave.
     void setChainSync(bool v) { chainSync_ = v; }
 
     // Stealth sync (protocol 20, default ON): continuous BODY_SNEAK posture
     // apply on driven copies (engine-native setStealthMode) + the detection-
-    // indicator feedback stream. KENSHICOOP_STEALTH_SYNC=0 disables.
+    // indicator feedback stream. TOKELACOOP_STEALTH_SYNC=0 disables.
     void setStealthSync(bool v) { stealthSync_ = v; }
 
     // Prone posture sync (protocol 53, default ON): continuous ProneState apply
     // on driven copies (engine-native setProneState), so an injured crawler is
     // posed as one instead of being walk-driven upright. The crippled FLAG (the
-    // cause) rides the medical channel. KENSHICOOP_PRONE_SYNC=0 disables.
+    // cause) rides the medical channel. TOKELACOOP_PRONE_SYNC=0 disables.
     void setProneSync(bool v) { proneSync_ = v; }
 
     // Runtime-spawn proxy replication (protocol 21, default ON): the join
     // requests a description for any streamed hand it cannot resolve (a host
     // RUNTIME spawn) and mints a local proxy body bound at the applyTargets
-    // resolve choke point. KENSHICOOP_SPAWN_SYNC=0 disables (and spawn_probe
+    // resolve choke point. TOKELACOOP_SPAWN_SYNC=0 disables (and spawn_probe
     // forces it off to baseline the failure modes).
     void setSpawnSync(bool v) { spawnSync_ = v; }
 
@@ -372,7 +372,7 @@ public:
     //         purchase from a moment ago is not reverted and then re-applied.
     void applyMoneyPool(const SyncContext& ctx);
 
-    // Shared money-pool sync master enable (KENSHICOOP_MONEY_SYNC).
+    // Shared money-pool sync master enable (TOKELACOOP_MONEY_SYNC).
     void setMoneySync(bool v) { moneySync_ = v; }
 
     // BEFORE engine (protocol 23, both clients): drain the engine's recruit-edge
@@ -384,7 +384,7 @@ public:
     // recruit landed in the host's rank-0 container).
     void publishRecruits(GameWorld* gw, NetLink& net, u32 ownerId);
 
-    // Recruitment sync master enable (KENSHICOOP_RECRUIT_SYNC).
+    // Recruitment sync master enable (TOKELACOOP_RECRUIT_SYNC).
     void setRecruitSync(bool v) { recruitSync_ = v; }
 
     // BEFORE engine (protocol 35, both clients): poll the roster's pointer ->
@@ -397,7 +397,7 @@ public:
     // re-key) lives in applyEvents.
     void publishSquadMoves(GameWorld* gw, NetLink& net, u32 ownerId);
 
-    // Squad management sync master enable (KENSHICOOP_SQUAD_SYNC). Also gates
+    // Squad management sync master enable (TOKELACOOP_SQUAD_SYNC). Also gates
     // the container-rank LATCH: with it on, tab ranks are assigned once at
     // first census and newly-seen containers APPEND (a mid-session tab can
     // never reshuffle existing ranks / flip whole-tab ownership); off = the
@@ -419,7 +419,7 @@ public:
     // seq guard) and already-converged rows are skipped.
     void applyFactions(const SyncContext& ctx);
 
-    // Faction-relation sync master enable (KENSHICOOP_FACTION_SYNC).
+    // Faction-relation sync master enable (TOKELACOOP_FACTION_SYNC).
     void setFactionSync(bool v) { factionSync_ = v; }
 
     // BEFORE engine (protocol 26, both clients): sample baked doors near the
@@ -438,7 +438,7 @@ public:
     // silently (out-of-interest or runtime door - accepted edge).
     void applyDoors(const SyncContext& ctx);
 
-    // Door-state sync master enable (KENSHICOOP_DOOR_SYNC).
+    // Door-state sync master enable (TOKELACOOP_DOOR_SYNC).
     void setDoorSync(bool v) { doorSync_ = v; }
 
     // BEFORE engine (protocol 27, both clients): drain local placement edges
@@ -458,7 +458,7 @@ public:
     // rows; unknown keys are skipped silently).
     void applyBuilds(const SyncContext& ctx);
 
-    // Placed-building sync master enable (KENSHICOOP_BUILD_SYNC).
+    // Placed-building sync master enable (TOKELACOOP_BUILD_SYNC).
     void setBuildSync(bool v) { buildSync_ = v; }
 
     // BEFORE engine (protocol 28, both clients): sample the doors of every
@@ -476,10 +476,10 @@ public:
     // guard; unknown/tombstoned keys skip silently.
     void applyBuildDoors(const SyncContext& ctx);
 
-    // Placed-building door + removal sync master enable (KENSHICOOP_BDOOR_SYNC).
+    // Placed-building door + removal sync master enable (TOKELACOOP_BDOOR_SYNC).
     void setBdoorSync(bool v) { bdoorSync_ = v; }
 
-    // Hunger sync enable (protocol 29, KENSHICOOP_HUNGER_SYNC): whether the
+    // Hunger sync enable (protocol 29, TOKELACOOP_HUNGER_SYNC): whether the
     // hunger/fed scalars ride the medical snapshot (OFF sends/applies them
     // as -1 = not carried; the rest of the stream is untouched).
     void setHungerSync(bool v) { hungerSync_ = v; }
@@ -503,7 +503,7 @@ public:
     // drops stale rows; unresolvable keys skip silently (out-of-interest).
     void applyProd(const SyncContext& ctx);
 
-    // Production machine sync master enable (KENSHICOOP_PROD_SYNC).
+    // Production machine sync master enable (TOKELACOOP_PROD_SYNC).
     void setProdSync(bool v) { prodSync_ = v; }
 
     // BEFORE engine (protocol 38, HOST only - the tech-tree authority):
@@ -521,7 +521,7 @@ public:
     // seq guard drops stale rows.
     void applyResearch(const SyncContext& ctx);
 
-    // Research tech-tree sync master enable (KENSHICOOP_RESEARCH_SYNC).
+    // Research tech-tree sync master enable (TOKELACOOP_RESEARCH_SYNC).
     void setResearchSync(bool v) { researchSync_ = v; }
 
     // BEFORE engine (protocol 54, BOTH clients - either may buy): sample the
@@ -545,7 +545,7 @@ public:
     // must NOT behave like the door channel, which drops such a row for good.
     void applyDeeds(const SyncContext& ctx);
 
-    // Property-deed sync master enable (KENSHICOOP_DEED_SYNC).
+    // Property-deed sync master enable (TOKELACOOP_DEED_SYNC).
     void setDeedSync(bool v) { deedSync_ = v; }
 
     // AFTER engine (protocol 55): announce the container/machine-class fixtures
@@ -564,7 +564,7 @@ public:
     // nothing and waits for the safety resend.
     void applyFixtures(const SyncContext& ctx);
 
-    // Runtime-fixture sync master enable (KENSHICOOP_FIXTURE_SYNC).
+    // Runtime-fixture sync master enable (TOKELACOOP_FIXTURE_SYNC).
     void setFixtureSync(bool v) { fixtureSync_ = v; }
 
     // Phase 6c: drive the change-gated SAMPLED channels (faction, doors, placed
@@ -578,7 +578,7 @@ public:
     // cadence positions / patterns).
     void driveSampledChannels(const SyncContext& ctx);
 
-    // Storage/machine container sync (protocol 34, KENSHICOOP_STORE_SYNC):
+    // Storage/machine container sync (protocol 34, TOKELACOOP_STORE_SYNC):
     // when set (HOST only - host-authoritative world containers), a ~1 Hz
     // census of container-bearing buildings (STORAGE + the machine classes)
     // in the interest spheres auto-registers each as an AUTHORED container,
@@ -641,10 +641,10 @@ public:
     // (no lever to compose with).
     void syncTime(GameWorld* gw, Inbound& in, NetLink& net, u32 ownerId, bool isHost);
 
-    // Game-clock sync master enable (KENSHICOOP_TIME_SYNC).
+    // Game-clock sync master enable (TOKELACOOP_TIME_SYNC).
     void setTimeSync(bool v) { timeSync_ = v; }
 
-    // KENSHICOOP_TIME_BRAKE (default ON): the host half of the correction -
+    // TOKELACOOP_TIME_BRAKE (default ON): the host half of the correction -
     // slowing its own sim while the join is behind and out of headroom. "0"
     // restores the join-only slew, which is join-catches-up or nothing.
     void setTimeBrake(bool v) { timeBrake_ = v; }
@@ -714,11 +714,11 @@ public:
     // camera can stay private.
     void syncCamHint(GameWorld* gw, Inbound& in, NetLink& net, u32 ownerId);
 
-    // KENSHICOOP_CENSUS_RADIUS: wide-radius existence culling reach (units);
+    // TOKELACOOP_CENSUS_RADIUS: wide-radius existence culling reach (units);
     // <= 0 disables the census channel on both sides.
     void setCensusRadius(float r) { censusRadius_ = r; }
 
-    // KENSHICOOP_SPAWN_MINT_RADIUS (2026-07-11 "NPCs spawn on top of the join
+    // TOKELACOOP_SPAWN_MINT_RADIUS (2026-07-11 "NPCs spawn on top of the join
     // player" fix): how far from our own squad a census-missing host NPC may
     // be PROXY-MINTED. The census-missing scan asks about every census hand
     // with no local body; the host's reply carries the authoritative position
@@ -728,7 +728,7 @@ public:
     // stream-bubble-only minting.
     void setSpawnMintRadius(float r) { spawnMintRadius_ = r; }
 
-    // KENSHICOOP_ADOPT_RADIUS (zone-load population parity, 2026-08-06): how far
+    // TOKELACOOP_ADOPT_RADIUS (zone-load population parity, 2026-08-06): how far
     // from a census row's position the join looks for one of its OWN bodies of the
     // same template+faction to BIND to that row, rather than minting a proxy next
     // to it. Zone-generated town population is the case: both engines create it
@@ -737,19 +737,19 @@ public:
     // town on top of the first and hid the first. <= 0 restores that behaviour.
     void setAdoptRadius(float r) { adoptRadius_ = r; }
 
-    // KENSHICOOP_CENSUS_PARK (v38 pack-hidden fix): how far a census-PRESENT
+    // TOKELACOOP_CENSUS_PARK (v38 pack-hidden fix): how far a census-PRESENT
     // local copy may drift from the host's census position before the join
     // parks it back onto the host's spot. <= 0 disables parking (existence-
     // only census, the v37 behavior).
     void setCensusParkDist(float d) { censusParkDist_ = d; }
 
-    // KENSHICOOP_CENSUS_WALK: the ceiling of the band in which a diverged
+    // TOKELACOOP_CENSUS_WALK: the ceiling of the band in which a diverged
     // census-band body is WALKED back onto the host's position instead of
     // teleported there. <= 0 disables the walk and restores teleport-only
     // correction at every distance.
     void setCensusWalkDist(float d) { censusWalkDist_ = d; }
 
-    // KENSHICOOP_CENSUS_FREEZE_AI (default ON): the join freezes the local AI
+    // TOKELACOOP_CENSUS_FREEZE_AI (default ON): the join freezes the local AI
     // of a census-band body (census-present, unstreamed) that DIVERGES past
     // censusParkDist_ - the position park teleports it back, but its local AI
     // kept re-deciding to flee/fight, so a captive/working slave ran and
@@ -757,7 +757,7 @@ public:
     // gated: well-tracking census NPCs never trip it and keep their local AI.
     void setCensusFreezeAi(bool v) { censusFreezeAi_ = v; }
 
-    // KENSHICOOP_ATTENTION_RADIUS (attention-gated reconciliation): how close
+    // TOKELACOOP_ATTENTION_RADIUS (attention-gated reconciliation): how close
     // an interest anchor must be to a body before the two worlds are
     // reconciled there. <= 0 disables the gate - everything counts as
     // observed, which is exactly the pre-gate behaviour.
@@ -771,13 +771,13 @@ public:
     // the players travel. Off by default (log volume).
     void setAuditRows(bool on) { auditRows_ = on; }
 
-    // Jail put-to-work desync spike (KENSHICOOP_JAIL_PROBE, read-only): emit
+    // Jail put-to-work desync spike (TOKELACOOP_JAIL_PROBE, read-only): emit
     // correlated [jail] STATE traces for captive bodies - the owned PC in
     // publishOwned (side=own) and each driven copy in applyTargets (side=drv)
     // - so the brief cage-exit/re-cage twitch can be pinned. Off by default.
     void setJailProbe(bool on) { jailProbe_ = on; }
 
-    // Phase A jail-observe (KENSHICOOP_JAIL_OBSERVE, read-only): on the host,
+    // Phase A jail-observe (TOKELACOOP_JAIL_OBSERVE, read-only): on the host,
     // stop driving/suspending/self-healing a peer-owned captive so the host's
     // local sim runs it unopposed, and log its trajectory ([jail] OBSERVE) to
     // classify the guard's "put to work" intent (relocate vs walk-round). Off
@@ -1209,14 +1209,14 @@ private:
     std::map<Key, CensusFix>  censusFix_;
     float                     censusWalkDist_; // walk-converge band ceiling
     unsigned long             censusWalks_;    // join: walk-converge orders issued
-    // Census-band AI freeze (KENSHICOOP_CENSUS_FREEZE_AI): join-side flag +
+    // Census-band AI freeze (TOKELACOOP_CENSUS_FREEZE_AI): join-side flag +
     // per-key last-diverge tick. A census-band body that drifts past
     // censusParkDist_ is added here and AI-suspended; the hold (~5 s) keeps it
     // quiesced after the park zeroes its drift, then re-checks (release if it
     // settled, re-freeze if it diverges again).
     bool                      censusFreezeAi_;
     std::map<Key, unsigned long> censusFrozen_; // join: per-key freeze-hold tick
-    // Attention gate (KENSHICOOP_ATTENTION_RADIUS). Reconciliation follows
+    // Attention gate (TOKELACOOP_ATTENTION_RADIUS). Reconciliation follows
     // attention: a body no interest anchor is within attentionRadius_ of is
     // DORMANT, and neither side speaks for it - the host omits it from the
     // census, the join never suppresses it for being census-absent. Anchors
@@ -1339,8 +1339,8 @@ private:
     unsigned int              attnVetoRawN_;
     unsigned int              attnVetoMask_;   // bit a = raw anchor a survived
     bool                      auditRows_;     // travel_parity worldstate rows
-    bool                      jailProbe_;     // KENSHICOOP_JAIL_PROBE [jail] STATE
-    bool                      jailObserve_;   // KENSHICOOP_JAIL_OBSERVE [jail] OBSERVE
+    bool                      jailProbe_;     // TOKELACOOP_JAIL_PROBE [jail] STATE
+    bool                      jailObserve_;   // TOKELACOOP_JAIL_OBSERVE [jail] OBSERVE
     // Per-captive last-logged sample for the jail-observe spike (kind + pos +
     // ms), so [jail] OBSERVE lines fire on change/move/timeout, not every tick.
     struct JailObs { int kind; float x, y, z; unsigned long ms;
@@ -1534,7 +1534,7 @@ private:
     // reconcileGroundGear until pendingSinceMs + WD_REHOME_MAX_MS, and only then may the
     // author destroy its ground copy - and ONLY after it has SEEN the item in the target
     // container. Destroying on faith would lose the item outright wherever the reconcile
-    // cannot recreate it (a truncated read, KENSHICOOP_WEAPON_FAB=0, or a backpack, which
+    // cannot recreate it (a truncated read, TOKELACOOP_WEAPON_FAB=0, or a backpack, which
     // must never be fabricated because the copy would be empty).
     struct GroundWeapon {
         u32           dropOwnerId;
@@ -1879,7 +1879,7 @@ private:
     unsigned long        crawlPhysRestore_;
     unsigned long        sitOrders_;      // applyTaskOrder issues (the sit/work APPLY lever)
     unsigned long        detachUses_;     // detachFromTownAI calls from applyRest (sitter path)
-    bool                 noDetach_;       // KENSHICOOP_NO_DETACH=1: skip sitter detach (A/B experiment)
+    bool                 noDetach_;       // TOKELACOOP_NO_DETACH=1: skip sitter detach (A/B experiment)
 
     // Damage-guard state (join side): suppress local melee damage on driven bodies.
     bool                 dmgGuard_;
@@ -1894,15 +1894,15 @@ private:
     std::map<Key, PendingHit> pendingHits_;
     unsigned int         nextHitId_;
 
-    // Carried-body sync (protocol 18): master enable (KENSHICOOP_CARRY_SYNC).
+    // Carried-body sync (protocol 18): master enable (TOKELACOOP_CARRY_SYNC).
     bool                 carrySync_;
     bool                 furnSync_;
     // Chained/pole prisoner sync (protocol 41): master enable
-    // (KENSHICOOP_CHAIN_SYNC). Sub-gate within the furniture pipeline.
+    // (TOKELACOOP_CHAIN_SYNC). Sub-gate within the furniture pipeline.
     bool                 chainSync_;
-    // Stealth sync (protocol 20): master enable (KENSHICOOP_STEALTH_SYNC).
+    // Stealth sync (protocol 20): master enable (TOKELACOOP_STEALTH_SYNC).
     bool                 stealthSync_;
-    // Prone posture sync (protocol 53): master enable (KENSHICOOP_PRONE_SYNC).
+    // Prone posture sync (protocol 53): master enable (TOKELACOOP_PRONE_SYNC).
     bool                 proneSync_;
     // Host-side detection-feedback publish state per DRIVEN sneaker: last sent
     // map fingerprint + send time (~4 Hz change-gated), and whether the last
@@ -2338,7 +2338,7 @@ private:
     void lifeSweep(GameWorld* gw, unsigned long now);
     unsigned long lifeSweepMs_;
 
-    // Debug marker HUD labels (KENSHICOOP_DEBUG_MARKERS=1, spike-47 substrate):
+    // Debug marker HUD labels (TOKELACOOP_DEBUG_MARKERS=1, spike-47 substrate):
     // pin a colored label to each judged body so authority states are visible
     // live - green DRV = host-driven, red HID = suppressed/culled, yellow
     // LOC = local-sim copy that exists in the host census. No-op (single env
@@ -2476,7 +2476,7 @@ public:
     // Never returns "nobody" - an unowned region is the case this exists to
     // eliminate.
     u32 authorityFor(GameWorld* gw, float x, float z) const;
-    // authorityFor with its reasoning exposed (KENSHICOOP_DEBUG_CENSUS): a
+    // authorityFor with its reasoning exposed (TOKELACOOP_DEBUG_CENSUS): a
     // client publishing rows for cells it does not stand in is either
     // exercising the deliberate vacated-cell rule or misattributing, and the
     // verdict alone cannot tell those apart. Same answer as authorityFor, which
@@ -2538,7 +2538,7 @@ private:
     // Phase B: close the attach window if it is due and log what the burst
     // cost. Called once per authority tick.
     void measureAttach(unsigned long now);
-    // Census-band AI freeze (KENSHICOOP_CENSUS_FREEZE_AI): suspend the local AI
+    // Census-band AI freeze (TOKELACOOP_CENSUS_FREEZE_AI): suspend the local AI
     // of a census-band body whose drift crossed censusParkDist_, held ~5 s past
     // the last over-threshold tick so the position park can't oscillate it back
     // into fleeing. Divergence-gated: leaves well-tracking census NPCs alone.
@@ -2705,4 +2705,4 @@ private:
 
 } // namespace coop
 
-#endif // KENSHICOOP_REPLICATOR_H
+#endif // TOKELACOOP_REPLICATOR_H

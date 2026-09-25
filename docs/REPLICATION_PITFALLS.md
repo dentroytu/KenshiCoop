@@ -1,6 +1,6 @@
 # Replication pitfalls and gate design
 
-> **Purpose.** Hard-won failure modes in KenshiCoop's item/world replication, and
+> **Purpose.** Hard-won failure modes in TokelaCoop's item/world replication, and
 > the testing habits that did or did not catch them. Each entry states a rule, the
 > concrete bug that produced it, and the signature to grep for. This is not a
 > changelog — per-protocol narrative lives in `resources/PROTOCOL_HISTORY.md`
@@ -146,14 +146,14 @@ to discriminate:
 
 1. **The plain scenario** passed on both builds — the fault is timing-dependent
    and does not reproduce on demand.
-2. **`KENSHICOOP_WD_FORGET_TRACK`** (discard the author's track permanently) also
+2. **`TOKELACOOP_WD_FORGET_TRACK`** (discard the author's track permanently) also
    passed pre-fix, because a *permanently* lost track is covered by the
    site-anchored recovery, which `inv_regear_forget` already gates. The injected
    fault was **more severe** than the real one, so it exercised a different
    recovery path and said nothing about the bug under test.
 
 What discriminated was modelling the real transient:
-`KENSHICOOP_WD_TRANSIENT_DEAD=N` makes the first N pickup-time resolutions report
+`TOKELACOOP_WD_TRANSIENT_DEAD=N` makes the first N pickup-time resolutions report
 the object gone and later reads succeed — the engine streaming an object out and
 back. Pre-fix, the host ledger reads `2+0/1` (two ground copies of a template
 dumped once); post-fix it reads `1+0/1`.
@@ -164,7 +164,7 @@ severity, not just the shape.
 
 ## 9. Log unconditionally for anything a player can see
 
-W1 ground-item diagnostics sit behind `KENSHICOOP_INV_DUMP`, so a real session log
+W1 ground-item diagnostics sit behind `TOKELACOOP_INV_DUMP`, so a real session log
 of "I dropped it here and it never appeared there" contained nothing attributable
 about the W1 path at all. The W2 path, whose key lines are unconditional, was
 diagnosable from the same log in minutes.
@@ -303,7 +303,7 @@ re-running any experiment of this shape.
 ## 14. A predicate two clients must agree on has to be published, not derived
 
 The attention gate stops both clients reconciling a region neither is watching:
-if no attention centre is within `KENSHICOOP_ATTENTION_RADIUS`, the host omits
+if no attention centre is within `TOKELACOOP_ATTENTION_RADIUS`, the host omits
 those bodies from its census and the join stops counting suppression frames
 against them. That only works if the two sides reach the *same* verdict about
 the same body. Wherever an input to the predicate is private, they cannot.
@@ -402,7 +402,7 @@ from agreement, because both clients agreeing on the wrong number passes.
 
 **Corollary on the negative control.** `money_persist` first waited for the
 host's pool to move before saving. That is the right assertion in the wrong
-place: with `KENSHICOOP_MONEY_SYNC=0` the fold never arrives, so the run stalled
+place: with `TOKELACOOP_MONEY_SYNC=0` the fold never arrives, so the run stalled
 before the save and the A/B proved only that a scenario can fail to set itself
 up. Latching whatever the pool reads (recording `moved=0|1`) and saving anyway
 carries the unfixed build to the post-load comparison, where the erase is
@@ -420,7 +420,7 @@ together, and the same A/B run apart had the join hold a steady 11 NPCs at its
 own town under cell authority against 5, 5 and 23 without it. Each model wins
 decisively in one regime. So the rule switches on SEPARATION rather than
 electing a global winner: while both squads claim the same cell, every cell
-resolves to the host (`KENSHICOOP_CELL_COLLAPSE`, default on).
+resolves to the host (`TOKELACOOP_CELL_COLLAPSE`, default on).
 
 Two ways that went wrong, both instructive:
 
@@ -446,7 +446,7 @@ because the absence reads as a deliberate "this body is gone".
 
 ## 18. A marker written on one edge is a record of history, not of state
 
-`KENSHICOOP_DEBUG_MARKERS` pins a colored label to each judged body — green DRV
+`TOKELACOOP_DEBUG_MARKERS` pins a colored label to each judged body — green DRV
 for host-driven, red HID for suppressed, yellow LOC for a local-sim copy. The
 DRV label is written every tick a body is driven, and nothing ever removes it
 when the drive stops: the body is still standing there, so the pruner (which

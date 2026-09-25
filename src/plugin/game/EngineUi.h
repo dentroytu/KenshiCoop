@@ -7,8 +7,8 @@
 // facade and must NEVER pull in a <kenshi/...> internal header - those live in
 // the adapter (EngineInternal.h). Forward declarations only.
 
-#ifndef KENSHICOOP_ENGINE_UI_H
-#define KENSHICOOP_ENGINE_UI_H
+#ifndef TOKELACOOP_ENGINE_UI_H
+#define TOKELACOOP_ENGINE_UI_H
 
 namespace coop {
 namespace engine {
@@ -104,4 +104,4 @@ void coopUiShutdown();
 } // namespace engine
 } // namespace coop
 
-#endif // KENSHICOOP_ENGINE_UI_H
+#endif // TOKELACOOP_ENGINE_UI_H

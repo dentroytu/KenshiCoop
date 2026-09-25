@@ -11,8 +11,8 @@
 // namespace) - only the maker function crosses TUs, so Scenario.h and every
 // caller stay unchanged.
 
-#ifndef KENSHICOOP_SCENARIO_SUPPORT_H
-#define KENSHICOOP_SCENARIO_SUPPORT_H
+#ifndef TOKELACOOP_SCENARIO_SUPPORT_H
+#define TOKELACOOP_SCENARIO_SUPPORT_H
 
 #define _CRT_SECURE_NO_WARNINGS 1
 
@@ -84,4 +84,4 @@ Scenario* makeSessionScenario(const std::string& name);   // ScenarioSession.cpp
 
 } // namespace coop
 
-#endif // KENSHICOOP_SCENARIO_SUPPORT_H
+#endif // TOKELACOOP_SCENARIO_SUPPORT_H

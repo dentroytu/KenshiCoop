@@ -12,8 +12,8 @@
 // remain interleaved with their sync siblings in Engine.h and migrate here as
 // those sections are touched in later Phase 5 increments.
 
-#ifndef KENSHICOOP_ENGINE_SCENARIO_H
-#define KENSHICOOP_ENGINE_SCENARIO_H
+#ifndef TOKELACOOP_ENGINE_SCENARIO_H
+#define TOKELACOOP_ENGINE_SCENARIO_H
 
 class GameWorld;
 class Character;
@@ -124,4 +124,4 @@ bool woundSubject(GameWorld* gw, const unsigned int subjHand[5], float blood);
 } // namespace engine
 } // namespace coop
 
-#endif // KENSHICOOP_ENGINE_SCENARIO_H
+#endif // TOKELACOOP_ENGINE_SCENARIO_H

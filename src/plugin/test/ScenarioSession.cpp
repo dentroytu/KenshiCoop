@@ -1052,7 +1052,7 @@ private:
 const char* const SaveSyncScenario::SAVE_NAME = "coopresume";
 
 // resume_check (protocol 31 phase 12c, stage 2 of resume_test.ps1). Both
-// clients relaunched with KENSHICOOP_SAVE=coopresume - the save the stage-1
+// clients relaunched with TOKELACOOP_SAVE=coopresume - the save the stage-1
 // coordinated transfer delivered to the join. The stage-1 building is BAKED
 // in that save (progress 0.5, still enumerable by the incomplete-site
 // census), so if the resume flow really re-ran the shared-save lineage, BOTH
@@ -1123,7 +1123,7 @@ private:
 //                 scenario does not depend on how many cats the fixture ships
 //                 with - and, unlike a host-seeded base, it is still a real
 //                 spend with the channel switched OFF, which is what makes the
-//                 KENSHICOOP_MONEY_SYNC=0 A/B reproduce the reported bug
+//                 TOKELACOOP_MONEY_SYNC=0 A/B reproduce the reported bug
 //                 instead of just failing to set itself up.
 //   * host: waits until the fold has actually moved its own wallet (the join's
 //           delta landed), latches that total as the expectation, then issues the

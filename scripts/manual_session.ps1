@@ -7,10 +7,10 @@
 .DESCRIPTION
   Unlike run_test.ps1 (timed/scenario runs that self-exit and screenshot), this
   leaves both clients running so you can play. It drives the plugin via env vars:
-    KENSHICOOP_SAVE         - save both clients auto-load
-    KENSHICOOP_TEST_SECONDS - forced 0 here (NO self-exit; you close the windows)
-    KENSHICOOP_SCENARIO     - forced empty (normal co-op tick, no scenario)
-    KENSHICOOP_AUTOSPAWN    - host only: spawn N distinct squad members once
+    TOKELACOOP_SAVE         - save both clients auto-load
+    TOKELACOOP_TEST_SECONDS - forced 0 here (NO self-exit; you close the windows)
+    TOKELACOOP_SCENARIO     - forced empty (normal co-op tick, no scenario)
+    TOKELACOOP_AUTOSPAWN    - host only: spawn N distinct squad members once
   Those spawned units get fresh hands (not in the join's own squad), so the join
   renders them as proxies - exercising the cross-client squad-render path on a
   single shared save, no second save needed.
@@ -40,7 +40,7 @@ param(
     # to the main menu instead, and you load + go online by hand via F2).
     [string]$Save = "",
     # Title-screen free play: launch BOTH clients to the Kenshi main menu with
-    # NO auto-load and NO auto-connect (KENSHICOOP_SAVE empty, AUTOCONNECT=0 on
+    # NO auto-load and NO auto-connect (TOKELACOOP_SAVE empty, AUTOCONNECT=0 on
     # both). You then load a save and go ONLINE via the in-game F2 panel - the
     # real remote-play flow. Skips save validation, -Sync, and inhabit ownership.
     [switch]$TitleScreen,
@@ -49,7 +49,7 @@ param(
     # hands and fully render each other - including the player-controlled leaders.
     [string]$JoinSave = "",
     [int]$AutoSpawn = 3,
-    # Host-only recruit helper (KENSHICOOP_AUTORECRUIT=N seconds): N s after
+    # Host-only recruit helper (TOKELACOOP_AUTORECRUIT=N seconds): N s after
     # gameplay settles, the host ONCE programmatically recruits the nearest
     # non-player world NPC via the same PlayerInterface::recruit the dialog
     # "join me" hits. Use to validate recruit sync on a populated save that has
@@ -58,7 +58,7 @@ param(
     # Inhabit mode: both clients load the SAME save (so NPC sync works) but each
     # OWNS a different subset of the shared squad. Default split: host owns the
     # leader (index 0), join inhabits everyone else (~0). Overridable via
-    # -HostOwn/-JoinOwn (KENSHICOOP_OWN_INDICES: "0", "~0", "1,2", ""=own all).
+    # -HostOwn/-JoinOwn (TOKELACOOP_OWN_INDICES: "0", "~0", "1,2", ""=own all).
     # Forces shared save + no autospawn.
     [switch]$Inhabit,
     [string]$HostOwn = "0",
@@ -82,24 +82,24 @@ param(
     [switch]$NoJoin,
     [int]$JoinDelaySec = 8,
     [int]$StartTimeoutSec = 90,
-    # Host-only deterministic test-scene setup (KENSHICOOP_SETUP). "chair" spawns a
+    # Host-only deterministic test-scene setup (TOKELACOOP_SETUP). "chair" spawns a
     # seat in front of the player; "npc" also spawns a loose world NPC. The host
     # then stays up (no self-exit) so you can arrange the pose and SAVE the game.
     [string]$SetupScene = "",
-    # AI-gating probe (join only, KENSHICOOP_PROBE_RECRUIT=1): recruit diverged
+    # AI-gating probe (join only, TOKELACOOP_PROBE_RECRUIT=1): recruit diverged
     # NPCs into the player squad to validate the "inhabit" lever.
     [switch]$ProbeRecruit,
-    # AI-suspend probe (join only, KENSHICOOP_PROBE_AISUSPEND=1): detour
+    # AI-suspend probe (join only, TOKELACOOP_PROBE_AISUSPEND=1): detour
     # Character::periodicUpdate so host-driven NPCs stop self-tasking (decision
     # layer off) while still animating. Faction is untouched.
     [switch]$ProbeAiSuspend,
-    # Bidirectional inventory sync (KENSHICOOP_INV_SYNC=1 on BOTH clients): each side
+    # Bidirectional inventory sync (TOKELACOOP_INV_SYNC=1 on BOTH clients): each side
     # streams the contents of the squad tabs it owns (host tab 0, join tab 1) and
     # reconciles the peer's. Add an item to a join-owned character and watch it appear
     # on the host (and vice versa). Pair with -SetupScene inventory to also seed the
     # leader so the host->join direction is visible at startup.
     [switch]$InvSync,
-    # World-item sync (KENSHICOOP_WORLD_SYNC=1 on BOTH clients, Phase W1): the HOST streams
+    # World-item sync (TOKELACOOP_WORLD_SYNC=1 on BOTH clients, Phase W1): the HOST streams
     # free GROUND items in the interest sphere; the JOIN spawns local proxies so a dropped
     # item appears on the join at the same spot (and is culled when it despawns). In W1 only
     # host-authored drops sync (join-originated DROP intent is W2). Drop an item from a host
@@ -107,15 +107,15 @@ param(
     [switch]$WorldSync,
     # Diagnostic: log a full inventory dump (loose _allItems + every section + weapon
     # accessors) on each inventory SEND (host capture) and APPLY (peer reconcile result),
-    # so we can see exactly where an unequipped weapon goes. Sets KENSHICOOP_INV_DUMP=1.
+    # so we can see exactly where an unequipped weapon goes. Sets TOKELACOOP_INV_DUMP=1.
     [switch]$InvDump,
-    # Debug authority markers (KENSHICOOP_DEBUG_MARKERS=1, spike-47 HUD labels):
+    # Debug authority markers (TOKELACOOP_DEBUG_MARKERS=1, spike-47 HUD labels):
     # the JOIN pins a colored label to every judged body - green DRV = host-
     # driven, red HID = suppressed/culled, yellow LOC = local-sim copy present
     # in the host census. Makes pops and ghosts self-explaining on screen
     # (pair with -Save zoom for long-run wide-camera inspection).
     [switch]$DebugMarkers,
-    # Presence authority (KENSHICOOP_CELL_AUTH, protocol 49): each side claims
+    # Presence authority (TOKELACOOP_CELL_AUTH, protocol 49): each side claims
     # the 4608 u zone cells its own squad tabs are standing in and AUTHORS the
     # NPC census there, instead of the host authoring everywhere. Split the pair
     # across two towns and the join keeps its own population instead of having
@@ -128,7 +128,7 @@ param(
     # for every scenario that does not ask for it in its manifest DiagEnv.
     # Pair either way with -DebugMarkers to see the handover on screen.
     [switch]$NoCellAuth,
-    # Co-location collapse (KENSHICOOP_CELL_COLLAPSE): while both squads claim the
+    # Co-location collapse (TOKELACOOP_CELL_COLLAPSE): while both squads claim the
     # SAME 4608 u cell, every claimed cell resolves to the host, so standing
     # together behaves as unconditional host authority did and only the join
     # drives. ON by default; -NoCollapse pins it off for the A/B. Ignored when
@@ -138,19 +138,19 @@ param(
     # appear on the join only; walk a tab into the next cell and the host starts
     # showing them too as the split resumes.
     [switch]$NoCollapse,
-    # Record where you walk (KENSHICOOP_TRACK_MOVE=1): one [track] line per squad
+    # Record where you walk (TOKELACOOP_TRACK_MOVE=1): one [track] line per squad
     # tab per second, with position, cell and whether it is moving. Log-only.
     # Use it to capture a route for a scenario to follow: the cell claims a session
     # already logs fire once per 4608 u cell, so a cross-map walk leaves under
     # thirty points, and run_apart wedged trying to walk straight between two of
     # them. A 1 Hz track over the same walk is ~500 points, which is a real path.
     [switch]$TrackMove,
-    # Phase 6 shackle diagnostic (KENSHICOOP_DEBUG_SHACKLE=1 on both clients):
+    # Phase 6 shackle diagnostic (TOKELACOOP_DEBUG_SHACKLE=1 on both clients):
     # emits the ~1 Hz [shackledbg] per-body chained/lock trace so a manual camp
     # session captures the exact tick a peer's driven copy diverges from the
     # owner (the reported "peer PC unlocks the shackles" desync).
     [switch]$DebugShackle,
-    # Jail long-play diagnostics (spike 58, KENSHICOOP_JAIL_PROBE/TASK_SPIKE=1 on
+    # Jail long-play diagnostics (spike 58, TOKELACOOP_JAIL_PROBE/TASK_SPIKE=1 on
     # both clients): arms the [jail] STATE/SNAP captive traces + [spike] SELECT
     # task-selection + auditRows (SCENARIO WNPC/WORLD) so a manual
     # jailed/slaves/cage2 session captures the guard put-to-work cage<->pole
@@ -158,7 +158,7 @@ param(
     # (i.e. real replicated behavior). On exit both logs are copied into
     # tools/manual-sessions/<stamp>/. All read-only, OFF by default.
     [switch]$JailProbe,
-    # Jail OBSERVE (spike 57 phase A, KENSHICOOP_JAIL_OBSERVE=1): OPT-IN, requires
+    # Jail OBSERVE (spike 57 phase A, TOKELACOOP_JAIL_OBSERVE=1): OPT-IN, requires
     # -JailProbe. Runs peer-owned captives UNOPPOSED (drive/suspend/self-heal OFF)
     # to classify the guard put-to-work trajectory. WARNING: this DISABLES the
     # captive self-heal, so captives WILL exit furniture and walk off on the
@@ -230,7 +230,7 @@ if (-not $TitleScreen) {
     }
 }
 
-Write-Host "== KenshiCoop MANUAL session =="
+Write-Host "== TokelaCoop MANUAL session =="
 if ($TitleScreen) {
     Write-Host "  mode:       TITLE SCREEN (both clients boot to the main menu; no auto-load)"
     Write-Host "  connect:    by hand - load a save, then F2 -> Connection ONLINE on both"
@@ -286,7 +286,7 @@ if (-not $SkipDeploy) {
     & cmd /c "`"$scriptDir\deploy.cmd`""
     if ($LASTEXITCODE -ne 0) { throw "deploy.cmd failed ($LASTEXITCODE)" }
     # Surface exactly which DLL is now deployed so we never validate a stale build.
-    $deployed = Join-Path $HostDir "mods\KenshiCoop\KenshiCoop.dll"
+    $deployed = Join-Path $HostDir "mods\TokelaCoop\TokelaCoop.dll"
     if (Test-Path $deployed) {
         $info = Get-Item $deployed
         Write-Host ("  deployed DLL: {0}  ({1:yyyy-MM-dd HH:mm:ss}, {2} bytes)" -f $deployed, $info.LastWriteTime, $info.Length)
@@ -321,70 +321,70 @@ if ($Sync -and $TitleScreen) {
 
 function Set-CoopEnv {
     param([string]$Mode, [string]$SaveName, [int]$Spawn, [string]$Own = "")
-    $env:KENSHICOOP_MODE         = $Mode
+    $env:TOKELACOOP_MODE         = $Mode
     # Manual sessions run BOTH clients on this one machine (same Steam account), so
     # they must use direct-UDP loopback: a same-machine Steam P2P session can't
     # establish (active=0/err=4). Force it here rather than inheriting the deployed
     # coop_config.json, which may be left on transport=steam + a real steamPeer from
     # a friend session (that silently breaks the loopback connection). Env overrides
     # the file. For a real two-machine Steam test, use the in-game F2 panel instead.
-    $env:KENSHICOOP_TRANSPORT    = "udp"
-    $env:KENSHICOOP_STEAM_PEER   = "0"
+    $env:TOKELACOOP_TRANSPORT    = "udp"
+    $env:TOKELACOOP_STEAM_PEER   = "0"
     # Auto-connect at load using the env role/transport above. EXCEPTION: with
     # -JoinFromMenu the JOIN must WAIT at the main menu so the user can bring up
     # the F2 panel and go ONLINE by hand (the whole point of that mode - the join
     # user configures the connection at the menu). The host still auto-connects
     # (it hosts + loads its save); on the join's manual connect the host pushes
     # its world.
-    $env:KENSHICOOP_AUTOCONNECT  = if ($TitleScreen) { "0" } elseif ($Mode -eq "join" -and $JoinFromMenu) { "0" } else { "1" }
-    $env:KENSHICOOP_PORT         = "$Port"
-    $env:KENSHICOOP_IP           = $Ip
-    $env:KENSHICOOP_SAVE         = $SaveName
-    $env:KENSHICOOP_TEST_SECONDS = "0"     # manual: never self-exit
-    $env:KENSHICOOP_SCENARIO     = ""      # manual: no scenario
-    $env:KENSHICOOP_AUTOSPAWN    = "$Spawn"
-    $env:KENSHICOOP_OWN_INDICES  = $Own    # inhabit partition ("" = own all)
+    $env:TOKELACOOP_AUTOCONNECT  = if ($TitleScreen) { "0" } elseif ($Mode -eq "join" -and $JoinFromMenu) { "0" } else { "1" }
+    $env:TOKELACOOP_PORT         = "$Port"
+    $env:TOKELACOOP_IP           = $Ip
+    $env:TOKELACOOP_SAVE         = $SaveName
+    $env:TOKELACOOP_TEST_SECONDS = "0"     # manual: never self-exit
+    $env:TOKELACOOP_SCENARIO     = ""      # manual: no scenario
+    $env:TOKELACOOP_AUTOSPAWN    = "$Spawn"
+    $env:TOKELACOOP_OWN_INDICES  = $Own    # inhabit partition ("" = own all)
     # Host-only one-shot world spawn for baking a deterministic test scene.
-    $env:KENSHICOOP_SETUP        = if ($Mode -eq "join") { "" } else { $SetupScene }
+    $env:TOKELACOOP_SETUP        = if ($Mode -eq "join") { "" } else { $SetupScene }
     # Host-only auto-recruit (N s after gameplay): recruit nearest world NPC.
-    $env:KENSHICOOP_AUTORECRUIT  = if ($Mode -eq "join") { "" } else { "$AutoRecruit" }
-    $env:KENSHICOOP_PROBE_RECRUIT = if ($Mode -eq "join" -and $ProbeRecruit) { "1" } else { "" }
-    $env:KENSHICOOP_PROBE_AISUSPEND = if ($Mode -eq "join" -and $ProbeAiSuspend) { "1" } else { "" }
+    $env:TOKELACOOP_AUTORECRUIT  = if ($Mode -eq "join") { "" } else { "$AutoRecruit" }
+    $env:TOKELACOOP_PROBE_RECRUIT = if ($Mode -eq "join" -and $ProbeRecruit) { "1" } else { "" }
+    $env:TOKELACOOP_PROBE_AISUSPEND = if ($Mode -eq "join" -and $ProbeAiSuspend) { "1" } else { "" }
     # Inventory sync is bidirectional, so enable it on BOTH clients.
-    $env:KENSHICOOP_INV_SYNC     = if ($InvSync) { "1" } else { "" }
+    $env:TOKELACOOP_INV_SYNC     = if ($InvSync) { "1" } else { "" }
     # World-item sync is host-authored + join-observed, but the gate is read on both
     # clients (host publishes, join applies), so enable it on BOTH.
-    $env:KENSHICOOP_WORLD_SYNC   = if ($WorldSync) { "1" } else { "" }
-    $env:KENSHICOOP_INV_DUMP     = if ($InvDump) { "1" } else { "" }
+    $env:TOKELACOOP_WORLD_SYNC   = if ($WorldSync) { "1" } else { "" }
+    $env:TOKELACOOP_INV_DUMP     = if ($InvDump) { "1" } else { "" }
     # Authority markers render on the DRIVEN side; harmless on both, so set both.
-    $env:KENSHICOOP_DEBUG_MARKERS = if ($DebugMarkers) { "1" } else { "" }
+    $env:TOKELACOOP_DEBUG_MARKERS = if ($DebugMarkers) { "1" } else { "" }
     # Presence authority MUST match on both clients: each side publishes claims and
     # reads the peer's, so one side alone would author its cells while the other
     # went on enforcing host authority over the same bodies. Pinned explicitly in
     # BOTH directions rather than left unset, so the session does not silently
     # change meaning if the plugin-side default moves again.
-    $env:KENSHICOOP_CELL_AUTH    = if ($NoCellAuth) { "0" } else { "1" }
+    $env:TOKELACOOP_CELL_AUTH    = if ($NoCellAuth) { "0" } else { "1" }
     # Same reasoning as the line above: the collapse verdict has to be computed
     # identically on both sides or the two would disagree about who authors a
     # shared cell, so pin it explicitly rather than relying on the plugin default
     # being the same in both installs.
-    $env:KENSHICOOP_CELL_COLLAPSE = if ($NoCollapse) { "0" } else { "1" }
+    $env:TOKELACOOP_CELL_COLLAPSE = if ($NoCollapse) { "0" } else { "1" }
     # Track on BOTH: each client can only see its own tabs' true positions, and
     # the interesting comparison is what the two logs say about the same walk.
-    $env:KENSHICOOP_TRACK_MOVE   = if ($TrackMove) { "1" } else { "" }
+    $env:TOKELACOOP_TRACK_MOVE   = if ($TrackMove) { "1" } else { "" }
     # Phase 6 shackle trace on both clients (see -DebugShackle).
-    $env:KENSHICOOP_DEBUG_SHACKLE = if ($DebugShackle) { "1" } else { "" }
+    $env:TOKELACOOP_DEBUG_SHACKLE = if ($DebugShackle) { "1" } else { "" }
     # Jail long-play probes on BOTH clients (spike 58, see -JailProbe): STATE/SNAP
-    # + task-selection traces + auditRows (auditRows keys off KENSHICOOP_JAIL_PROBE
+    # + task-selection traces + auditRows (auditRows keys off TOKELACOOP_JAIL_PROBE
     # in Plugin.cpp when no scenario name is set). NOTE: JAIL_OBSERVE is NOT armed
     # by -JailProbe - observe disables the captive self-heal (captives exit
     # furniture + walk off on the observing side), which is a diagnostic
     # divergence, not real behavior. It is opt-in via -JailObserve.
-    $env:KENSHICOOP_JAIL_PROBE   = if ($JailProbe) { "1" } else { "" }
-    $env:KENSHICOOP_TASK_SPIKE   = if ($JailProbe) { "1" } else { "" }
-    $env:KENSHICOOP_JAIL_OBSERVE = if ($JailObserve) { "1" } else { "" }
+    $env:TOKELACOOP_JAIL_PROBE   = if ($JailProbe) { "1" } else { "" }
+    $env:TOKELACOOP_TASK_SPIKE   = if ($JailProbe) { "1" } else { "" }
+    $env:TOKELACOOP_JAIL_OBSERVE = if ($JailObserve) { "1" } else { "" }
     # Per-mode log next to the install so host/join don't clobber each other.
-    $env:KENSHICOOP_LOG          = if ($Mode -eq "join") { "KenshiCoop_join.log" } else { "KenshiCoop_host.log" }
+    $env:TOKELACOOP_LOG          = if ($Mode -eq "join") { "TokelaCoop_join.log" } else { "TokelaCoop_host.log" }
 }
 
 function Start-PastLauncher {
@@ -477,8 +477,8 @@ if ($hostPid -ne 0) {
     $stamp      = Get-Date -Format "yyyyMMdd_HHmmss"
     $prefix     = if ($JailProbe) { "jail_" } else { "" }
     $dest       = Join-Path $repoRoot ("tools\manual-sessions\{0}{1}_{2}" -f $prefix, $Save.Replace(' ', '_'), $stamp)
-    $hostLogSrc = Join-Path $HostDir "KenshiCoop_host.log"
-    $joinLogSrc = Join-Path $JoinDir "KenshiCoop_join.log"
+    $hostLogSrc = Join-Path $HostDir "TokelaCoop_host.log"
+    $joinLogSrc = Join-Path $JoinDir "TokelaCoop_join.log"
     $hostEngSrc = Join-Path $HostDir "kenshi_info.log"
     $joinEngSrc = Join-Path $JoinDir "kenshi_info.log"
     $pidCsv     = if ($joinPid -ne 0) { "$hostPid,$joinPid" } else { "$hostPid" }
@@ -487,8 +487,8 @@ if ($hostPid -ne 0) {
 `$ErrorActionPreference = 'SilentlyContinue'
 Wait-Process -Id $pidCsv
 New-Item -ItemType Directory -Force -Path '$dest' | Out-Null
-Copy-Item '$hostLogSrc' (Join-Path '$dest' 'KenshiCoop_host.log')
-Copy-Item '$joinLogSrc' (Join-Path '$dest' 'KenshiCoop_join.log')
+Copy-Item '$hostLogSrc' (Join-Path '$dest' 'TokelaCoop_host.log')
+Copy-Item '$joinLogSrc' (Join-Path '$dest' 'TokelaCoop_join.log')
 Copy-Item '$hostEngSrc' (Join-Path '$dest' 'host_engine.log')
 Copy-Item '$joinEngSrc' (Join-Path '$dest' 'join_engine.log')
 "@ | Set-Content -Path $waiterPs -Encoding UTF8
@@ -514,7 +514,7 @@ Copy-Item '$joinEngSrc' (Join-Path '$dest' 'join_engine.log')
 # and any validation would be meaningless. Surface it loudly instead of silently
 # validating the wrong build.
 if (($Inhabit -or $JoinFromMenu) -and -not $TitleScreen) {
-    $hostLog = Join-Path $HostDir "KenshiCoop_host.log"
+    $hostLog = Join-Path $HostDir "TokelaCoop_host.log"
     Write-Host ""
     Write-Host "Confirming the deployed build is the inhabit build (watching host log) ..."
     $deadline = (Get-Date).AddSeconds($StartTimeoutSec)

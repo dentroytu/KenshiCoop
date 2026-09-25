@@ -92,7 +92,7 @@ void Replicator::publishOwned(GameWorld* gw, NetLink& net, u32 ownerId) {
         buf[n++] = raw[i];
         ownHands_.insert(hk);
     }
-    // Jail put-to-work desync spike (KENSHICOOP_JAIL_PROBE, read-only): the
+    // Jail put-to-work desync spike (TOKELACOOP_JAIL_PROBE, read-only): the
     // OWNED view of any captive body (the join's real, authoritative PC while it
     // is jailed). Correlate side=own here against side=drv from the host's
     // driven copy (applyTargets) to pin the brief cage-exit/re-cage twitch.
@@ -353,11 +353,11 @@ void Replicator::publishOwned(GameWorld* gw, NetLink& net, u32 ownerId) {
         // near-tier snaps 6 -> 74) - the same budget lesson as MID_BAND_MAX,
         // arrived at from the other direction. Nearest-first, so what fits is
         // what the peer is closest to.
-        // KENSHICOOP_MID_FAST overrides it, and 0 turns promotion off - the
+        // TOKELACOOP_MID_FAST overrides it, and 0 turns promotion off - the
         // control arm for measuring what this pass is worth on a given scene.
         static int fastCap = -1;
         if (fastCap < 0) {
-            const char* e = getenv("KENSHICOOP_MID_FAST");
+            const char* e = getenv("TOKELACOOP_MID_FAST");
             fastCap = (e && e[0]) ? atoi(e) : 8;
             if (fastCap < 0) fastCap = 0;
         }
@@ -1152,12 +1152,12 @@ void Replicator::publishNpcCensus(GameWorld* gw, NetLink& net, u32 ownerId) {
                   midFastPromoted_, na, det,
                   n, nNotMine, nProxyRow, attentionRadius_);
         b[sizeof(b) - 1] = '\0'; coop::logLine(b);
-        // KENSHICOOP_DEBUG_CENSUS=1: dump every census row (hand + name) at the
+        // TOKELACOOP_DEBUG_CENSUS=1: dump every census row (hand + name) at the
         // same 10 s cadence, so a join-side cull can be classified against the
         // host's actual membership (true ghost vs host enumeration miss).
         static int dump = -1;
         if (dump < 0) {
-            const char* e = getenv("KENSHICOOP_DEBUG_CENSUS");
+            const char* e = getenv("TOKELACOOP_DEBUG_CENSUS");
             dump = (e && e[0] == '1') ? 1 : 0;
         }
         if (dump == 1) {

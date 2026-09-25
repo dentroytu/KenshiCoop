@@ -3,8 +3,8 @@
 // Non-ASCII text is written as UTF-8 byte escapes (the VS2010 compiler reads
 // BOM-less sources in the system code page).
 
-#ifndef KENSHICOOP_UILANG_H
-#define KENSHICOOP_UILANG_H
+#ifndef TOKELACOOP_UILANG_H
+#define TOKELACOOP_UILANG_H
 
 #include <windows.h>
 #include <string>
@@ -93,4 +93,4 @@ inline std::string foldToAscii(const std::string& s) {
 
 } // namespace coop
 
-#endif // KENSHICOOP_UILANG_H
+#endif // TOKELACOOP_UILANG_H

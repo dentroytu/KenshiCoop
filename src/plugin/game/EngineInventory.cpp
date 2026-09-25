@@ -308,7 +308,7 @@ GameData* findItemTemplateImpl(GameWorld* gw, const char* sid, unsigned int type
             if (gd && strcmp(gd->stringID.c_str(), sid) == 0) return gd;
         }
         static int dbg = -1;
-        if (dbg < 0) { const char* e = getenv("KENSHICOOP_INV_DUMP"); dbg = (e && e[0] == '1') ? 1 : 0; }
+        if (dbg < 0) { const char* e = getenv("TOKELACOOP_INV_DUMP"); dbg = (e && e[0] == '1') ? 1 : 0; }
         if (dbg) {
             char b[200];
             _snprintf(b, sizeof(b) - 1, "[tmpl] MISS sid='%s' type=%u scanned=%u sample0='%s'",
@@ -367,7 +367,7 @@ bool createItemAndAdd(GameWorld* gw, Inventory* inv, const char* sid,
                       unsigned char level) {
     if (!gw || !gw->theFactory || !g_createItemFn || !inv || !sid || qty <= 0) return false;
     static int dbg = -1;
-    if (dbg < 0) { const char* e = getenv("KENSHICOOP_INV_DUMP"); dbg = (e && e[0] == '1') ? 1 : 0; }
+    if (dbg < 0) { const char* e = getenv("TOKELACOOP_INV_DUMP"); dbg = (e && e[0] == '1') ? 1 : 0; }
     __try {
         GameData* tmpl = findItemTemplateImpl(gw, sid, typeCat);
         if (!tmpl) { if (dbg) coop::logLine("[mk] tmpl-null"); return false; }
@@ -387,22 +387,22 @@ bool createItemAndAdd(GameWorld* gw, Inventory* inv, const char* sid,
         // bug, and the reason the grade needed its own wire field (protocol 51).
         //
         // GRADE_NA means the author had no craft level to report (a non-Gear stack), so the
-        // engine's own per-branch default stands. KENSHICOOP_GEAR_LEVEL=0 forces that path
+        // engine's own per-branch default stands. TOKELACOOP_GEAR_LEVEL=0 forces that path
         // for everything, restoring the pre-fix constants: this argument sits INSIDE the
         // spike-451 weapon recipe, which is delicate enough to want a one-env rollback.
         static int lvlOn = -1;
-        if (lvlOn < 0) { const char* e = getenv("KENSHICOOP_GEAR_LEVEL"); lvlOn = (e && e[0] == '0') ? 0 : 1; }
+        if (lvlOn < 0) { const char* e = getenv("TOKELACOOP_GEAR_LEVEL"); lvlOn = (e && e[0] == '0') ? 0 : 1; }
         int gradeLevel = -1; // -1 = "no wire grade": use the per-branch engine default
         if (lvlOn && level != GRADE_NA) gradeLevel = (int)level;
         Item* it = 0;
         if ((itemType)typeCat == WEAPON) {
-            // KENSHICOOP_WEAPON_FAB=0: escape hatch back to the pre-spike-451 behaviour
+            // TOKELACOOP_WEAPON_FAB=0: escape hatch back to the pre-spike-451 behaviour
             // (weapons never fabricate - conservation-only gear sync). Covers EVERY
             // weapon-fabrication site at once: reconcile CREATE, xfer shortfall, probes.
             static int fabOn = -1;
-            if (fabOn < 0) { const char* e = getenv("KENSHICOOP_WEAPON_FAB"); fabOn = (e && e[0] == '0') ? 0 : 1; }
+            if (fabOn < 0) { const char* e = getenv("TOKELACOOP_WEAPON_FAB"); fabOn = (e && e[0] == '0') ? 0 : 1; }
             if (!fabOn) {
-                if (dbg) coop::logLine("[mk] weapon-fab disabled (KENSHICOOP_WEAPON_FAB=0)");
+                if (dbg) coop::logLine("[mk] weapon-fab disabled (TOKELACOOP_WEAPON_FAB=0)");
                 return false;
             }
             // Spike 451: for WEAPONS the 6-arg createItem's first two GameData roles
@@ -667,7 +667,7 @@ static bool applyToInventory(GameWorld* gw, Inventory* inv,
     }
 
     static int dbg = -1;
-    if (dbg < 0) { const char* e = getenv("KENSHICOOP_INV_DUMP"); dbg = (e && e[0] == '1') ? 1 : 0; }
+    if (dbg < 0) { const char* e = getenv("TOKELACOOP_INV_DUMP"); dbg = (e && e[0] == '1') ? 1 : 0; }
 
     bool changed = false;
     for (unsigned int k = 0; k < ng; ++k) {
@@ -967,7 +967,7 @@ bool applyContainerContents(GameWorld* gw, const unsigned int cHand[5],
     unsigned int ncur = readInvItems(inv, cur, curItems, INV_ITEMS_MAX, 0);
 
     static int dbg = -1;
-    if (dbg < 0) { const char* e = getenv("KENSHICOOP_INV_DUMP"); dbg = (e && e[0] == '1') ? 1 : 0; }
+    if (dbg < 0) { const char* e = getenv("TOKELACOOP_INV_DUMP"); dbg = (e && e[0] == '1') ? 1 : 0; }
 
     // Containers already reconciled in this pass. Two bags of the SAME template are otherwise
     // indistinguishable by (sid,type), and a plain first-match rule pointed BOTH parents'
@@ -2100,7 +2100,7 @@ int relocateWeaponToGround(GameWorld* gw, const unsigned int ownerHand[5],
 // better served with a copy than with silence. Callers MUST first confirm the owner
 // resolves locally - fabricating for an unresolved/not-yet-loaded container would mint
 // items for a bag we simply cannot see yet.
-// Weapon fabrication remains subject to KENSHICOOP_WEAPON_FAB (checked inside
+// Weapon fabrication remains subject to TOKELACOOP_WEAPON_FAB (checked inside
 // createItemAndAdd), so the escape hatch back to conservation-only gear sync still works.
 // Returns the number relocated (0 if the fabricate or the drop failed).
 int fabricateWeaponToGround(GameWorld* gw, const unsigned int ownerHand[5],

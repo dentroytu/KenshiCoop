@@ -31,7 +31,7 @@ const int        CH_COUNT      = 3;  // channels negotiated at host-create / con
 // Net-thread diagnostics. OutputDebugStringA is thread-safe, and CoopLog guards
 // its FILE* with a lock, so both are safe to call off the main thread.
 void netLog(const char* msg) {
-    OutputDebugStringA("[KenshiCoop/net] ");
+    OutputDebugStringA("[TokelaCoop/net] ");
     OutputDebugStringA(msg ? msg : "");
     OutputDebugStringA("\n");
     char buf[256];
@@ -40,7 +40,7 @@ void netLog(const char* msg) {
     coop::logLine(buf);
 }
 void netErr(const char* msg) {
-    OutputDebugStringA("[KenshiCoop/net] ERROR: ");
+    OutputDebugStringA("[TokelaCoop/net] ERROR: ");
     OutputDebugStringA(msg ? msg : "");
     OutputDebugStringA("\n");
     char buf[256];
@@ -1190,8 +1190,8 @@ void NetLink::threadLoop() {
                                 else if (r == REFUSE_VERSION)
                                     _snprintf(b, sizeof(b) - 1,
                                               "protocol mismatch: host v?, ours v%u (dropped %lu ms "
-                                              "into the attempt with no reason code: probably an "
-                                              "older KenshiCoop); not retrying",
+                                              "into the attempt with no reason code: probably "
+                                              "KenshiCoop v0.53 or older); not retrying",
                                               (unsigned)wireVer_,
                                               (unsigned long)(GetTickCount() - attemptStart));
                                 else

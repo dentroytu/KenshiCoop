@@ -1,9 +1,9 @@
-﻿# KenshiCoopInstaller.psm1 - the logic behind "Instalar KenshiCoop.cmd".
+﻿# TokelaCoopInstaller.psm1 - the logic behind "Instalar TokelaCoop.cmd".
 #
 # Every function here is side-effect-light and parameterized on paths so
 # scripts/tests/Installer.Tests.ps1 can drive it against fake Kenshi/Steam
 # folders in CI. The interactive flow (prompts, RE_Kenshi's own installer,
-# elevation) lives in Install-KenshiCoop.ps1.
+# elevation) lives in Install-TokelaCoop.ps1.
 #
 # Windows PowerShell 5.1 compatible (what every player has): no ternary, no
 # null-coalescing, no pipeline chain operators.
@@ -203,14 +203,26 @@ function Get-REKenshiInstaller([string]$WorkDir) {
     return $exe
 }
 
-# ---- KenshiCoop files ---------------------------------------------------------------
+# ---- TokelaCoop files ---------------------------------------------------------------
 
-# Copy the kit's KenshiCoop folder into <Kenshi>\mods\KenshiCoop. An existing
-# coop_config.json is kept (it may hold the player's LAN settings). Returns the
-# destination folder.
-function Install-KenshiCoopFiles([string]$KitModDir, [string]$KenshiDir) {
-    $dst = Join-Path $KenshiDir 'mods\KenshiCoop'
+# Up to v0.53 the mod was called KenshiCoop: folder mods\KenshiCoop, file
+# KenshiCoop.dll, mods.cfg line KenshiCoop.mod. An upgrade must leave only
+# TokelaCoop active - RE_Kenshi loads the plugin of every active mod, and two
+# copies hook the same engine functions.
+$script:LegacyName = 'KenshiCoop'
+
+# Copy the kit's TokelaCoop folder into <Kenshi>\mods\TokelaCoop. The player's
+# coop_config.json (it may hold LAN settings) wins over the kit's default: an
+# existing mods\TokelaCoop one first, else the one from an old mods\KenshiCoop.
+# Returns the destination folder.
+function Install-TokelaCoopFiles([string]$KitModDir, [string]$KenshiDir) {
+    $dst = Join-Path $KenshiDir 'mods\TokelaCoop'
     New-Item -ItemType Directory -Force -Path $dst | Out-Null
+    $cfg = Join-Path $dst 'coop_config.json'
+    $legacyCfg = Join-Path $KenshiDir ('mods\' + $script:LegacyName + '\coop_config.json')
+    if (-not (Test-Path -LiteralPath $cfg) -and (Test-Path -LiteralPath $legacyCfg)) {
+        Copy-Item -LiteralPath $legacyCfg -Destination $cfg -Force
+    }
     foreach ($f in (Get-ChildItem -LiteralPath $KitModDir -File)) {
         $target = Join-Path $dst $f.Name
         if ($f.Name -eq 'coop_config.json' -and (Test-Path -LiteralPath $target)) { continue }
@@ -220,37 +232,85 @@ function Install-KenshiCoopFiles([string]$KitModDir, [string]$KenshiDir) {
     return $dst
 }
 
-# Make sure KenshiCoop.mod is in <Kenshi>\data\mods.cfg (Kenshi's active-mod
-# list, one file name per line, load order). Appends it at the end when absent
-# and keeps the file's line endings. Returns $true if the file was changed.
-function Enable-KenshiCoopMod([string]$KenshiDir, [string]$ModFile = 'KenshiCoop.mod') {
+# Make sure TokelaCoop.mod is in <Kenshi>\data\mods.cfg (Kenshi's active-mod
+# list, one file name per line, load order) and the old KenshiCoop.mod is not.
+# An old KenshiCoop.mod line is REPLACED in place, so the load order the mods
+# check compares between the two players stays the same; otherwise TokelaCoop.mod
+# is appended. Duplicates are dropped and the file's line endings kept. Returns
+# $true if the file was changed.
+function Enable-TokelaCoopMod([string]$KenshiDir, [string]$ModFile = 'TokelaCoop.mod') {
     $cfg = Join-Path $KenshiDir 'data\mods.cfg'
+    $legacy = $script:LegacyName + '.mod'
     $lines = @()
     $nl = "`r`n"
     if (Test-Path -LiteralPath $cfg) {
         $raw = [System.IO.File]::ReadAllText($cfg)
         if ($raw -notmatch "`r`n" -and $raw -match "`n") { $nl = "`n" }
         $lines = @($raw -split "`r?`n" | Where-Object { $_ -ne '' })
-        foreach ($l in $lines) {
-            if ($l.Trim() -ieq $ModFile) { return $false }
-        }
     } else {
         New-Item -ItemType Directory -Force -Path (Split-Path $cfg) | Out-Null
     }
-    $lines += $ModFile
-    [System.IO.File]::WriteAllText($cfg, (($lines -join $nl) + $nl), (New-Object System.Text.UTF8Encoding($false)))
+    $out = @()
+    $have = $false
+    $changed = $false
+    foreach ($l in $lines) {
+        $t = $l.Trim()
+        if ($t -ieq $ModFile) {
+            if ($have) { $changed = $true; continue }   # a second copy of the line
+            $have = $true; $out += $l; continue
+        }
+        if ($t -ieq $legacy) {
+            if (-not $have) { $out += $ModFile; $have = $true }   # same place in the order
+            $changed = $true
+            continue
+        }
+        $out += $l
+    }
+    if (-not $have) { $out += $ModFile; $changed = $true }
+    if (-not $changed) { return $false }
+    [System.IO.File]::WriteAllText($cfg, (($out -join $nl) + $nl), (New-Object System.Text.UTF8Encoding($false)))
     return $true
 }
 
-# Steam Workshop copies of KenshiCoop next to this install: RE_Kenshi would load
-# the plugin twice. Returns the offending folders.
-function Find-WorkshopKenshiCoop([string]$KenshiDir) {
+# Before the old folder goes: when mods\TokelaCoop already had its own
+# coop_config.json (so the old one was not carried over) and the old one says
+# something else, keep the old one next to it as coop_config.KenshiCoop.json
+# instead of deleting the player's LAN settings. Returns that file, or ''.
+function Save-LegacyConfig([string]$KenshiDir) {
+    $old = Join-Path $KenshiDir ('mods\' + $script:LegacyName + '\coop_config.json')
+    $new = Join-Path $KenshiDir 'mods\TokelaCoop\coop_config.json'
+    if (-not (Test-Path -LiteralPath $old) -or -not (Test-Path -LiteralPath $new)) { return '' }
+    $a = [System.IO.File]::ReadAllBytes($old)
+    $b = [System.IO.File]::ReadAllBytes($new)
+    if ($a.Length -eq $b.Length -and -not (Compare-Object $a $b -SyncWindow 0)) { return '' }
+    $keep = Join-Path $KenshiDir ('mods\TokelaCoop\coop_config.' + $script:LegacyName + '.json')
+    Copy-Item -LiteralPath $old -Destination $keep -Force
+    return $keep
+}
+
+# Remove an old <Kenshi>\mods\KenshiCoop. Run it AFTER Enable-TokelaCoopMod, so
+# that even if the removal fails the old mod is no longer active. Returns the
+# removed folder, or '' when there was none. Throws if it cannot be removed.
+function Remove-LegacyKenshiCoop([string]$KenshiDir) {
+    $old = Join-Path $KenshiDir ('mods\' + $script:LegacyName)
+    if (-not (Test-Path -LiteralPath $old)) { return '' }
+    Remove-Item -LiteralPath $old -Recurse -Force
+    return $old
+}
+
+# Steam Workshop copies of the mod next to this install, under either name
+# (TokelaCoop.dll, or the old KenshiCoop.dll): RE_Kenshi would load the plugin
+# twice. Returns the offending folders.
+function Find-WorkshopTokelaCoop([string]$KenshiDir) {
     $ws = Join-Path $KenshiDir ('..\..\workshop\content\' + $script:KenshiAppId)
     $hits = @()
     if (Test-Path -LiteralPath $ws) {
         foreach ($d in (Get-ChildItem -LiteralPath $ws -Directory -ErrorAction SilentlyContinue)) {
-            if (Get-ChildItem -LiteralPath $d.FullName -Recurse -Filter 'KenshiCoop.dll' -ErrorAction SilentlyContinue) {
-                $hits += $d.FullName
+            foreach ($dll in @('TokelaCoop.dll', ($script:LegacyName + '.dll'))) {
+                if (Get-ChildItem -LiteralPath $d.FullName -Recurse -Filter $dll -ErrorAction SilentlyContinue) {
+                    $hits += $d.FullName
+                    break
+                }
             }
         }
     }

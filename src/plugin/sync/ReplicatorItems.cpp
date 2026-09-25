@@ -128,7 +128,7 @@ void Replicator::publishInventories(GameWorld* gw, NetLink& net, u32 ownerId) {
         // skips entirely when world sync is off - so the predicate is false by construction.
         if (wdPendingDrop(*it)) {
             static int dumpHold = -1;
-            if (dumpHold < 0) { const char* e = getenv("KENSHICOOP_INV_DUMP"); dumpHold = (e && e[0] == '1') ? 1 : 0; }
+            if (dumpHold < 0) { const char* e = getenv("TOKELACOOP_INV_DUMP"); dumpHold = (e && e[0] == '1') ? 1 : 0; }
             if (dumpHold) { char b[160]; _snprintf(b, sizeof(b) - 1,
                 "[inv] HOLD hand=%u,%u,%u,%u,%u (gear decrease pending drop adjudication)",
                 it->t, it->c, it->cs, it->i, it->s);
@@ -181,7 +181,7 @@ void Replicator::publishInventories(GameWorld* gw, NetLink& net, u32 ownerId) {
                 t[sizeof(t) - 1] = '\0'; coop::logLine(t);
             }
             static int dumpInv = -1;
-            if (dumpInv < 0) { const char* e = getenv("KENSHICOOP_INV_DUMP"); dumpInv = (e && e[0] == '1') ? 1 : 0; }
+            if (dumpInv < 0) { const char* e = getenv("TOKELACOOP_INV_DUMP"); dumpInv = (e && e[0] == '1') ? 1 : 0; }
             if (dumpInv) { coop::logLine("[inv] SEND-state:"); engine::dumpInventory(gw, cHand); }
         }
     }
@@ -346,7 +346,7 @@ void Replicator::applyInventories(GameWorld* gw) {
             t[sizeof(t) - 1] = '\0'; coop::logLine(t);
         }
         static int dumpInvA = -1;
-        if (dumpInvA < 0) { const char* e = getenv("KENSHICOOP_INV_DUMP"); dumpInvA = (e && e[0] == '1') ? 1 : 0; }
+        if (dumpInvA < 0) { const char* e = getenv("TOKELACOOP_INV_DUMP"); dumpInvA = (e && e[0] == '1') ? 1 : 0; }
         if (dumpInvA) { coop::logLine("[inv] APPLY-result:"); engine::dumpInventory(gw, cHand); }
     }
 }
@@ -391,7 +391,7 @@ void Replicator::publishWorldItems(GameWorld* gw, NetLink& net, u32 ownerId) {
     const float         POS_EPS      = 0.5f;  // re-stream a moved item past this gap
     const unsigned long WI_RESEND_MS = 5000;  // periodic safety resend (loss / late join)
     static int dumpWi = -1;
-    if (dumpWi < 0) { const char* e = getenv("KENSHICOOP_INV_DUMP"); dumpWi = (e && e[0] == '1') ? 1 : 0; }
+    if (dumpWi < 0) { const char* e = getenv("TOKELACOOP_INV_DUMP"); dumpWi = (e && e[0] == '1') ? 1 : 0; }
     unsigned long now = nowMs();
 
     // ECHO GUARD: a proxy we spawned for a PEER's streamed item is a real local
@@ -524,12 +524,12 @@ void Replicator::publishWorldItems(GameWorld* gw, NetLink& net, u32 ownerId) {
     WorldItemEntry send[WORLD_ITEMS_MAX]; unsigned int ns = 0;
     u32 removed[256]; unsigned int nr = 0;
     unsigned int deferred = 0;
-    // TEST-ONLY: shrink the per-tick batch (KENSHICOOP_WI_BATCH_MAX) so a scenario can overflow
+    // TEST-ONLY: shrink the per-tick batch (TOKELACOOP_WI_BATCH_MAX) so a scenario can overflow
     // it with a handful of drops. Filling the real 16-entry batch needs a crowd of simultaneous
     // ground items, which is precisely the situation a deterministic test cannot arrange.
     static int batchCap = -1;
     if (batchCap < 0) {
-        const char* e = getenv("KENSHICOOP_WI_BATCH_MAX");
+        const char* e = getenv("TOKELACOOP_WI_BATCH_MAX");
         int v = e ? atoi(e) : 0;
         batchCap = (v > 0 && v < (int)WORLD_ITEMS_MAX) ? v : (int)WORLD_ITEMS_MAX;
     }
@@ -649,7 +649,7 @@ void Replicator::applyWorldItems(GameWorld* gw, Inbound& in) {
     in.drainWorldRemove(rems);
     if (items.empty() && rems.empty()) return;
     static int dumpWi = -1;
-    if (dumpWi < 0) { const char* e = getenv("KENSHICOOP_INV_DUMP"); dumpWi = (e && e[0] == '1') ? 1 : 0; }
+    if (dumpWi < 0) { const char* e = getenv("TOKELACOOP_INV_DUMP"); dumpWi = (e && e[0] == '1') ? 1 : 0; }
     const float POS_EPS = 0.5f;
 
     // Snapshots: spawn a proxy for a new (owner, netId), move it if it changed.
@@ -694,7 +694,7 @@ void Replicator::applyWorldItems(GameWorld* gw, Inbound& in) {
             }
         }
     }
-    // TEST-ONLY fault injection (KENSHICOOP_WI_TEST_STALE): free the proxy through the
+    // TEST-ONLY fault injection (TOKELACOOP_WI_TEST_STALE): free the proxy through the
     // engine immediately before culling it, so the cull runs against an object the
     // engine has ALREADY destroyed. That is the state a zone teardown leaves behind when
     // players travel out of a block, but the window is one frame wide - the publish
@@ -704,7 +704,7 @@ void Replicator::applyWorldItems(GameWorld* gw, Inbound& in) {
     // reports as "alredy has destroy reason coop-worlditem-cull" (world_item_stale).
     static int testStale = -1;
     if (testStale < 0) {
-        const char* e = getenv("KENSHICOOP_WI_TEST_STALE");
+        const char* e = getenv("TOKELACOOP_WI_TEST_STALE");
         testStale = (e && e[0] == '1') ? 1 : 0;
     }
 
@@ -740,7 +740,7 @@ void Replicator::applyWorldClaims(GameWorld* gw, Inbound& in, u32 localId) {
     in.drainWorldClaim(got);
     if (got.empty()) return;
     static int dumpWi = -1;
-    if (dumpWi < 0) { const char* e = getenv("KENSHICOOP_INV_DUMP"); dumpWi = (e && e[0] == '1') ? 1 : 0; }
+    if (dumpWi < 0) { const char* e = getenv("TOKELACOOP_INV_DUMP"); dumpWi = (e && e[0] == '1') ? 1 : 0; }
     for (std::deque<InboundWorldClaim>::iterator b = got.begin(); b != got.end(); ++b) {
         if (b->ownerId == localId) continue;      // our own claim echoed back (relay safety)
         if (b->authorId != localId) continue;     // addressed to a different author
@@ -781,7 +781,7 @@ void Replicator::detectAndPublishWeaponDrops(GameWorld* gw, NetLink& net, u32 ow
     const float        GROUND_R    = 60.0f;
     const int          MAX_RETRY   = 30;    // ticks to keep looking for the ground copy
     static int dumpWd = -1;
-    if (dumpWd < 0) { const char* e = getenv("KENSHICOOP_INV_DUMP"); dumpWd = (e && e[0] == '1') ? 1 : 0; }
+    if (dumpWd < 0) { const char* e = getenv("TOKELACOOP_INV_DUMP"); dumpWd = (e && e[0] == '1') ? 1 : 0; }
     InvItemEntry items[INV_ITEMS_MAX];
     for (std::set<Key>::iterator it = ownHands_.begin(); it != ownHands_.end(); ++it) {
         unsigned int cHand[5] = { it->t, it->c, it->cs, it->i, it->s };
@@ -1134,7 +1134,7 @@ void Replicator::applyWeaponDrops(GameWorld* gw, Inbound& in) {
     }
 }
 
-// TEST-ONLY fault injection: KENSHICOOP_WD_FORGET_TRACK=1 makes the DROP AUTHOR discard its
+// TEST-ONLY fault injection: TOKELACOOP_WD_FORGET_TRACK=1 makes the DROP AUTHOR discard its
 // ground track the moment it is created, reproducing the state the player's session was
 // actually in - a real, identified pickup arrives and the author has no handle for the object.
 // Without this lever there is no deterministic way to gate the site-anchored recovery, because
@@ -1146,7 +1146,7 @@ void Replicator::applyWeaponDrops(GameWorld* gw, Inbound& in) {
 // increase-untracked, and the author was never even asked.
 static bool injectForgetTrack(bool authored) {
     static int on = -1;
-    if (on < 0) { const char* e = getenv("KENSHICOOP_WD_FORGET_TRACK"); on = (e && e[0] == '1') ? 1 : 0; }
+    if (on < 0) { const char* e = getenv("TOKELACOOP_WD_FORGET_TRACK"); on = (e && e[0] == '1') ? 1 : 0; }
     return on == 1 && authored;
 }
 
@@ -1206,8 +1206,8 @@ int containerHoldsItemState(GameWorld* gw, const unsigned int cHand[5], const ch
 // control (an occupied equip slot, no room), so these levers are the only way to gate the
 // recovery deterministically - and the absence of that recovery is precisely what turned a
 // refusal into a permanent duplicate.
-//   KENSHICOOP_WD_REFUSE_REHOME=1     refuse ONCE   -> exercises the retry
-//   KENSHICOOP_WD_REFUSE_REHOME_ALL=1 refuse ALWAYS -> exercises verify-then-destroy, the
+//   TOKELACOOP_WD_REFUSE_REHOME=1     refuse ONCE   -> exercises the retry
+//   TOKELACOOP_WD_REFUSE_REHOME_ALL=1 refuse ALWAYS -> exercises verify-then-destroy, the
 //                                     branch that retires our ground copy against the bag
 //                                     we can actually read
 // Consulted by BOTH re-home attempts (the pickup apply and the reconcile retry), or "refuse
@@ -1215,8 +1215,8 @@ int containerHoldsItemState(GameWorld* gw, const unsigned int cHand[5], const ch
 bool injectRehomeRefusal() {
     static int mode = -1; // 0 = off, 1 = first only, 2 = always
     if (mode < 0) {
-        const char* all = getenv("KENSHICOOP_WD_REFUSE_REHOME_ALL");
-        const char* one = getenv("KENSHICOOP_WD_REFUSE_REHOME");
+        const char* all = getenv("TOKELACOOP_WD_REFUSE_REHOME_ALL");
+        const char* one = getenv("TOKELACOOP_WD_REFUSE_REHOME");
         mode = (all && all[0] == '1') ? 2 : ((one && one[0] == '1') ? 1 : 0);
     }
     if (mode == 0) return false;
@@ -1225,7 +1225,7 @@ bool injectRehomeRefusal() {
     return true;
 }
 
-// TEST-ONLY fault injection: KENSHICOOP_WD_TRANSIENT_DEAD=N makes the first N PICKUP-time
+// TEST-ONLY fault injection: TOKELACOOP_WD_TRANSIENT_DEAD=N makes the first N PICKUP-time
 // resolutions of a tracked ground object read as dead, then lets them succeed. That is the real
 // cause of the duplicate the player saw - the engine streams an object out and back, so a single
 // read disagrees with the world for a moment - and it cannot be arranged deterministically any
@@ -1239,7 +1239,7 @@ bool injectRehomeRefusal() {
 static bool injectTransientDead() {
     static int budget = -1;
     if (budget < 0) {
-        const char* e = getenv("KENSHICOOP_WD_TRANSIENT_DEAD");
+        const char* e = getenv("TOKELACOOP_WD_TRANSIENT_DEAD");
         budget = e ? atoi(e) : 0;
         if (budget < 0) budget = 0;
     }
@@ -1331,7 +1331,7 @@ void Replicator::reconcileGroundGear(GameWorld* gw) {
     retryPendingPickups(gw);
     if (groundedWeapons_.empty()) return;
     static int dumpWd = -1;
-    if (dumpWd < 0) { const char* e = getenv("KENSHICOOP_INV_DUMP"); dumpWd = (e && e[0] == '1') ? 1 : 0; }
+    if (dumpWd < 0) { const char* e = getenv("TOKELACOOP_INV_DUMP"); dumpWd = (e && e[0] == '1') ? 1 : 0; }
     unsigned long now = nowMs();
     for (std::map<std::string, std::deque<GroundWeapon> >::iterator sit = groundedWeapons_.begin();
          sit != groundedWeapons_.end(); ++sit) {
@@ -1644,7 +1644,7 @@ void Replicator::detectAndPublishTransfers(GameWorld* gw, NetLink& net, u32 owne
     if (xferScanMs_ != 0 && now - xferScanMs_ < XFER_SCAN_MS) return;
     xferScanMs_ = now;
     static int dumpX = -1;
-    if (dumpX < 0) { const char* e = getenv("KENSHICOOP_INV_DUMP"); dumpX = (e && e[0] == '1') ? 1 : 0; }
+    if (dumpX < 0) { const char* e = getenv("TOKELACOOP_INV_DUMP"); dumpX = (e && e[0] == '1') ? 1 : 0; }
 
     // Tracked set: every container we author + every peer container we have received a
     // snapshot for. Both ends of any drag a player can perform live in this union.
@@ -1880,13 +1880,13 @@ void Replicator::applyTransfers(GameWorld* gw, Inbound& in, NetLink& net, u32 lo
             // fabrication work (armour always could). Dupe safety: the latch below keeps
             // stale snapshots from reconciling the fab away, and wdSuppress_ keeps the W2
             // weapon census from reading the count edge as a ground pickup.
-            // KENSHICOOP_WEAPON_FAB=0 restores gear-never-fabricates (weapons also die
+            // TOKELACOOP_WEAPON_FAB=0 restores gear-never-fabricates (weapons also die
             // inside createItemAndAdd on the same env).
             // A worn CONTAINER (backpack) NEVER fabricates: the template mints an EMPTY bag,
             // so the trade would land as a contents-less duplicate the moment our real copy
             // resolves. A short container transfer stays short and reconcile corrects it.
             static int gearFab = -1;
-            if (gearFab < 0) { const char* e = getenv("KENSHICOOP_WEAPON_FAB"); gearFab = (e && e[0] == '0') ? 0 : 1; }
+            if (gearFab < 0) { const char* e = getenv("TOKELACOOP_WEAPON_FAB"); gearFab = (e && e[0] == '0') ? 0 : 1; }
             if ((!isGearType(p.itemType) || gearFab) && !engine::isContainerItemType(p.itemType))
                 fab = engine::addItemsToContainerBySid(gw, dHand, p.stringID, p.itemType,
                                                        shortBy, (int)p.quality,

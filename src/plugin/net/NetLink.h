@@ -10,8 +10,8 @@
 //
 // VS2010 (v100) compatible: Win32 threads + CRITICAL_SECTION (no std::thread).
 
-#ifndef KENSHICOOP_NETLINK_H
-#define KENSHICOOP_NETLINK_H
+#ifndef TOKELACOOP_NETLINK_H
+#define TOKELACOOP_NETLINK_H
 
 #include <windows.h>
 #include <string>
@@ -417,4 +417,4 @@ private:
 
 } // namespace coop
 
-#endif // KENSHICOOP_NETLINK_H
+#endif // TOKELACOOP_NETLINK_H

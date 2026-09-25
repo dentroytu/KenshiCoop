@@ -1052,7 +1052,7 @@ function Test-SplitFar2 {
     $jm = Get-CellMap -File $JoinFile -BeforeMs $endMs
     $hm = Get-CellMap -File $HostFile -BeforeMs $endMs
     if ($jm.dumps -eq 0 -and $hm.dumps -eq 0) {
-        Write-Host "  SPLIT-FAR2 SKIP - no [cell] MAP dumps in either log (KENSHICOOP_CELL_AUTH off?)"
+        Write-Host "  SPLIT-FAR2 SKIP - no [cell] MAP dumps in either log (TOKELACOOP_CELL_AUTH off?)"
         return (Add-GateResult -Name "split_far2" -Status SKIP `
                     -Metrics @{ sep = $sepMed; hostCell = $hostCell; joinCell = $joinCell } `
                     -Detail "cell authority disabled")

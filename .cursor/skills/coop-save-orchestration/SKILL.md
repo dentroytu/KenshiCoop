@@ -1,7 +1,7 @@
 ---
 name: coop-save-orchestration
 description: >-
-  Load and orchestrate Kenshi saves for KenshiCoop debugging and validation.
+  Load and orchestrate Kenshi saves for TokelaCoop debugging and validation.
   Covers how saves auto-load (env vars + %LOCALAPPDATA%\kenshi\save), which
   script drives which job (manual_session.ps1 for hands-on debugging,
   run_test.ps1 / regress.ps1 for validation, bake_scene.ps1 for fixtures), the
@@ -12,7 +12,7 @@ description: >-
   scenario, baking a fixture, or before doing anything that loads/writes a save.
 ---
 
-# KenshiCoop Save Orchestration
+# TokelaCoop Save Orchestration
 
 ## How saves load
 
@@ -21,7 +21,7 @@ description: >-
   install read this SAME per-user folder, so a save is visible to both clients
   with no copy step.
 - The plugin auto-loads a save from the title screen via env var
-  `KENSHICOOP_SAVE=<name>`. The orchestration scripts set this for you.
+  `TOKELACOOP_SAVE=<name>`. The orchestration scripts set this for you.
 - **Validation fixtures are version-controlled** under `fixtures/saves/<name>\`.
   `run_test.ps1` restores the pristine repo copy over the AppData copy right
   before every run (via `deploy_saves.ps1`), so a prior co-op run's connect-push /

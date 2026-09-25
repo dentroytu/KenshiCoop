@@ -1060,7 +1060,7 @@ const float CampApproachScenario::HOP = 2800.0f;
 //   both_host  both -> host tab the JOIN attends a cell the HOST authors
 //   back       each -> own      does the peer's population SURVIVE us leaving
 //
-// Requires KENSHICOOP_CELL_AUTH=1 (manifest DiagEnv). With it off the run
+// Requires TOKELACOOP_CELL_AUTH=1 (manifest DiagEnv). With it off the run
 // still completes and still logs, and the oracle reports the flag state, so a
 // misconfigured run reads as inconclusive rather than as a pass.
 class SplitFar2Scenario : public TimedScenario {
@@ -1311,7 +1311,7 @@ const float SplitFar2Scenario::PROBE_R    = 1800.0f;
 // That arbitration also pins the sim to 1x while either squad fights, which for
 // this scenario is the wrong answer to the right question: we are fleeing the
 // encounter, not resolving it. The manifest therefore clears
-// KENSHICOOP_SPEED_COMBAT_CAP, and the stall handler below skips a waypoint we
+// TOKELACOOP_SPEED_COMBAT_CAP, and the stall handler below skips a waypoint we
 // have stopped closing on, so a fight costs a detour instead of the run.
 //
 // How fast that actually is, measured rather than assumed: ~570-600 u/s of real
@@ -1326,7 +1326,7 @@ const float SplitFar2Scenario::PROBE_R    = 1800.0f;
 // between the two.
 struct RunWp { float x, z; };
 // The two routes are RECORDED, at 1 Hz, from a human driving both squads apart
-// (KENSHICOOP_TRACK_MOVE, session 20260804_114911), then decimated to ~2000 u
+// (TOKELACOOP_TRACK_MOVE, session 20260804_114911), then decimated to ~2000 u
 // legs. They are not a straight line and must not be replaced by one.
 //
 // That is the whole lesson of the three runs before this. The first tried
@@ -1757,14 +1757,14 @@ const float RunApartScenario::PROBE_R  = 1800.0f;
 // aim off the bearing by growing angles, alternating sides, so it walks around
 // the obstacle instead of standing in front of it. Progress resets the bearing.
 //
-// Both the start and the target are env-overridable (KENSHICOOP_TOWN_FROM /
-// KENSHICOOP_TOWN_AT, "x,z"), because the gate is about population identity and
+// Both the start and the target are env-overridable (TOKELACOOP_TOWN_FROM /
+// TOKELACOOP_TOWN_AT, "x,z"), because the gate is about population identity and
 // not about this particular town.
 class TownArriveScenario : public TimedScenario {
 public:
     // The start/target come from the PROFILE the factory picks, so a second
     // approach to the same town is a registration rather than a second copy of
-    // this class. KENSHICOOP_TOWN_FROM / KENSHICOOP_TOWN_AT still override
+    // this class. TOKELACOOP_TOWN_FROM / TOKELACOOP_TOWN_AT still override
     // either one for an ad-hoc target.
     //
     // route/nRoute is OPTIONAL. Given one, the approach follows those recorded
@@ -1787,8 +1787,8 @@ public:
         // standing on when they began walking. Parking anywhere else would put
         // the squad off the recorded ground on the very first leg.
         if (route_ && nRoute_) { fx_ = route_[0].x; fz_ = route_[0].z; }
-        readPt("KENSHICOOP_TOWN_FROM", &fx_, &fz_);
-        readPt("KENSHICOOP_TOWN_AT",   &tx_, &tz_);
+        readPt("TOKELACOOP_TOWN_FROM", &fx_, &fz_);
+        readPt("TOKELACOOP_TOWN_AT",   &tx_, &tz_);
         // Budget the ground actually covered: a route is longer than the line.
         float len = (route_ && nRoute_) ? routeLength() : straightLength();
         walkMs_  = walkBudgetMs(len);

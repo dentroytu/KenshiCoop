@@ -15,14 +15,14 @@
 // by it, and SetUnhandledExceptionFilter is last-writer-wins), writes a full
 // dump, then CHAINS to whatever filter was installed before us so RE_Kenshi's
 // emergency save still happens.
-#ifndef KENSHICOOP_CRASHDUMP_H
-#define KENSHICOOP_CRASHDUMP_H
+#ifndef TOKELACOOP_CRASHDUMP_H
+#define TOKELACOOP_CRASHDUMP_H
 
 namespace coop {
 namespace crashdump {
 
 // Install the filter. Dumps land next to the plugin log as
-// KenshiCoop_crash_<mode>_<pid>.dmp. Safe to call once at startup; a second
+// TokelaCoop_crash_<mode>_<pid>.dmp. Safe to call once at startup; a second
 // call is ignored.
 void install(const char* dir, const char* modeTag);
 

@@ -9,8 +9,8 @@
 // re-added (duplicated) or wiped (lost). Every settled loss is now paired, a
 // loss may split across several gains, and each unit is paired at most once.
 
-#ifndef KENSHICOOP_XFERPAIR_H
-#define KENSHICOOP_XFERPAIR_H
+#ifndef TOKELACOOP_XFERPAIR_H
+#define TOKELACOOP_XFERPAIR_H
 
 #include <map>
 #include <utility>
@@ -62,4 +62,4 @@ void pairXferDiffs(const std::map<K, std::map<X, int> >& settled,
 
 } // namespace coop
 
-#endif // KENSHICOOP_XFERPAIR_H
+#endif // TOKELACOOP_XFERPAIR_H

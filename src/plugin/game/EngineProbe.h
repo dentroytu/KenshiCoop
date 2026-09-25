@@ -10,8 +10,8 @@
 // PUBLIC header: SEH-guarded facade only, no <kenshi/...> internal headers
 // (those live in the adapter, EngineInternal.h). Forward declarations only.
 
-#ifndef KENSHICOOP_ENGINE_PROBE_H
-#define KENSHICOOP_ENGINE_PROBE_H
+#ifndef TOKELACOOP_ENGINE_PROBE_H
+#define TOKELACOOP_ENGINE_PROBE_H
 
 class GameWorld;
 
@@ -64,7 +64,7 @@ int commonNovelArmourSid(GameWorld* gw, const unsigned int cHandA[5],
 // SEH-guarded (trade_peer grade gate): mint ONE piece of gear at an explicit craft LEVEL
 // straight through the engine factory (levelOverride = level) and add it to cHand's
 // inventory. Deliberately NOT the sync's createItemAndAdd and deliberately NOT subject to
-// KENSHICOOP_GEAR_LEVEL: this is the REFERENCE item a grade test compares against, so it
+// TOKELACOOP_GEAR_LEVEL: this is the REFERENCE item a grade test compares against, so it
 // has to be graded correctly even in the run that has the fix turned off - otherwise the
 // peer's copy would match a reference that was equally wrong and the gate would pass
 // vacuously. Quality is NOT patched afterwards: whatever the engine derives from the level
@@ -92,4 +92,4 @@ int probeNativeSnapshot(GameWorld* gw);
 } // namespace engine
 } // namespace coop
 
-#endif // KENSHICOOP_ENGINE_PROBE_H
+#endif // TOKELACOOP_ENGINE_PROBE_H

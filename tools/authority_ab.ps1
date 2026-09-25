@@ -5,7 +5,7 @@
 .DESCRIPTION
   An arm is a name plus a DiagEnv override, so anything Config.cpp reads from the
   environment can be compared without touching the committed manifest. The
-  default pair is the original question - KENSHICOOP_CELL_AUTH=0 restores
+  default pair is the original question - TOKELACOOP_CELL_AUTH=0 restores
   unconditional host authority (the v0.46 model), so it is a ready-made control
   against today's bidirectional cell authority.
 
@@ -37,7 +37,7 @@
 .EXAMPLE
   # Three arms: today's split, the co-location collapse, and the host-only
   # reference the collapse is supposed to reproduce while the squads are together.
-  powershell -ExecutionPolicy Bypass -File tools\authority_ab.ps1 -Scenario escape_cohesion -Runs 4 -Arms "cellauth:KENSHICOOP_CELL_AUTH=1,KENSHICOOP_CELL_COLLAPSE=0;collapse:KENSHICOOP_CELL_AUTH=1,KENSHICOOP_CELL_COLLAPSE=1;hostonly:KENSHICOOP_CELL_AUTH=0"
+  powershell -ExecutionPolicy Bypass -File tools\authority_ab.ps1 -Scenario escape_cohesion -Runs 4 -Arms "cellauth:TOKELACOOP_CELL_AUTH=1,TOKELACOOP_CELL_COLLAPSE=0;collapse:TOKELACOOP_CELL_AUTH=1,TOKELACOOP_CELL_COLLAPSE=1;hostonly:TOKELACOOP_CELL_AUTH=0"
 #>
 [CmdletBinding()]
 param(
@@ -57,7 +57,7 @@ param(
     # The default pair reproduces the original cell-authority-on vs -off
     # comparison, and keeps the on_N / off_N directory names that earlier
     # batches already use so they can still be re-scored.
-    [string[]]$Arms = @("on:KENSHICOOP_CELL_AUTH=1", "off:KENSHICOOP_CELL_AUTH=0"),
+    [string[]]$Arms = @("on:TOKELACOOP_CELL_AUTH=1", "off:TOKELACOOP_CELL_AUTH=0"),
     # Reuse an existing batch directory: runs whose out dir already exists are
     # scored from their logs instead of re-played, so a batch can be topped up
     # (raise -Runs) or re-scored after a scoring change without more game time.
@@ -77,8 +77,8 @@ $runner    = Join-Path $repoRoot "scripts\run_test.ps1"
 # what makes an arm checkable: setting a variable proves nothing, the dump is the
 # game telling us what it actually read. A key absent here is simply not verified.
 $script:FlagFields = @{
-    'KENSHICOOP_CELL_AUTH'     = 'cellAuth'
-    'KENSHICOOP_CELL_COLLAPSE' = 'cellCollapse'
+    'TOKELACOOP_CELL_AUTH'     = 'cellAuth'
+    'TOKELACOOP_CELL_COLLAPSE' = 'cellCollapse'
 }
 
 function Parse-Arm([string]$Spec) {

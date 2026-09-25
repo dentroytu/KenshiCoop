@@ -2,7 +2,7 @@
 //
 // The ownership partition decides which squad tabs a peer controls locally and
 // streams (its own) versus drives from the peer's stream. Host owns tab {0},
-// join owns {1} by default; an explicit KENSHICOOP_OWN_SQUAD/OWN_RANK env
+// join owns {1} by default; an explicit TOKELACOOP_OWN_SQUAD/OWN_RANK env
 // override wins. This logic is shared by:
 //   * Config.cpp   - initial resolution at load
 //   * Plugin.cpp   - re-resolution when the F2 panel switches role mid-session

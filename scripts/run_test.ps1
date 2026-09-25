@@ -1,15 +1,15 @@
 ﻿<#
 .SYNOPSIS
-  Functional test runner for KenshiCoop: launch host + join, auto-load a save,
+  Functional test runner for TokelaCoop: launch host + join, auto-load a save,
   run for a fixed time (or a compiled scenario), self-exit, then collect
   per-client logs and screenshots and judge the run with the shared oracle
   library (scripts/CoopOracles.psm1 + scripts/scenarios.psd1).
 
 .DESCRIPTION
   Relies on the plugin's env-var driven behavior:
-    KENSHICOOP_SAVE          - save to auto-load on the title screen
-    KENSHICOOP_TEST_SECONDS  - self-exit this many seconds after gameplay starts
-    KENSHICOOP_LOG           - dedicated, per-line-flushed log file
+    TOKELACOOP_SAVE          - save to auto-load on the title screen
+    TOKELACOOP_TEST_SECONDS  - self-exit this many seconds after gameplay starts
+    TOKELACOOP_LOG           - dedicated, per-line-flushed log file
   Each client writes its own log; we time a screenshot of each window while both
   are still in-game, then wait for them to self-exit (with a hard-timeout kill as
   a safety net).
@@ -61,10 +61,10 @@ param(
     [int]$Frames = 5,
     [int]$FrameIntervalMs = 16,
     # Scenario mode: both clients run the compiled scenario named here
-    # (KENSHICOOP_SCENARIO). The scenario self-exits when complete; the verdict
+    # (TOKELACOOP_SCENARIO). The scenario self-exits when complete; the verdict
     # comes from the manifest-declared oracle set.
     [string]$Scenario = "",
-    # Host-only setup scene (KENSHICOOP_SETUP). Defaults from the manifest.
+    # Host-only setup scene (TOKELACOOP_SETUP). Defaults from the manifest.
     [string]$Setup = "",
     [double]$Tolerance = 0,
     [int]$ScenarioShotDelaySec = 5,
@@ -86,7 +86,7 @@ param(
     # applies to ALL datagrams in BOTH directions BELOW ENet - reliable-channel
     # retransmission, handshake and all packet families are genuinely exercised.
     [string]$Wan = "",
-    # Inject a fake wall-clock skew (ms) into the JOIN (KENSHICOOP_FAKE_CLOCK_SKEW_MS):
+    # Inject a fake wall-clock skew (ms) into the JOIN (TOKELACOOP_FAKE_CLOCK_SKEW_MS):
     # its log timestamps AND its time-sync pings shift together, so the run
     # validates that CLOCKSYNC offset estimation + oracle alignment recover it.
     [int]$FakeClockSkewMs = 0,
@@ -242,7 +242,7 @@ if ($Wan -ne "") {
     $joinPort = $proxyPort
 }
 
-Write-Host "== KenshiCoop test run =="
+Write-Host "== TokelaCoop test run =="
 Write-Host "  save:     $Save"
 Write-Host "  seconds:  $Seconds"
 if ($Scenario -ne "") { Write-Host "  scenario: $Scenario (tolerance $Tolerance u)" }
@@ -330,7 +330,7 @@ if ($Sync) {
 
 function Set-CoopEnv {
     param([string]$Mode, [string]$Log)
-    $env:KENSHICOOP_MODE         = $Mode
+    $env:TOKELACOOP_MODE         = $Mode
     # Loopback regression is ALWAYS direct-UDP on 127.0.0.1: two Kenshi instances
     # on one machine (same Steam account) cannot establish a Steam P2P session, so
     # force the transport here rather than inheriting the deployed coop_config.json
@@ -338,17 +338,17 @@ function Set-CoopEnv {
     # session - that silently breaks every scenario's connection). Env overrides the
     # config file, so this makes the harness self-contained. LAN runs use a separate
     # runner (run_lan_test.ps1) and are unaffected.
-    $env:KENSHICOOP_TRANSPORT    = "udp"
-    $env:KENSHICOOP_STEAM_PEER   = "0"
+    $env:TOKELACOOP_TRANSPORT    = "udp"
+    $env:TOKELACOOP_STEAM_PEER   = "0"
     # The join connects through the WAN proxy when one is active.
-    $env:KENSHICOOP_PORT         = if ($Mode -eq "join") { "$joinPort" } else { "$Port" }
-    $env:KENSHICOOP_IP           = if ($Mode -eq "join") { $joinIp } else { $Ip }
-    $env:KENSHICOOP_SAVE         = $Save
-    $env:KENSHICOOP_TEST_SECONDS = "$Seconds"
-    $env:KENSHICOOP_LOG          = $Log
-    $env:KENSHICOOP_SCENARIO     = $Scenario
+    $env:TOKELACOOP_PORT         = if ($Mode -eq "join") { "$joinPort" } else { "$Port" }
+    $env:TOKELACOOP_IP           = if ($Mode -eq "join") { $joinIp } else { $Ip }
+    $env:TOKELACOOP_SAVE         = $Save
+    $env:TOKELACOOP_TEST_SECONDS = "$Seconds"
+    $env:TOKELACOOP_LOG          = $Log
+    $env:TOKELACOOP_SCENARIO     = $Scenario
     # Join-only AI-suspend probe (mode+flag specific, so NOT a manifest knob).
-    $env:KENSHICOOP_PROBE_AISUSPEND = if ($Mode -eq "join" -and $ProbeAiSuspend) { "1" } else { "" }
+    $env:TOKELACOOP_PROBE_AISUSPEND = if ($Mode -eq "join" -and $ProbeAiSuspend) { "1" } else { "" }
     # Per-scenario channel A/B knobs (invSync/worldSync ON, probe channels OFF)
     # and log-only diagnostic traces ([recon]/[wi]/[speeddbg]/[shackledbg]/[jail]
     # /[spike]) come from the manifest DiagEnv - the single source of truth the
@@ -361,15 +361,15 @@ function Set-CoopEnv {
         Set-Item -Path "env:$k" -Value "$($diagOverride[$k])"
     }
     # Host-only setup/re-arm scene.
-    $env:KENSHICOOP_SETUP = if ($Mode -eq "host") { $Setup } else { "" }
+    $env:TOKELACOOP_SETUP = if ($Mode -eq "host") { $Setup } else { "" }
     # Legacy in-plugin WAN sim (both clients; entities only).
-    $env:KENSHICOOP_NETSIM_DELAY_MS  = "$NetSimDelayMs"
-    $env:KENSHICOOP_NETSIM_JITTER_MS = "$NetSimJitterMs"
-    $env:KENSHICOOP_NETSIM_LOSS_PCT  = "$NetSimLossPct"
+    $env:TOKELACOOP_NETSIM_DELAY_MS  = "$NetSimDelayMs"
+    $env:TOKELACOOP_NETSIM_JITTER_MS = "$NetSimJitterMs"
+    $env:TOKELACOOP_NETSIM_LOSS_PCT  = "$NetSimLossPct"
     # Fake wall-clock skew: JOIN only (the host is the reference clock).
-    $env:KENSHICOOP_FAKE_CLOCK_SKEW_MS = if ($Mode -eq "join") { "$FakeClockSkewMs" } else { "0" }
+    $env:TOKELACOOP_FAKE_CLOCK_SKEW_MS = if ($Mode -eq "join") { "$FakeClockSkewMs" } else { "0" }
     # Peer-ready arming fallback (0 = legacy immediate arming; spike runs).
-    $env:KENSHICOOP_ARM_TIMEOUT_MS = "$effArmTimeoutMs"
+    $env:TOKELACOOP_ARM_TIMEOUT_MS = "$effArmTimeoutMs"
 }
 
 # Wait until a regex appears in a (growing) file, or timeout. Returns $true/$false.

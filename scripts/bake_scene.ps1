@@ -1,8 +1,8 @@
 <#
 .SYNOPSIS
   Bake a fixture save: launch a single HOST instance, auto-load a base save,
-  run a setup scene (KENSHICOOP_SETUP), then auto-write the fixture save
-  (KENSHICOOP_BAKESAVE) - no manual save-menu round-trip.
+  run a setup scene (TOKELACOOP_SETUP), then auto-write the fixture save
+  (TOKELACOOP_BAKESAVE) - no manual save-menu round-trip.
 
   Example (bed+cage occupancy fixture):
     powershell -ExecutionPolicy Bypass -File scripts\bake_scene.ps1 `
@@ -47,14 +47,14 @@ if (-not $SkipDeploy) {
 $log = Join-Path $repo "tools\_bake_$Setup.log"
 Remove-Item $log -ErrorAction SilentlyContinue
 
-$env:KENSHICOOP_MODE         = "host"
-$env:KENSHICOOP_SAVE         = $BaseSave
-$env:KENSHICOOP_SETUP        = $Setup
-$env:KENSHICOOP_BAKESAVE     = $BakeSave
-$env:KENSHICOOP_TEST_SECONDS = "$Seconds"
-$env:KENSHICOOP_LOG          = $log
-$env:KENSHICOOP_SCENARIO     = ""
-$env:KENSHICOOP_ARM_TIMEOUT_MS = "1"
+$env:TOKELACOOP_MODE         = "host"
+$env:TOKELACOOP_SAVE         = $BaseSave
+$env:TOKELACOOP_SETUP        = $Setup
+$env:TOKELACOOP_BAKESAVE     = $BakeSave
+$env:TOKELACOOP_TEST_SECONDS = "$Seconds"
+$env:TOKELACOOP_LOG          = $log
+$env:TOKELACOOP_SCENARIO     = ""
+$env:TOKELACOOP_ARM_TIMEOUT_MS = "1"
 
 Write-Host "Launching HOST for bake (setup=$Setup base=$BaseSave -> bake=$BakeSave) ..."
 $out = & (Join-Path $scriptDir "start_kenshi.ps1") -ExePath $hostExe -WorkDir $HostDir -TimeoutSec $StartTimeoutSec 6>&1

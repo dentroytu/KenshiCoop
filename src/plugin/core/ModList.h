@@ -3,8 +3,8 @@
 // the engine (engine::activeModList), and the receiver parses both texts and
 // diffs them here. Line format: "file|version\n" per mod, in load order.
 
-#ifndef KENSHICOOP_MODLIST_H
-#define KENSHICOOP_MODLIST_H
+#ifndef TOKELACOOP_MODLIST_H
+#define TOKELACOOP_MODLIST_H
 
 #include <string>
 #include <vector>
@@ -136,4 +136,4 @@ inline std::string modsCfgText(const std::vector<ModEntry>& v) {
 
 } // namespace coop
 
-#endif // KENSHICOOP_MODLIST_H
+#endif // TOKELACOOP_MODLIST_H

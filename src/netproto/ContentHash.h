@@ -6,8 +6,8 @@
 //
 // Plain C++03 for the VS2010 (v100) toolchain. Header-only (inline).
 
-#ifndef KENSHICOOP_CONTENTHASH_H
-#define KENSHICOOP_CONTENTHASH_H
+#ifndef TOKELACOOP_CONTENTHASH_H
+#define TOKELACOOP_CONTENTHASH_H
 
 #include "Wire.h"
 
@@ -141,4 +141,4 @@ inline unsigned int folderFingerprintOf(const char* const* relPaths,
 
 } // namespace coop
 
-#endif // KENSHICOOP_CONTENTHASH_H
+#endif // TOKELACOOP_CONTENTHASH_H

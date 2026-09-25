@@ -19,8 +19,8 @@
 //   * a helper needed by a SECOND domain TU moves to EngineInternal.cpp and gets
 //     declared here (do not duplicate it).
 
-#ifndef KENSHICOOP_ENGINE_INTERNAL_H
-#define KENSHICOOP_ENGINE_INTERNAL_H
+#ifndef TOKELACOOP_ENGINE_INTERNAL_H
+#define TOKELACOOP_ENGINE_INTERNAL_H
 
 #define _CRT_SECURE_NO_WARNINGS 1
 #define BOOST_ALL_NO_LIB 1
@@ -85,7 +85,7 @@
 #include <ogre/OgreVector3.h>
 #include <ogre/OgreQuaternion.h>
 #include <cmath>
-#include <cstdlib> // getenv (KENSHICOOP_INV_DUMP reconcile-trace gate)
+#include <cstdlib> // getenv (TOKELACOOP_INV_DUMP reconcile-trace gate)
 #include <intrin.h> // _ReturnAddress (spike 451 weapon-mint caller RVAs)
 #pragma intrinsic(_ReturnAddress)
 #include <map>     // squad roster pointer->hand baseline (protocol 35)
@@ -452,11 +452,11 @@ extern float g_quietMult;
 extern bool  g_quietPaused;
 extern char g_voteBtn[15];
 extern int  g_voteBtnN;
-// Phase 5 spike (KENSHICOOP_DEBUG_SPEED): combat-cap-active hint, set by
+// Phase 5 spike (TOKELACOOP_DEBUG_SPEED): combat-cap-active hint, set by
 // Replicator::syncSpeed each tick so the speed-setter diagnostics can tell an
 // engine-forced (combat) change from a user click by context.
 extern bool g_speedCombatHint;
-// True when KENSHICOOP_DEBUG_SPEED=1 (cached). Gates the speed-path diagnostics.
+// True when TOKELACOOP_DEBUG_SPEED=1 (cached). Gates the speed-path diagnostics.
 bool speedDbgOn();
 
 // doors
@@ -713,4 +713,4 @@ Faction* factionBySidGuarded(GameWorld* gw, const std::string* sid);
 } // namespace engine
 } // namespace coop
 
-#endif // KENSHICOOP_ENGINE_INTERNAL_H
+#endif // TOKELACOOP_ENGINE_INTERNAL_H

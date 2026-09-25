@@ -9,7 +9,7 @@
 // Must NOT: define g_* engine pointers (EngineInternal.cpp owns them), install
 // hooks, or change any log string - "[coop-ui] ..." phrasing is API consumed by
 // the harness. The public marker* declarations stay in Engine.h (the Replicator
-// uses them for KENSHICOOP_DEBUG_MARKERS); only their definitions moved here.
+// uses them for TOKELACOOP_DEBUG_MARKERS); only their definitions moved here.
 
 #include "EngineInternal.h"
 
@@ -31,6 +31,7 @@
 #include "../core/SteamId.h" // parseSteamId64 (paste button) + maskSteamId64 (id rows)
 #include "../core/UiLang.h" // L(es, en): panel text in the player's language
 #include "../core/TextWrap.h" // one panel row per wrapped line
+#include "../../netproto/Version.h" // TOKELACOOP_TITLE: the panel title
 #include <fstream>
 #include <iterator>
 #include <map>
@@ -40,7 +41,7 @@
 namespace coop {
 namespace engine {
 
-// ---- Debug marker HUD labels (KENSHICOOP_DEBUG_MARKERS, spike-47 substrate) --
+// ---- Debug marker HUD labels (TOKELACOOP_DEBUG_MARKERS, spike-47 substrate) --
 // ForgottenGUI::createScreenLabel + ScreenLabel::setTracking pin a colored text
 // label to a character; the engine's own per-frame projection keeps it on the
 // body (spike 47 render proof). The Replicator uses these to make join-side
@@ -728,8 +729,8 @@ std::string inviteStatusText(int code, const char* arg) {
     case 4: return L("Tu amigo ha aceptado. Conectando...", "Your friend accepted. Connecting...");
     case 5: return L("Entrando en la partida de tu amigo...", "Joining your friend's game...");
     case 6: return L("Conectando con tu amigo...", "Connecting to your friend...");
-    case 7: return L("Tu amigo tiene otra versi\xC3\xB3n de KenshiCoop. Instalad la misma los dos.",
-                     "Your friend has a different KenshiCoop version. Install the same one.");
+    case 7: return L("Tu amigo tiene otra versi\xC3\xB3n de TokelaCoop. Instalad la misma los dos.",
+                     "Your friend has a different TokelaCoop version. Install the same one.");
     case 8: return L("Steam no est\xC3\xA1 disponible. Abre Kenshi desde Steam.",
                      "Steam is not available. Start Kenshi from Steam.");
     default: return std::string();
@@ -909,8 +910,8 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
                                                 : L("CONECTADO", "ONLINE")) +
                         L("    (cambiar)", "    (switch)"), ACT_CONN);
         if (!g_panel.steamFlag)
-            addLine(rows, L("UDP: la IP y el puerto est\xC3\xA1n en mods\\KenshiCoop\\coop_config.json",
-                            "UDP: IP and port are in mods\\KenshiCoop\\coop_config.json"), COL_GREY);
+            addLine(rows, L("UDP: la IP y el puerto est\xC3\xA1n en mods\\TokelaCoop\\coop_config.json",
+                            "UDP: IP and port are in mods\\TokelaCoop\\coop_config.json"), COL_GREY);
         addSpace(rows);
         // Friend's SteamID: prefer the value pasted in-panel this session; fall
         // back to the config (steamPeer). Only the last 4 digits are shown.
@@ -1019,7 +1020,8 @@ void coopPanelTick(const CoopPanelState* st, CoopConnectFn onConnect,
 
     // (Re)populate the rows when anything visible changed.
     if (g_panel.panel && (g_panel.needsRebuild || !g_panel.built)) {
-        std::string title = uiText(L("Co-op    -    F2 para cerrar", "Co-op    -    F2 to close"));
+        std::string title = uiText(L(TOKELACOOP_TITLE "    -    F2 para cerrar",
+                                     TOKELACOOP_TITLE "    -    F2 to close"));
         std::string empty;
         std::vector<std::string> keys(rows.size());
         RowPod pods[MAX_ROWS];
@@ -1110,7 +1112,7 @@ namespace {
 // argument order is ambiguous (the normalized values are overwritten either way).
 const int kOverlayX = 10;
 const int kOverlayY = 10;
-const int kOverlayW = 520;
+const int kOverlayW = 680;   // "TokelaCoop v0.54: " leads every banner text
 const int kOverlayH = 26;
 
 MyGUI::Window*  g_overlayBox   = 0; // container: geometry + layer attachment

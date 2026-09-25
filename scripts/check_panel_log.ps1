@@ -12,11 +12,11 @@
     * each panel role/transport selection actually reached the connect path.
 
   Point it at a log you played through the panel (yours or a friend's). With no
-  -Log it scans the default KenshiCoop_host.log / KenshiCoop_join.log next to
+  -Log it scans the default TokelaCoop_host.log / TokelaCoop_join.log next to
   each local install.
 
 .EXAMPLE
-  powershell -ExecutionPolicy Bypass -File scripts\check_panel_log.ps1 -Log "C:\Program Files (x86)\Steam\steamapps\common\Kenshi\KenshiCoop_host.log"
+  powershell -ExecutionPolicy Bypass -File scripts\check_panel_log.ps1 -Log "C:\Program Files (x86)\Steam\steamapps\common\Kenshi\TokelaCoop_host.log"
 
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File scripts\check_panel_log.ps1
@@ -33,14 +33,14 @@ Import-Module (Join-Path $scriptDir "CoopOracles.psm1") -Force
 
 if ($Log.Count -eq 0) {
     $candidates = @(
-        (Join-Path ${env:ProgramFiles(x86)} "Steam\steamapps\common\Kenshi\KenshiCoop_host.log"),
-        (Join-Path ${env:ProgramFiles(x86)} "Steam\steamapps\common\Kenshi\KenshiCoop_join.log"),
-        (Join-Path $env:USERPROFILE "Kenshi-Join\KenshiCoop_host.log"),
-        (Join-Path $env:USERPROFILE "Kenshi-Join\KenshiCoop_join.log")
+        (Join-Path ${env:ProgramFiles(x86)} "Steam\steamapps\common\Kenshi\TokelaCoop_host.log"),
+        (Join-Path ${env:ProgramFiles(x86)} "Steam\steamapps\common\Kenshi\TokelaCoop_join.log"),
+        (Join-Path $env:USERPROFILE "Kenshi-Join\TokelaCoop_host.log"),
+        (Join-Path $env:USERPROFILE "Kenshi-Join\TokelaCoop_join.log")
     )
     $Log = @($candidates | Where-Object { Test-Path $_ })
     if ($Log.Count -eq 0) {
-        Write-Host "No logs given and no default KenshiCoop_*.log found. Pass -Log <path>."
+        Write-Host "No logs given and no default TokelaCoop_*.log found. Pass -Log <path>."
         exit 2
     }
 }

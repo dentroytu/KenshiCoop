@@ -8,8 +8,8 @@
 // over the buttons below). Giving each wrapped piece its own row keeps every row
 // one line tall.
 
-#ifndef KENSHICOOP_TEXTWRAP_H
-#define KENSHICOOP_TEXTWRAP_H
+#ifndef TOKELACOOP_TEXTWRAP_H
+#define TOKELACOOP_TEXTWRAP_H
 
 #include <string>
 #include <vector>
@@ -77,4 +77,4 @@ inline void wrapTextPx(const std::string& s, float maxPx, GlyphAdvanceFn adv, vo
 
 } // namespace coop
 
-#endif // KENSHICOOP_TEXTWRAP_H
+#endif // TOKELACOOP_TEXTWRAP_H

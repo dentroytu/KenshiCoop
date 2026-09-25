@@ -3,7 +3,7 @@
   Capture a single window to a PNG, by process id (preferred) or window-title match.
 
 .DESCRIPTION
-  Used by the KenshiCoop test runner so an agent can visually evaluate the host
+  Used by the TokelaCoop test runner so an agent can visually evaluate the host
   and join clients. Capture is OS-level (no game code), so it works even when the
   window is unfocused or overlapped by the other client.
 

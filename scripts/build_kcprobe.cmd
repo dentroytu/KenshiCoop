@@ -1,5 +1,5 @@
 @echo off
-REM Build dist\kcprobe.exe - a fake KenshiCoop peer for testing the handshake
+REM Build dist\kcprobe.exe - a fake TokelaCoop peer for testing the handshake
 REM (version / session-full refusals, receive gate, goodbye) against a real
 REM host on one PC (src\kcprobe). Test-only: not part of the player kit.
 REM Same vendored+patched ENet sources and v100 toolchain as the plugin.
