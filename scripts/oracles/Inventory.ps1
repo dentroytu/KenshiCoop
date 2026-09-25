@@ -380,6 +380,41 @@ function Test-TradeProbe {
         takeSig = $takeSig; giveSig = $giveSig; wpnSig = $wpnSig })
 }
 
+# trade_burst (protocol 37 pairing, 2026-09-25): three different items dragged across
+# the players' bags in one tick, then back. Each client's in-plugin verdict is a
+# per-item ledger at settled moments (mid and final); here both must PASS, the host
+# must have sent one intent per item per burst, the join must have applied them all,
+# and none may have been refused - a refusal means one side took from a stale copy.
+function Test-TradeBurst {
+    param([string]$HostFile, [string]$JoinFile)
+    $rx = "SCENARIO TRBU verdict role=(\w+) pass=(\d) mid=(\d) final=(\d) take=(-?\d+) give=(-?\d+)"
+    $read = {
+        param($file)
+        if (-not (Test-Path $file)) { return $null }
+        $l = Select-String -Path $file -Pattern $rx | Select-Object -Last 1
+        if (-not $l) { return $null }
+        $null = $l.Line -match $rx
+        return [pscustomobject]@{ pass = [int]$matches[2]; mid = [int]$matches[3]
+                                  final = [int]$matches[4]; take = [int]$matches[5]; give = [int]$matches[6] }
+    }
+    $h = & $read $HostFile
+    $j = & $read $JoinFile
+    if (-not $h -or -not $j) {
+        Write-Host "  TRADE-BURST FAIL - missing verdict (host=$([bool]$h) join=$([bool]$j))"
+        return (Add-GateResult -Name "trade_burst" -Status FAIL -Detail "missing verdict")
+    }
+    $sends    = @(Select-String -Path $HostFile -Pattern "\[xfer\] SEND id=").Count
+    $applies  = @(Select-String -Path $JoinFile -Pattern "\[xfer\] APPLY id=").Count
+    $refusals = @(Select-String -Path $HostFile -Pattern "\[xfer\] ACK id=\d+ from=\d+ verdict=(reject|partial)").Count
+    $ok = ($h.pass -eq 1) -and ($j.pass -eq 1) -and ($sends -ge 6) -and ($applies -ge 6) -and ($refusals -eq 0)
+    Write-Host ("  TRADE-BURST " + $(if ($ok) { "PASS" } else { "FAIL" }) +
+                " - host pass=$($h.pass) mid=$($h.mid) final=$($h.final) take=$($h.take) give=$($h.give);" +
+                " join pass=$($j.pass) mid=$($j.mid) final=$($j.final); sends=$sends applies=$applies refusals=$refusals")
+    return (Add-GateResult -Name "trade_burst" -Status $(if ($ok) { "PASS" } else { "FAIL" }) `
+                -Metrics @{ hostMid = $h.mid; hostFinal = $h.final; joinMid = $j.mid; joinFinal = $j.final
+                            take = $h.take; give = $h.give; sends = $sends; applies = $applies; refusals = $refusals })
+}
+
 # trade_peer (protocol 37 VALIDATION): the trade_probe drags rerun with the
 # transfer-intent channel live. GATES that every baselined failure signature is
 # closed: TAKE lands AND its removal reaches the owner (no dupe), GIVE arrives on

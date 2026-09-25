@@ -31,6 +31,7 @@
 #include "../plugin/core/WorkPose.h"
 #include "../plugin/core/DeathLatch.h"
 #include "../plugin/core/ModList.h" // protocol 56: active-mod list diff (header-only)
+#include "../plugin/core/XferPair.h" // protocol 37: pairing settled drag diffs
 #include "../plugin/core/UiLang.h"  // accented fonts XML + ASCII fallback (header-only)
 #include "../plugin/core/Refusal.h" // how a client reads a refusal + its player text
 #include "../plugin/core/TextWrap.h" // F2 panel: one row per wrapped line
@@ -1144,6 +1145,44 @@ static void testOwnRanks() {
 // a streamed screen leaks no account. A leaked prefix would defeat the point, so
 // the exact output shape is pinned here.
 
+static void testXferPair() {
+    std::printf("== drag detector pairing (XferPair.h, protocol 37) ==\n");
+    typedef std::map<int, std::map<std::string, int> > Diffs;
+    std::vector<coop::XferFire<int, std::string> > f;
+
+    // A player drags three different stacks from container 1 to container 2
+    // within one scan: every one of them is a transfer (it used to be one).
+    Diffs d;
+    d[1]["food"] = -2; d[1]["cloth"] = -1; d[1]["plate"] = -5;
+    d[2]["food"] = 2;  d[2]["cloth"] = 1;  d[2]["plate"] = 5;
+    coop::pairXferDiffs(d, f);
+    CHECK_EQ("three keys moved -> three fires", (int)f.size(), 3);
+    int total = 0;
+    for (size_t i = 0; i < f.size(); ++i) {
+        total += f[i].qty;
+        CHECK("fire goes 1 -> 2", f[i].src == 1 && f[i].dst == 2);
+    }
+    CHECK_EQ("every unit moved once", total, 8);
+
+    // One loss split across two destinations.
+    d.clear(); d[1]["plate"] = -5; d[2]["plate"] = 3; d[3]["plate"] = 2;
+    coop::pairXferDiffs(d, f);
+    CHECK("split loss -> 3 to #2 and 2 to #3", f.size() == 2 &&
+          f[0].dst == 2 && f[0].qty == 3 && f[1].dst == 3 && f[1].qty == 2);
+
+    // Two losses into one smaller gain: the gain is never paired twice.
+    d.clear(); d[1]["plate"] = -2; d[2]["plate"] = -2; d[3]["plate"] = 3;
+    coop::pairXferDiffs(d, f);
+    CHECK("two losses share one gain without over-pairing", f.size() == 2 &&
+          f[0].src == 1 && f[0].qty == 2 && f[1].src == 2 && f[1].qty == 1);
+
+    // Unpaired diffs stay unpaired: loot (gain only), a drop (loss only), and
+    // different items never pair with each other.
+    d.clear(); d[1]["food"] = -1; d[2]["cloth"] = 1; d[3]["plate"] = 4;
+    coop::pairXferDiffs(d, f);
+    CHECK_EQ("different keys / lone diffs -> no fire", (int)f.size(), 0);
+}
+
 static void testModList() {
     std::printf("== active-mod list diff (ModList.h, protocol 56) ==\n");
     using coop::ModEntry;
@@ -2095,6 +2134,7 @@ int main() {
     testOwnRanks();
     testSteamIdParse();
     testModList();
+    testXferPair();
     testRefusal();
     testPresenceOrder();
     testAccentText();

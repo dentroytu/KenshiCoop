@@ -8,6 +8,10 @@
 
 #include "ScenarioSupport.h"
 
+#include <algorithm>
+#include <map>
+#include <vector>
+
 namespace coop {
 namespace {
 
@@ -2531,6 +2535,212 @@ private:
 };
 const float InvDumpAllScenario::RADIUS = 60.0f;
 
+// trade_burst (protocol 37 pairing, 2026-09-25): several DIFFERENT items dragged across
+// the two players' bags inside one detector scan. The detector used to fire one move per
+// container per scan and then re-read both containers whole, so every other item of the
+// burst was folded into its baseline unannounced - the owner's next snapshot re-added
+// those (duplicates) or wiped them (lost items). This is the chest session players have:
+// three stacks moved in a second.
+//   SEED  @6s  (JOIN): three distinct base-game items, 2 of each, into its own tab (rank 1),
+//                      picked by stringID so both languages and any mod set agree
+//   PICK  @12s (HOST): the same three, read back as rank 1's gains over its pre-seed state
+//   BASE  @16s (both): per item, how many sit in rank 0 and rank 1 on this client
+//   TAKE  @18s (HOST): one of EACH, rank 1 -> rank 0, all in one tick
+//   MID   @32s (both): every item is base+1 in rank 0 and base-1 in rank 1
+//   GIVE  @34s (HOST): all three back, rank 0 -> rank 1, in one tick
+//   FINAL @48s (both): every item is back to its base in both ranks
+// A per-item ledger at settled moments, not a presence check (REPLICATION_PITFALLS 6):
+// a duplicate reads high, a loss reads low. Test-TradeBurst also wants 6 intents sent,
+// 6 applied and none refused.
+class TradeBurstScenario : public TimedScenario {
+public:
+    TradeBurstScenario()
+        : TimedScenario("trade_burst", 0), lastLogMs_(0), nSid_(0), seeded_(false),
+          hostBaseDone_(false), picked_(false), baseDone_(false), takeDone_(false),
+          midDone_(false), giveDone_(false), finalDone_(false), midOk_(false),
+          finalOk_(false), takeMoved_(0), giveMoved_(0) {
+        for (int r = 0; r < 2; ++r) {
+            rankHave_[r] = false;
+            for (int k = 0; k < 5; ++k) rankHand_[r][k] = 0;
+        }
+        for (int i = 0; i < N; ++i) { sid_[i][0] = '\0'; base0_[i] = 0; base1_[i] = 0; }
+    }
+
+    virtual void onStart(const ScenarioContext& ctx) {
+        for (unsigned int r = 0; r < 2; ++r) rankHave_[r] = ovlRankContainer(ctx.gw, r, rankHand_[r]);
+        char b[160];
+        _snprintf(b, sizeof(b) - 1, "SCENARIO TRBU anchor host=%d r0=%d r1=%d",
+                  ctx.isHost ? 1 : 0, rankHave_[0] ? 1 : 0, rankHave_[1] ? 1 : 0);
+        b[sizeof(b) - 1] = '\0'; coop::logLine(b);
+    }
+
+    virtual bool onTick(const ScenarioContext& ctx) {
+        if (lastLogMs_ != 0 && ctx.elapsedMs - lastLogMs_ < 500) return done(ctx);
+        lastLogMs_ = ctx.elapsedMs;
+        for (unsigned int r = 0; r < 2; ++r)
+            if (!rankHave_[r]) rankHave_[r] = ovlRankContainer(ctx.gw, r, rankHand_[r]);
+        if (!rankHave_[0] || !rankHave_[1]) return done(ctx);
+
+        // HOST: rank 1 before the join seeds, to recognise the seeded items later.
+        if (ctx.isHost && !hostBaseDone_ && ctx.elapsedMs >= 2000 && ctx.elapsedMs < SEED_MS)
+            hostBaseDone_ = countRank(ctx.gw, 1, hostBase_) > 0;
+
+        if (!ctx.isHost && !seeded_ && ctx.elapsedMs >= SEED_MS) {
+            seeded_ = true;
+            nSid_ = engine::seedDistinctBaseItems(ctx.gw, rankHand_[1], N, 2, sid_);
+            picked_ = (nSid_ == N);
+            logSids("SEED");
+        }
+        if (ctx.isHost && !picked_ && hostBaseDone_ && ctx.elapsedMs >= PICK_MS &&
+            ctx.elapsedMs < PICK_MS + 6000) {
+            pickSeeded(ctx.gw);
+            if (picked_ || ctx.elapsedMs + 500 >= PICK_MS + 6000) logSids("picked");
+        }
+        if (!picked_) return done(ctx);
+
+        int c0[N], c1[N];
+        if (!sample(ctx.gw, c0, c1)) return done(ctx);
+        char b[200];
+        _snprintf(b, sizeof(b) - 1, "SCENARIO TRBU t=%lu r0=%d,%d,%d r1=%d,%d,%d",
+                  (unsigned long)ctx.elapsedMs, c0[0], c0[1], c0[2], c1[0], c1[1], c1[2]);
+        b[sizeof(b) - 1] = '\0'; coop::logLine(b);
+
+        if (!baseDone_ && ctx.elapsedMs >= BASE_MS) {
+            baseDone_ = true;
+            for (int i = 0; i < N; ++i) { base0_[i] = c0[i]; base1_[i] = c1[i]; }
+            coop::logLine("SCENARIO TRBU base latched");
+        }
+        if (ctx.isHost && baseDone_ && !takeDone_ && ctx.elapsedMs >= TAKE_MS) {
+            takeDone_ = true;
+            for (int i = 0; i < N; ++i)
+                takeMoved_ += engine::moveItemBetweenContainers(
+                    ctx.gw, rankHand_[1], rankHand_[0], sid_[i], ITEM_CAT, 1);
+            logBurst("TAKE", takeMoved_);
+        }
+        if (baseDone_ && !midDone_ && ctx.elapsedMs >= MID_MS) {
+            midDone_ = true;
+            midOk_ = true;
+            for (int i = 0; i < N; ++i)
+                if (c0[i] != base0_[i] + 1 || c1[i] != base1_[i] - 1) midOk_ = false;
+            logCheck("mid", midOk_);
+        }
+        if (ctx.isHost && midDone_ && !giveDone_ && ctx.elapsedMs >= GIVE_MS) {
+            giveDone_ = true;
+            for (int i = 0; i < N; ++i)
+                giveMoved_ += engine::moveItemBetweenContainers(
+                    ctx.gw, rankHand_[0], rankHand_[1], sid_[i], ITEM_CAT, 1);
+            logBurst("GIVE", giveMoved_);
+        }
+        if (baseDone_ && !finalDone_ && ctx.elapsedMs >= FINAL_MS) {
+            finalDone_ = true;
+            finalOk_ = true;
+            for (int i = 0; i < N; ++i)
+                if (c0[i] != base0_[i] || c1[i] != base1_[i]) finalOk_ = false;
+            logCheck("final", finalOk_);
+        }
+        return done(ctx);
+    }
+
+private:
+    enum { N = 3 };
+    static const unsigned int  ITEM_CAT = 4; // GameData ITEM: plain goods, not gear
+    static const unsigned long SEED_MS  = 6000;
+    static const unsigned long PICK_MS  = 12000;
+    static const unsigned long BASE_MS  = 16000;
+    static const unsigned long TAKE_MS  = 18000;
+    static const unsigned long MID_MS   = 32000;
+    static const unsigned long GIVE_MS  = 34000;
+    static const unsigned long FINAL_MS = 48000;
+    static const unsigned long DUR_MS   = 52000;
+
+    bool done(const ScenarioContext& ctx) {
+        if (ctx.elapsedMs < DUR_MS) return false;
+        bool pass = picked_ && baseDone_ && midOk_ && finalOk_ &&
+                    (!ctx.isHost || (takeMoved_ == N && giveMoved_ == N));
+        char b[200];
+        _snprintf(b, sizeof(b) - 1,
+                  "SCENARIO TRBU verdict role=%s pass=%d mid=%d final=%d take=%d give=%d",
+                  ctx.isHost ? "host" : "join", pass ? 1 : 0, midOk_ ? 1 : 0,
+                  finalOk_ ? 1 : 0, takeMoved_, giveMoved_);
+        b[sizeof(b) - 1] = '\0'; coop::logLine(b);
+        setPassed(pass);
+        return true;
+    }
+    // (stringID -> units) of ITEM-type entries in the given rank's container.
+    int countRank(GameWorld* gw, unsigned int rank, std::map<std::string, int>& out) {
+        out.clear();
+        InvItemEntry items[INV_ITEMS_MAX];
+        unsigned int n = engine::captureContainerContents(gw, rankHand_[rank], items, INV_ITEMS_MAX, 0);
+        for (unsigned int i = 0; i < n; ++i) {
+            if (items[i].itemType != ITEM_CAT) continue;
+            out[std::string(items[i].stringID)] += (items[i].quantity < 1) ? 1 : (int)items[i].quantity;
+        }
+        return (int)n;
+    }
+    // The three items the join seeded: base-game ITEMs whose count in rank 1 rose by 2+
+    // since before the seed, lowest stringID number first (the join's own order).
+    void pickSeeded(GameWorld* gw) {
+        std::map<std::string, int> now;
+        if (countRank(gw, 1, now) == 0) return;
+        std::vector<std::pair<int, std::string> > gains;
+        for (std::map<std::string, int>::iterator it = now.begin(); it != now.end(); ++it) {
+            const std::string& s = it->first;
+            if (s.size() < 15 || s.compare(s.size() - 14, 14, "-gamedata.base") != 0) continue;
+            std::map<std::string, int>::iterator b = hostBase_.find(s);
+            int before = (b != hostBase_.end()) ? b->second : 0;
+            if (it->second - before >= 2) gains.push_back(std::make_pair(atoi(s.c_str()), s));
+        }
+        std::sort(gains.begin(), gains.end());
+        if ((int)gains.size() < N) return;
+        for (int i = 0; i < N; ++i) {
+            strncpy(sid_[i], gains[i].second.c_str(), sizeof(sid_[i]) - 1);
+            sid_[i][sizeof(sid_[i]) - 1] = '\0';
+        }
+        nSid_ = N;
+        picked_ = true;
+    }
+    bool sample(GameWorld* gw, int c0[N], int c1[N]) {
+        std::map<std::string, int> m0, m1;
+        if (countRank(gw, 0, m0) == 0 || countRank(gw, 1, m1) == 0) return false;
+        for (int i = 0; i < N; ++i) {
+            std::map<std::string, int>::iterator a = m0.find(sid_[i]);
+            std::map<std::string, int>::iterator b = m1.find(sid_[i]);
+            c0[i] = (a != m0.end()) ? a->second : 0;
+            c1[i] = (b != m1.end()) ? b->second : 0;
+        }
+        return true;
+    }
+    void logSids(const char* what) {
+        char b[240];
+        _snprintf(b, sizeof(b) - 1, "SCENARIO TRBU %s n=%d sids='%s|%s|%s'", what, nSid_,
+                  sid_[0], sid_[1], sid_[2]);
+        b[sizeof(b) - 1] = '\0'; coop::logLine(b);
+    }
+    void logBurst(const char* what, int moved) {
+        char b[120];
+        _snprintf(b, sizeof(b) - 1, "SCENARIO TRBU %s n=%d", what, moved);
+        b[sizeof(b) - 1] = '\0'; coop::logLine(b);
+    }
+    void logCheck(const char* what, bool ok) {
+        char b[200];
+        _snprintf(b, sizeof(b) - 1, "SCENARIO TRBU %s ok=%d base r0=%d,%d,%d r1=%d,%d,%d",
+                  what, ok ? 1 : 0, base0_[0], base0_[1], base0_[2],
+                  base1_[0], base1_[1], base1_[2]);
+        b[sizeof(b) - 1] = '\0'; coop::logLine(b);
+    }
+
+    unsigned long lastLogMs_;
+    bool          rankHave_[2];
+    unsigned int  rankHand_[2][5];
+    char          sid_[N][48];
+    int           nSid_;
+    std::map<std::string, int> hostBase_;
+    int           base0_[N], base1_[N];
+    bool          seeded_, hostBaseDone_, picked_, baseDone_, takeDone_, midDone_;
+    bool          giveDone_, finalDone_, midOk_, finalOk_;
+    int           takeMoved_, giveMoved_;
+};
+
 Scenario* makeInventoryScenario(const std::string& name) {
     // Same scenario twice: the plain run proves the round trip converges, and the
     // _refuse run drives it with the first re-home refused (KENSHICOOP_WD_REFUSE_REHOME),
@@ -2568,6 +2778,7 @@ Scenario* makeInventoryScenario(const std::string& name) {
     if (name == "inv_bidir")    return new InventoryBidirScenario();
     if (name == "trade_probe")  return new TradeScenario(/*peer=*/false);
     if (name == "trade_peer")   return new TradeScenario(/*peer=*/true);
+    if (name == "trade_burst")  return new TradeBurstScenario();
     if (name == "xfer_block")   return new XferBlockScenario();
     if (name == "inv_equip")    return new InventoryEquipScenario(/*reequip=*/false);
     if (name == "inv_reequip")  return new InventoryEquipScenario(/*reequip=*/true);

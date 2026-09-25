@@ -12,6 +12,7 @@
 // PowerShell oracles (see resources/CODE_MAP.md, log-tag index).
 
 #include "ReplicatorUtil.h"
+#include "../core/XferPair.h"
 
 namespace coop {
 
@@ -46,6 +47,7 @@ void Replicator::publishInventories(GameWorld* gw, NetLink& net, u32 ownerId) {
                 k.cs = rows[i].hand[2]; k.i = rows[i].hand[3];
                 k.s = rows[i].hand[4];
                 censusContainers_.insert(k);
+                censusEver_.insert(k);
             }
         }
         owned.insert(censusContainers_.begin(), censusContainers_.end());
@@ -133,6 +135,15 @@ void Replicator::publishInventories(GameWorld* gw, NetLink& net, u32 ownerId) {
                 b[sizeof(b) - 1] = '\0'; coop::logLine(b); }
             continue;
         }
+        // Protocol 37 ordering: hold while this container differs from the drag
+        // detector's baseline - a cross-owner move out of or into it may still become an
+        // intent. This snapshot settles in 350 ms and the intent in 600 ms plus a scan,
+        // so the snapshot used to arrive FIRST: the peer, with no diff of its own to
+        // defer on, minted the item into its copy of this container, and the intent then
+        // moved the real one in as well (trade_peer's weapon: three on the join where the
+        // host had two, for 14 s, crowding out the armour that followed). Bounded like
+        // the gear hold, so a diff that never pairs (loot, eating) only delays it.
+        if (xferHoldsSnapshot(gw, *it, cHand, now)) continue;
         // Protocol 34 wire identity: a session-placed building rides its
         // protocol-27 placer key (own placement = our hand; a minted proxy =
         // the reverse map). Characters / baked containers stay raw (kind 0).
@@ -215,7 +226,20 @@ void Replicator::applyInventories(GameWorld* gw) {
                 unsigned long now = nowMs();
                 unsigned long& since = xferDefer_[k];
                 if (since == 0) since = now;
-                if (now - since < XFER_DEFER_MS) {
+                // A player filling or emptying this container keeps making fresh
+                // diffs, so the window is measured from the LATEST one: timed from the
+                // first, a session of more than 3 s reconciled over the units still in
+                // flight and destroyed them. Bounded, so a diff that never pairs cannot
+                // hold the reconcile off forever.
+                const unsigned long XFER_DEFER_FRESH_MS = 1500; // > settle + one scan
+                const unsigned long XFER_DEFER_MAX_MS   = 12000;
+                bool fresh = false;
+                std::map<Key, std::map<XKey, XferPend> >::iterator pk = xferPend_.find(k);
+                if (pk != xferPend_.end())
+                    for (std::map<XKey, XferPend>::iterator pe = pk->second.begin();
+                         pe != pk->second.end() && !fresh; ++pe)
+                        if (now - pe->second.sinceMs < XFER_DEFER_FRESH_MS) fresh = true;
+                if ((now - since < XFER_DEFER_MS || fresh) && now - since < XFER_DEFER_MAX_MS) {
                     it->second.dirty = true; // re-visit next tick
                     continue;
                 }
@@ -1087,7 +1111,7 @@ void Replicator::applyWeaponDrops(GameWorld* gw, Inbound& in) {
             trackGroundGear(std::string(p.stringID), p.ownerId, p.dropId, dropped,
                             /*authored*/ false);
         // Keep the transfer detector blind to the relocation we just made.
-        if (moved > 0) xferRebase(gw, ok);
+        if (moved > 0) xferRebaseKey(gw, ok, XKey(std::string(p.stringID), p.itemType));
         char b[240]; _snprintf(b, sizeof(b) - 1,
             "[wd] APPLY id=%u sid='%s' owner=%u,%u,%u,%u,%u moved=%d pos=%.2f,%.2f,%.2f tracked=%u",
             p.dropId, p.stringID, p.oType, p.oContainer, p.oContainerSerial, p.oIndex,
@@ -1284,7 +1308,7 @@ void Replicator::retryPendingPickups(GameWorld* gw) {
             b[sizeof(b) - 1] = '\0'; coop::logLine(b);
             Key tk; tk.t = it->targetHand[0]; tk.c = it->targetHand[1]; tk.cs = it->targetHand[2];
             tk.i = it->targetHand[3]; tk.s = it->targetHand[4];
-            xferRebase(gw, tk); // keep the drag detector blind to our own relocation
+            xferRebaseKey(gw, tk, XKey(it->sid, it->itemType)); // detector blind to our relocation
             it = pendingPickups_.erase(it);
             continue;
         }
@@ -1352,7 +1376,7 @@ void Replicator::reconcileGroundGear(GameWorld* gw) {
                 b[sizeof(b) - 1] = '\0'; coop::logLine(b);
                 Key tk; tk.t = g->pendingHand[0]; tk.c = g->pendingHand[1];
                 tk.cs = g->pendingHand[2]; tk.i = g->pendingHand[3]; tk.s = g->pendingHand[4];
-                xferRebase(gw, tk); // keep the drag detector blind to our own relocation
+                xferRebaseKey(gw, tk, XKey(sit->first, g->pendingType)); // detector blind to it
                 g = q.erase(g);
                 continue;
             }
@@ -1497,7 +1521,7 @@ void Replicator::applyWeaponPickups(GameWorld* gw, Inbound& in) {
         // Keep the transfer detector blind to the relocation we just made.
         Key tk; tk.t = p.oType; tk.c = p.oContainer; tk.cs = p.oContainerSerial;
         tk.i = p.oIndex; tk.s = p.oSerial;
-        xferRebase(gw, tk);
+        xferRebaseKey(gw, tk, XKey(std::string(p.stringID), p.itemType));
     }
 }
 
@@ -1518,6 +1542,56 @@ void Replicator::xferRebase(GameWorld* gw, const Key& k) {
     }
     xferSeeded_[k] = true;
     xferPend_.erase(k);
+}
+
+void Replicator::xferRebaseKey(GameWorld* gw, const Key& k, const XKey& key) {
+    // An unseeded container has no baseline to correct: its first scan seeds it
+    // whole, after our own mutation, so there is nothing to hide from it.
+    if (xferSeeded_.find(k) == xferSeeded_.end() || !xferSeeded_[k]) return;
+    unsigned int cHand[5];
+    handForContainerKey(k, cHand);
+    if (engine::resolveObjectByHand(cHand) == 0) return;
+    InvItemEntry items[64];
+    unsigned int n = engine::captureContainerContents(gw, cHand, items, 64, 0);
+    int have = 0;
+    for (unsigned int i = 0; i < n; ++i) {
+        if (items[i].itemType != key.second || key.first != items[i].stringID) continue;
+        have += (items[i].quantity < 1) ? 1 : (int)items[i].quantity;
+    }
+    std::map<XKey, int>& base = xferBase_[k];
+    if (have > 0) base[key] = have; else base.erase(key);
+    std::map<Key, std::map<XKey, XferPend> >::iterator p = xferPend_.find(k);
+    if (p != xferPend_.end()) p->second.erase(key);
+}
+
+bool Replicator::xferHoldsSnapshot(GameWorld* gw, const Key& k, const unsigned int cHand[5],
+                                   unsigned long now) {
+    const unsigned long XFER_HOLD_MAX_MS = 2500; // > settle 600 + scan 400, with margin
+    if (xferScanMs_ == 0) return false;           // detector off (xferSync off)
+    std::map<Key, bool>::iterator s = xferSeeded_.find(k);
+    if (s == xferSeeded_.end() || !s->second) return false;
+    InvItemEntry items[64];
+    unsigned int n = engine::captureContainerContents(gw, cHand, items, 64, 0);
+    std::map<XKey, int> tot;
+    for (unsigned int i = 0; i < n; ++i) {
+        int q = items[i].quantity; if (q < 1) q = 1;
+        tot[XKey(std::string(items[i].stringID), items[i].itemType)] += q;
+    }
+    if (tot == xferBase_[k]) { xferHoldSince_.erase(k); return false; }
+    unsigned long& since = xferHoldSince_[k];
+    if (since == 0) since = now;
+    return now - since < XFER_HOLD_MAX_MS;
+}
+
+void Replicator::xferBaseShift(const Key& k, const XKey& key, int d) {
+    if (d == 0) return;
+    // Unseeded: its first scan seeds it whole, after our mutation - nothing to hide.
+    std::map<Key, bool>::iterator s = xferSeeded_.find(k);
+    if (s == xferSeeded_.end() || !s->second) return;
+    std::map<XKey, int>& base = xferBase_[k];
+    int& q = base[key];
+    q += d;
+    if (q <= 0) base.erase(key);
 }
 
 bool Replicator::xferPendingLoss(const Key& k, const char* sid) {
@@ -1574,8 +1648,12 @@ void Replicator::detectAndPublishTransfers(GameWorld* gw, NetLink& net, u32 owne
 
     // Tracked set: every container we author + every peer container we have received a
     // snapshot for. Both ends of any drag a player can perform live in this union.
+    // The host's censused chests are authored containers too: without them a host
+    // drag between the friend's character and a chest had no visible chest end, and
+    // the friend's next snapshot undid it (a duplicate, or a lost item).
     std::set<Key> tracked = ownedContainers_;
     tracked.insert(ownHands_.begin(), ownHands_.end());
+    if (storeSync_) tracked.insert(censusContainers_.begin(), censusContainers_.end());
     for (std::map<Key, InvRecv>::iterator ri = invRecv_.begin(); ri != invRecv_.end(); ++ri)
         tracked.insert(ri->first);
     if (tracked.empty()) return;
@@ -1593,6 +1671,16 @@ void Replicator::detectAndPublishTransfers(GameWorld* gw, NetLink& net, u32 owne
             int q = items[i].quantity; if (q < 1) q = 1;
             tot[XKey(std::string(items[i].stringID), items[i].itemType)] += q;
         }
+        // Back after a gap (left the census, or its block unloaded): what changed
+        // while it was out of reach is not a drag, so it is re-seeded rather than
+        // diffed against a stale baseline. A census flicker is shorter than this.
+        const unsigned long XFER_GAP_MS = 3000;
+        std::map<Key, unsigned long>::iterator ls = xferLastSeen_.find(*it);
+        if (ls != xferLastSeen_.end() && now - ls->second > XFER_GAP_MS) {
+            xferSeeded_[*it] = false;
+            xferPend_.erase(*it);
+        }
+        xferLastSeen_[*it] = now;
         if (!xferSeeded_[*it]) { xferBase_[*it] = tot; xferSeeded_[*it] = true; cur.erase(*it); }
     }
 
@@ -1635,41 +1723,29 @@ void Replicator::detectAndPublishTransfers(GameWorld* gw, NetLink& net, u32 owne
         }
     }
 
-    // PAIR pass: a settled LOSS of an item key in one container + the matching settled
-    // GAIN in another is a completed drag between the two. Collect first (rebase
-    // invalidates the pend iterators), then act.
-    struct Fire { Key src; Key dst; XKey key; int qty; };
-    std::vector<Fire> fires;
-    std::set<Key> consumed;
-    for (std::map<Key, std::map<XKey, XferPend> >::iterator li = xferPend_.begin();
-         li != xferPend_.end(); ++li) {
-        if (consumed.count(li->first) || cur.find(li->first) == cur.end()) continue;
-        for (std::map<XKey, XferPend>::iterator le = li->second.begin();
-             le != li->second.end(); ++le) {
-            if (le->second.delta >= 0) continue;
-            if (now - le->second.sinceMs < XFER_SETTLE_MS) continue;
-            for (std::map<Key, std::map<XKey, XferPend> >::iterator gi = xferPend_.begin();
-                 gi != xferPend_.end(); ++gi) {
-                if (gi == li || consumed.count(gi->first) || cur.find(gi->first) == cur.end())
-                    continue;
-                std::map<XKey, XferPend>::iterator ge = gi->second.find(le->first);
-                if (ge == gi->second.end() || ge->second.delta <= 0) continue;
-                if (now - ge->second.sinceMs < XFER_SETTLE_MS) continue;
-                Fire f; f.src = li->first; f.dst = gi->first; f.key = le->first;
-                f.qty = -le->second.delta;
-                if (ge->second.delta < f.qty) f.qty = ge->second.delta;
-                fires.push_back(f);
-                consumed.insert(f.src); consumed.insert(f.dst);
-                break;
-            }
-            if (consumed.count(li->first)) break;
-        }
+    // PAIR pass (core/XferPair.h): every settled LOSS of an item key in one container
+    // is matched with the settled GAINS of that key in other containers - a completed
+    // drag. All of them fire in this scan, and each fire moves only ITS key's
+    // baseline, so the other items of a multi-item drag keep their pends and pair
+    // too (one fire per container, then a whole-container rebase, used to fold them
+    // away unannounced: the duplicates and lost items of a quick chest session).
+    std::map<Key, std::map<XKey, int> > settled;
+    for (std::map<Key, std::map<XKey, XferPend> >::iterator pi = xferPend_.begin();
+         pi != xferPend_.end(); ++pi) {
+        if (cur.find(pi->first) == cur.end()) continue;
+        for (std::map<XKey, XferPend>::iterator pe = pi->second.begin();
+             pe != pi->second.end(); ++pe)
+            if (now - pe->second.sinceMs >= XFER_SETTLE_MS)
+                settled[pi->first][pe->first] = pe->second.delta;
     }
+    std::vector<coop::XferFire<Key, XKey> > fires;
+    coop::pairXferDiffs(settled, fires);
+    std::set<std::pair<Key, XKey> > touched;
 
     for (unsigned int i = 0; i < fires.size(); ++i) {
-        const Fire& f = fires[i];
-        bool srcOwn = ownedContainers_.count(f.src) != 0 || ownHands_.count(f.src) != 0;
-        bool dstOwn = ownedContainers_.count(f.dst) != 0 || ownHands_.count(f.dst) != 0;
+        const coop::XferFire<Key, XKey>& f = fires[i];
+        bool srcOwn = xferAuthored(f.src);
+        bool dstOwn = xferAuthored(f.dst);
         if (!srcOwn || !dstOwn) {
             // At least one end is peer-authored: the single-writer snapshots cannot
             // carry this move - author the reliable transfer intent.
@@ -1721,6 +1797,11 @@ void Replicator::detectAndPublishTransfers(GameWorld* gw, NetLink& net, u32 owne
             XferOut o;
             o.src = f.src; o.dst = f.dst; o.key = f.key; o.qty = f.qty;
             o.srcPeer = !srcOwn; o.dstPeer = !dstOwn; o.sentMs = now;
+            {
+                std::map<XKey, int>& db = xferBase_[f.dst];
+                std::map<XKey, int>::iterator dv = db.find(f.key);
+                o.priorDst = (dv != db.end()) ? dv->second : 0;
+            }
             xferOut_[pkt.xferId] = o;
             char b[240]; _snprintf(b, sizeof(b) - 1,
                 "[xfer] SEND id=%u sid='%s' type=%u qty=%d src=%u,%u,%u,%u,%u(%s) dst=%u,%u,%u,%u,%u(%s)",
@@ -1730,9 +1811,30 @@ void Replicator::detectAndPublishTransfers(GameWorld* gw, NetLink& net, u32 owne
             b[sizeof(b) - 1] = '\0'; coop::logLine(b);
         }
         // Own<->own moves need no intent (our own snapshots carry both ends); either
-        // way the baselines absorb the move so the detector never re-fires on it.
-        xferRebase(gw, f.src);
-        xferRebase(gw, f.dst);
+        // way the baselines absorb THIS key's move so the detector never re-fires on it.
+        std::map<XKey, int>& sb = xferBase_[f.src];
+        std::map<XKey, int>::iterator sv = sb.find(f.key);
+        if (sv != sb.end()) { sv->second -= f.qty; if (sv->second <= 0) sb.erase(sv); }
+        xferBase_[f.dst][f.key] += f.qty;
+        touched.insert(std::make_pair(f.src, f.key));
+        touched.insert(std::make_pair(f.dst, f.key));
+    }
+    // Re-derive each touched pend from the adjusted baseline: a fully paired diff
+    // clears; a remainder (part of a stack went somewhere untracked) restarts its
+    // clock and pairs or folds on its own.
+    for (std::set<std::pair<Key, XKey> >::iterator t = touched.begin(); t != touched.end(); ++t) {
+        std::map<XKey, int>& c = cur[t->first];
+        std::map<XKey, int>::iterator cv = c.find(t->second);
+        std::map<XKey, int>& b = xferBase_[t->first];
+        std::map<XKey, int>::iterator bv = b.find(t->second);
+        int delta = ((cv != c.end()) ? cv->second : 0) - ((bv != b.end()) ? bv->second : 0);
+        std::map<XKey, XferPend>& pend = xferPend_[t->first];
+        if (delta == 0) {
+            pend.erase(t->second);
+        } else {
+            XferPend p; p.delta = delta; p.sinceMs = now;
+            pend[t->second] = p;
+        }
     }
 }
 
@@ -1756,19 +1858,30 @@ void Replicator::applyTransfers(GameWorld* gw, Inbound& in, NetLink& net, u32 lo
         // Either end may be a mine the peer emptied, whose hand is its own.
         unsigned int sHand[5]; handForContainerKey(sk, sHand);
         unsigned int dHand[5]; handForContainerKey(dk, dHand);
+        // Everything below concerns OUR containers, so it is keyed by the LOCAL hands
+        // the wire keys resolve to: a box placed this session travels under the
+        // author's hand for it, and deciding ownership, latching or rebasing under
+        // that key missed the chest this client actually tracks and reconciles.
+        Key lsk; lsk.t = sHand[0]; lsk.c = sHand[1]; lsk.cs = sHand[2]; lsk.i = sHand[3]; lsk.s = sHand[4];
+        Key ldk; ldk.t = dHand[0]; ldk.c = dHand[1]; ldk.cs = dHand[2]; ldk.i = dHand[3]; ldk.s = dHand[4];
+        XKey key(std::string(p.stringID), p.itemType);
+        const bool srcOwn = xferAuthored(lsk);
+        const bool dstOwn = xferAuthored(ldk);
         // Relocate OUR copy of the real item between the same two containers - the
         // conservation move (never fabricates or destroys), so gear survives.
         int moved = engine::moveItemBetweenContainers(gw, sHand, dHand, p.stringID,
                                                       p.itemType, (int)p.quantity);
         int fab = 0;
-        if (moved < (int)p.quantity) {
-            // Our src copy is short (desync) - fabricate the shortfall into dst so the
-            // trade still lands. Non-gear always did this; gear joined once spike 451
-            // made weapon fabrication work (armour always could). Dupe safety: the
-            // latch below keeps stale snapshots from reconciling the fab away, and
-            // wdSuppress_ keeps the W2 weapon census from reading the count edge as a
-            // ground pickup. KENSHICOOP_WEAPON_FAB=0 restores gear-never-fabricates
-            // (weapons also die inside createItemAndAdd on the same env).
+        const int shortBy = (int)p.quantity - moved;
+        if (shortBy > 0 && !srcOwn) {
+            // Our copy of the AUTHOR's source is short (desync), but the author really
+            // had the units: fabricate the shortfall into dst so the trade still lands.
+            // Non-gear always did this; gear joined once spike 451 made weapon
+            // fabrication work (armour always could). Dupe safety: the latch below keeps
+            // stale snapshots from reconciling the fab away, and wdSuppress_ keeps the W2
+            // weapon census from reading the count edge as a ground pickup.
+            // KENSHICOOP_WEAPON_FAB=0 restores gear-never-fabricates (weapons also die
+            // inside createItemAndAdd on the same env).
             // A worn CONTAINER (backpack) NEVER fabricates: the template mints an EMPTY bag,
             // so the trade would land as a contents-less duplicate the moment our real copy
             // resolves. A short container transfer stays short and reconcile corrects it.
@@ -1776,34 +1889,42 @@ void Replicator::applyTransfers(GameWorld* gw, Inbound& in, NetLink& net, u32 lo
             if (gearFab < 0) { const char* e = getenv("KENSHICOOP_WEAPON_FAB"); gearFab = (e && e[0] == '0') ? 0 : 1; }
             if ((!isGearType(p.itemType) || gearFab) && !engine::isContainerItemType(p.itemType))
                 fab = engine::addItemsToContainerBySid(gw, dHand, p.stringID, p.itemType,
-                                                       (int)p.quantity - moved, (int)p.quality,
+                                                       shortBy, (int)p.quality,
                                                        p.manufacturer, p.material, p.level);
         }
-        XKey key(std::string(p.stringID), p.itemType);
+        // Whatever is still short is REFUSED. Either the source is ours and does not
+        // hold the units - the author took from a stale copy of it, and minting them
+        // was the duplicate - or our copy of the destination would not take them (the
+        // two clients pack a grid differently: trade_peer's armour, 2026-09-25).
+        // Nothing is destroyed on the strength of what the other side is assumed to
+        // hold (REPLICATION_PITFALLS 3): the verdict tells the author, which puts its
+        // own optimistic copy back. A drag that bounces can be repeated; an item
+        // destroyed on a wrong guess is gone for good.
+        //
         // Latch OUR peer end(s) too: an in-flight stale snapshot (captured by its
         // owner before this transfer) must not reconcile the relocation away.
-        bool srcOwn = ownedContainers_.count(sk) != 0 || ownHands_.count(sk) != 0;
-        bool dstOwn = ownedContainers_.count(dk) != 0 || ownHands_.count(dk) != 0;
-        int applied = moved + fab;
+        const int applied = moved + fab;
         if (applied > 0) {
             if (!srcOwn) {
-                XferLatch& L = xferLatch_[sk][key];
+                XferLatch& L = xferLatch_[lsk][key];
                 L.delta -= applied; L.deadlineMs = now + XFER_GRACE_MS;
-                if (L.delta == 0) xferLatch_[sk].erase(key);
+                if (L.delta == 0) xferLatch_[lsk].erase(key);
             }
             if (!dstOwn) {
-                XferLatch& L = xferLatch_[dk][key];
+                XferLatch& L = xferLatch_[ldk][key];
                 L.delta += applied; L.deadlineMs = now + XFER_GRACE_MS;
-                if (L.delta == 0) xferLatch_[dk].erase(key);
+                if (L.delta == 0) xferLatch_[ldk].erase(key);
             }
         }
         if (isGearType(p.itemType)) {
-            wdSuppress_[std::make_pair(sk, key.first)] = now + XFER_GRACE_MS;
-            wdSuppress_[std::make_pair(dk, key.first)] = now + XFER_GRACE_MS;
+            wdSuppress_[std::make_pair(lsk, key.first)] = now + XFER_GRACE_MS;
+            wdSuppress_[std::make_pair(ldk, key.first)] = now + XFER_GRACE_MS;
         }
-        // Keep the transfer detector blind to the relocation we just made.
-        xferRebase(gw, sk);
-        xferRebase(gw, dk);
+        // Keep the transfer detector blind to what we just did, and to nothing else:
+        // the baselines shift by exactly our move, so a drag the local player is
+        // making in the same containers keeps its diff and still pairs.
+        xferBaseShift(lsk, key, -moved);
+        xferBaseShift(ldk, key, applied);
         // Protocol 50: answer. The author cannot know any of this - only the
         // receiver knows whether its own copy of the source actually held the
         // item - so state it rather than let a deadline stand in for it.
@@ -1846,21 +1967,58 @@ void Replicator::applyXferAcks(GameWorld* gw, Inbound& in, u32 localId) {
         //              still show where they were, and we want to converge on
         //              that, not defend our optimistic copy of them
         //   rejected - the same thing at full size. Dropping the latch is what
-        //              lets applyInventories put our local copy back the way
-        //              the owner sees it; that is the rollback, through the
-        //              reconcile path rather than a second mutation that could
-        //              itself dupe.
+        //              lets applyInventories put our local copy of a PEER end
+        //              back the way the owner sees it.
+        // That reconcile only reaches peer ends, though. The end that is OURS
+        // already holds our optimistic result and nothing will ever undo it: a
+        // refused take stayed in our bag while the owner kept the item (trade_peer,
+        // 2026-09-25: host 2 armours, join 1), and a refused give vanished from our
+        // bag when the reconcile emptied our copy of the owner's. So the refused
+        // units are settled on our end here, by the move that undoes each case.
         if (x.srcPeer) releaseXferLatch(x.src, x.key, +x.qty);
-        if (x.dstPeer) releaseXferLatch(x.dst, x.key, -x.qty);
+        int refused = x.qty - (int)a.applied;
+        if (refused < 0) refused = 0;
+        int undone = 0;
+        const char* undo = "none";
+        if (refused > 0 && !x.dstPeer && x.srcPeer) {
+            // A take into our own container: the owner still has these units. Loose
+            // copies only while the container held the item before - a worn one may be
+            // a piece the player already had on. When it did not, every copy in it came
+            // from this take and a worn one (armour auto-equips) is the taken piece. A
+            // bag is never destroyed with what is inside it. A shortfall is a duplicate
+            // left standing and is logged below; it is never paid for with a guess.
+            unsigned int dHand[5]; handForContainerKey(x.dst, dHand);
+            undone = engine::removeItemsFromContainerBySid(gw, dHand, x.key.first.c_str(),
+                                                           x.key.second, refused,
+                                                           /*looseOnly=*/x.priorDst > 0);
+            xferBaseShift(x.dst, x.key, -undone);
+            undo = "take";
+        } else if (refused > 0 && !x.srcPeer && x.dstPeer) {
+            // A give out of our own container: move the units back from our copy
+            // of the owner's container before its reconcile deletes them.
+            unsigned int sHand[5]; handForContainerKey(x.src, sHand);
+            unsigned int dHand[5]; handForContainerKey(x.dst, dHand);
+            undone = engine::moveItemBetweenContainers(gw, dHand, sHand, x.key.first.c_str(),
+                                                       x.key.second, refused);
+            xferBaseShift(x.dst, x.key, -undone);
+            xferBaseShift(x.src, x.key, undone);
+            undo = "give";
+        }
+        // The destination latch is released only for what is settled: units a give
+        // could not bring back stay latched to the deadline, where the reconcile
+        // would otherwise delete the last copy the moment the latch dropped.
+        if (x.dstPeer) {
+            const int keep = (refused > 0 && !x.srcPeer) ? (refused - undone) : 0;
+            releaseXferLatch(x.dst, x.key, -(x.qty - keep));
+        }
         const char* vn = (a.verdict == XFER_ACK_ACCEPT)  ? "accept"
                        : (a.verdict == XFER_ACK_PARTIAL) ? "partial" : "reject";
-        char b[224]; _snprintf(b, sizeof(b) - 1,
-            "[xfer] ACK id=%u from=%u verdict=%s applied=%u/%u waitedMs=%lu sid='%s'",
+        char b[256]; _snprintf(b, sizeof(b) - 1,
+            "[xfer] ACK id=%u from=%u verdict=%s applied=%u/%u waitedMs=%lu sid='%s' undo=%s:%d/%d",
             a.xferId, a.ownerId, vn, (unsigned)a.applied, (unsigned)a.requested,
-            now - x.sentMs, x.key.first.c_str());
+            now - x.sentMs, x.key.first.c_str(), undo, undone, refused);
         b[sizeof(b) - 1] = '\0'; coop::logLine(b);
         xferOut_.erase(o);
-        (void)gw;
     }
     // Sweep intents nobody answered. The latches themselves already expire on
     // XFER_GRACE_MS; this only stops the pending map growing over a session and

@@ -1425,6 +1425,7 @@ private:
     bool           storeSync_;
     unsigned long  contCensusMs_;
     std::set<Key>  censusContainers_;
+    std::set<Key>  censusEver_;   // every container a census took in this session
 
     // Phase W1 world-item state.
     // HOST: worldTrack_ maps a ground item's LOCAL engine hand (Key) to its assigned
@@ -1632,6 +1633,8 @@ private:
         bool          srcPeer;   // we latched src (it is peer-authored)
         bool          dstPeer;
         unsigned long sentMs;
+        int           priorDst;  // units of the key dst held before this move (undo
+                                 // may take a worn copy only when this was 0)
     };
     std::map<u32, XferOut>                    xferOut_;
     // Undo one intent's contribution to a peer end's reconcile-suppression
@@ -1641,7 +1644,37 @@ private:
     unsigned long                             xferScanMs_; // last detector scan
     // Recapture `k`'s container and overwrite its baseline (clears its pends): call
     // after ANY local mutation we make ourselves so the detector only sees the user.
+    // Whole-container form: only where the whole container was just rewritten (a
+    // snapshot reconcile); anything narrower uses xferRebaseKey, so a player's other
+    // moves still waiting to pair in that container are not folded away unannounced.
     void xferRebase(GameWorld* gw, const Key& k);
+    // The same for ONE item key: re-read that key's count as its baseline and drop
+    // its pend; every other key's baseline and pend is left as it was.
+    void xferRebaseKey(GameWorld* gw, const Key& k, const XKey& key);
+    // Shift one key's baseline by exactly `d` units we moved ourselves, leaving its
+    // pend alone: the next scan re-derives it, so a drag of the same item the local
+    // player is making at the same moment keeps its diff and its settle clock
+    // (re-reading the count instead folded that drag away).
+    void xferBaseShift(const Key& k, const XKey& key, int d);
+    // A container this client authors: an explicitly registered one, a squad member
+    // we own, or (host, storeSync) a storage container the census has taken in this
+    // session - the host streams those, so its drags into and out of them are its own
+    // to report. Sticky for the session: the 1 Hz sphere census misses containers now
+    // and then, and ownership flipping with it split drags in two.
+    bool xferAuthored(const Key& k) const {
+        return ownedContainers_.count(k) != 0 || ownHands_.count(k) != 0 ||
+               (storeSync_ && censusEver_.count(k) != 0);
+    }
+    // When the detector last captured each container (a container coming back after
+    // a gap is re-seeded: what changed while it was out of reach is not a drag).
+    std::map<Key, unsigned long>              xferLastSeen_;
+    // publishInventories: hold an OWN container's snapshot while its contents differ
+    // from the detector's baseline (a move that may still become an intent), so the
+    // intent always reaches the peer before the snapshot that already shows it.
+    // Bounded; xferHoldSince_ is when the current hold began.
+    bool xferHoldsSnapshot(GameWorld* gw, const Key& k, const unsigned int cHand[5],
+                           unsigned long now);
+    std::map<Key, unsigned long>              xferHoldSince_;
     // True while the transfer detector is watching an unresolved LOSS of `sid` from
     // container `k` - the W2 census fallback defers its drop verdict for it.
     bool xferPendingLoss(const Key& k, const char* sid);

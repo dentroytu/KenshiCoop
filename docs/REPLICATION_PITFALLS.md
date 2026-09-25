@@ -468,3 +468,42 @@ asserting a fact that can stop being true has to be re-asserted on a cadence and
 withdrawn when it lapses — otherwise the instrument manufactures the failure it
 was built to detect, and it does so most convincingly in exactly the long
 sessions where you are least able to check it.
+
+## 19. Adjudicate a drag per item, and make the intent arrive first
+
+Three faults in the cross-owner drag path (protocol 37) shared one shape: a
+decision made for a whole container when only one item had been settled.
+
+- **One fire per container, then a whole-container rebase.** The detector paired
+  one settled loss per container per scan and then re-read both containers into
+  its baseline. Every other item of a burst (three stacks dragged into a chest in
+  a second) was folded away unannounced, and the owner's next snapshot re-added
+  it (duplicate) or wiped it (loss). `core/XferPair.h` now pairs every settled
+  loss, splits a loss across several gains, and each fire moves only its own
+  key's baseline. Our own relocations shift the baseline by exactly what they
+  moved (`xferBaseShift`) instead of re-reading the count, so a drag the local
+  player makes in the same instant keeps its diff.
+- **The snapshot overtook the intent.** An author's own-container snapshot
+  settles in 350 ms and the intent in 600 ms plus a scan. The peer, with no diff
+  of its own to defer on, minted the item from the snapshot, and the intent then
+  moved the real one in as well — three weapons where the author had two, for
+  14 s, crowding out the next item. `publishInventories` now holds an own
+  container's snapshot while its contents differ from the detector's baseline
+  (bounded, 2.5 s).
+- **A refused take left the taker's copy standing.** The verdict's rollback only
+  reconciled the PEER end; the end the author owns kept its optimistic result.
+  The author now settles refused units on its own end (a take is removed, a give
+  is moved back), and the receiver no longer mints units into a take whose source
+  it owns but does not hold.
+
+A first version also let the receiver destroy its own units when its copy of
+the author's container would not fit them, "because the author holds them". An
+adversarial review refuted it: that is a guess about the other machine, the host
+is where the saved world lives, and a bag goes with everything inside it
+(§3, §4). Refused units now bounce back to the author instead — a drag that
+bounces can be repeated.
+
+**Rule.** Pairing, rebasing and rollback are per item key and per unit, never per
+container; the message that explains a change must leave before the state that
+shows it; and settlement touches only units this client can see. `trade_burst`
+gates the burst case (it fails against the old detector: 2 of 6 intents sent).

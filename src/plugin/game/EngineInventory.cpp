@@ -13,6 +13,9 @@
 
 #include "EngineInternal.h"
 
+#include <algorithm> // std::sort (seedDistinctBaseItems)
+#include <cstdlib>   // atoi
+
 namespace coop {
 namespace engine {
 
@@ -1150,6 +1153,52 @@ int addTestItemsToContainer(GameWorld* gw, const unsigned int cHand[5], int qty,
     return ok ? qty : 0;
 }
 
+namespace {
+// SEH shell: copy the stringID of every base-game ITEM template into buf (PODs only).
+unsigned int baseItemSidsSeh(GameWorld* gw, char (*buf)[48], unsigned int cap) {
+    unsigned int k = 0;
+    __try {
+        g_dataScratch.clear();
+        g_getDataOfTypeFn(&gw->gamedata, &g_dataScratch, ITEM);
+        const unsigned int n = g_dataScratch.size();
+        for (unsigned int i = 0; i < n && k < cap; ++i) {
+            GameData* gd = g_dataScratch[i];
+            if (!gd) continue;
+            const char* s = gd->stringID.c_str();
+            const size_t sl = s ? strlen(s) : 0;
+            if (sl < 15 || sl >= 48 || strcmp(s + sl - 14, "-gamedata.base") != 0) continue;
+            memcpy(buf[k], s, sl + 1);
+            ++k;
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {}
+    return k;
+}
+} // namespace
+
+int seedDistinctBaseItems(GameWorld* gw, const unsigned int cHand[5], int n, int qty,
+                          char (*out)[48]) {
+    if (!gw || n <= 0 || qty <= 0 || !out || !g_getDataOfTypeFn) return 0;
+    RootObject* ro = resolveObjectByHand(cHand);
+    if (!ro) return 0;
+    Inventory* inv = invOf(ro);
+    if (!inv) return 0;
+    static char s_sids[4096][48]; // main thread only
+    const unsigned int m = baseItemSidsSeh(gw, s_sids, 4096);
+    std::vector<std::pair<int, unsigned int> > order;
+    for (unsigned int i = 0; i < m; ++i) order.push_back(std::make_pair(atoi(s_sids[i]), i));
+    std::sort(order.begin(), order.end());
+    int added = 0;
+    for (size_t j = 0; j < order.size() && added < n; ++j) {
+        const char* sid = s_sids[order[j].second];
+        // createItemAndAdd is SEH-guarded; false = no such template or refused.
+        if (!createItemAndAdd(gw, inv, sid, (unsigned int)ITEM, qty, 0, /*equip=*/false)) continue;
+        strncpy(out[added], sid, 47);
+        out[added][47] = '\0';
+        ++added;
+    }
+    return added;
+}
+
 int probeAddAnyToContainer(GameWorld* gw, const unsigned int cHand[5], int qty,
                            char* outStringID, unsigned int outLen) {
     if (outStringID && outLen) outStringID[0] = '\0';
@@ -1345,6 +1394,30 @@ int moveItemBetweenContainers(GameWorld* gw, const unsigned int srcHand[5],
     }
     g_invVetoSuspend = vetoSav;
     return moved;
+}
+
+int removeItemsFromContainerBySid(GameWorld* gw, const unsigned int cHand[5],
+                                  const char* sid, unsigned int typeCat, int qty,
+                                  bool looseOnly) {
+    if (!gw || !sid || !sid[0] || qty <= 0) return 0;
+    if (isContainerItemType(typeCat)) return 0;
+    RootObject* ro = resolveObjectByHand(cHand);
+    if (!ro) return 0;
+    Inventory* inv = invOf(ro);
+    if (!inv) return 0;
+    const unsigned int MAXC = 64;
+    InvItemEntry cur[64];
+    Item* curItems[64];
+    bool vetoSav = g_invVetoSuspend; g_invVetoSuspend = true;
+    int removed = 0;
+    // Loose first, then (unless looseOnly) worn; re-read between passes (removal
+    // frees the stacks).
+    for (int pass = 0; pass < (looseOnly ? 1 : 2) && removed < qty; ++pass) {
+        unsigned int n = readInvItems(inv, cur, curItems, MAXC);
+        removed += removeByKey(inv, curItems, cur, n, sid, typeCat, qty - removed, pass);
+    }
+    g_invVetoSuspend = vetoSav;
+    return removed;
 }
 
 // SEH-guarded DIAGNOSTIC: log the full inventory of the object at cHand - every loose
