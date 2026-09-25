@@ -1060,8 +1060,17 @@ namespace {
 // Find a "common", general-inventory-friendly item template (stackable trade goods /
 // food the player squad's backpack always accepts). Falls back to the first ITEM
 // template. Caller holds SEH. Returns the template + writes its itemType category.
+//
+// Both clients resolve this independently and must land on the SAME template.
+// Names are localized: a Spanish Kenshi names the base items in Spanish while an
+// untranslated mod item still says "iron plate", so a name-only search picked a
+// mod item on one side and a base item on the other (run 20260925_042807). Hence a
+// fixed base-game stringID first; the name search is the fallback, base game first.
 GameData* findCommonItemTemplate(GameWorld* gw, unsigned int* outType) {
     if (!gw || !g_getDataOfTypeFn) return 0;
+    const char* FIXED_SID = "42159-gamedata.base";
+    const char* BASE_SUFFIX = "gamedata.base";
+    const size_t baseLen = strlen(BASE_SUFFIX);
     const char* prefs[] = {
         "iron plate", "copper", "building materials", "raw meat", "dustwich",
         "foodcube", "ration", "rock", "cotton", "fabric"
@@ -1071,14 +1080,26 @@ GameData* findCommonItemTemplate(GameWorld* gw, unsigned int* outType) {
         g_dataScratch.clear();
         g_getDataOfTypeFn(&gw->gamedata, &g_dataScratch, ITEM);
         unsigned int n = g_dataScratch.size();
-        for (unsigned int k = 0; k < np; ++k)
-            for (unsigned int i = 0; i < n; ++i) {
-                GameData* gd = g_dataScratch[i];
-                if (gd && ciContains(gd->name.c_str(), prefs[k])) {
+        for (unsigned int i = 0; i < n; ++i) {
+            GameData* gd = g_dataScratch[i];
+            if (gd && strcmp(gd->stringID.c_str(), FIXED_SID) == 0) {
+                if (outType) *outType = (unsigned int)ITEM;
+                return gd;
+            }
+        }
+        for (int pass = 0; pass < 2; ++pass)          // 0: base game only, 1: any
+            for (unsigned int k = 0; k < np; ++k)
+                for (unsigned int i = 0; i < n; ++i) {
+                    GameData* gd = g_dataScratch[i];
+                    if (!gd || !ciContains(gd->name.c_str(), prefs[k])) continue;
+                    if (pass == 0) {
+                        const char* s = gd->stringID.c_str();
+                        const size_t sl = s ? strlen(s) : 0;
+                        if (sl < baseLen || strcmp(s + sl - baseLen, BASE_SUFFIX) != 0) continue;
+                    }
                     if (outType) *outType = (unsigned int)ITEM;
                     return gd;
                 }
-            }
         for (unsigned int i = 0; i < n; ++i)
             if (g_dataScratch[i]) { if (outType) *outType = (unsigned int)ITEM; return g_dataScratch[i]; }
     } __except (EXCEPTION_EXECUTE_HANDLER) {
