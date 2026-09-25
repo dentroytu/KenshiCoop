@@ -46,6 +46,20 @@ inline void resolveOwnRanks(std::set<unsigned int>& ranks, bool isHost, bool fro
     ranks.insert(isHost ? 0u : 1u);
 }
 
+// Who owns one of the SAVE's own squad tabs at session start (ranked identically
+// on both clients). The role's ranks, and on the host every rank past the two
+// players' own: a save with a third squad - typically the base crew - left that
+// tab owned by NOBODY, so neither side streamed it, both simulated it on their
+// own and its members diverged for good (audit, 2026-09-25). The host already
+// takes tabs created mid-session; this gives it the save's extra tabs too.
+// An empty rank set is the legacy single-owner rule (rank 0 = host).
+inline bool seededTabOwned(const std::set<unsigned int>& ownRanks, bool hostRole,
+                           unsigned int rank) {
+    if (ownRanks.empty()) return rank == 0u || (hostRole && rank >= 2u);
+    if (ownRanks.count(rank) != 0) return true;
+    return hostRole && rank >= 2u;
+}
+
 } // namespace coop
 
 #endif // COOP_OWN_RANKS_H

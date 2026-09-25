@@ -11,6 +11,7 @@
 // PowerShell oracles (see resources/CODE_MAP.md, log-tag index).
 
 #include "ReplicatorUtil.h"
+#include "../core/OwnRanks.h"
 
 namespace coop {
 
@@ -337,6 +338,14 @@ void Replicator::resetSession() {
     coop::logLine("[load] session reset: pointer caches, session maps, change gates cleared");
 }
 
+namespace {
+// SEH shell (C2712: the caller holds std iterators): is c in the player's squad?
+bool squadMemberSeh(GameWorld* gw, Character* c) {
+    __try { return engine::isPlayerSquad(gw, reinterpret_cast<RootObject*>(c)); }
+    __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+}
+} // namespace
+
 void Replicator::clearPeerReplicationState(GameWorld* gw) {
     // Destroy every MINTED proxy body before resetSession() drops the map that
     // owns the pointers. The engine owns the bodies; a proxy left standing after
@@ -349,10 +358,19 @@ void Replicator::clearPeerReplicationState(GameWorld* gw) {
     // adopted is one this client generated itself, so the peer leaving makes it
     // ours again rather than making it garbage. Destroying them here would empty a
     // whole town on disconnect, and bake that emptiness into the next save.
+    //
+    // A player-squad member is never destroyed here either, minted or not: it is
+    // the friend's recruit, and destroying it would bake the loss into the next
+    // save (insertPeerMember also stops counting such a body as minted).
     unsigned int cleared = 0, released = 0;
     for (std::map<Key, Character*>::iterator it = proxyByKey_.begin();
          it != proxyByKey_.end(); ++it) {
         if (!gw || !it->second) continue;
+        if (squadMemberSeh(gw, it->second)) {
+            mintedBodies_.erase(it->second);
+            ++released;
+            continue;
+        }
         if (destroyIfMinted(gw, it->second)) ++cleared; else ++released;
     }
     mintedBodies_.clear();
@@ -486,9 +504,10 @@ void Replicator::decideTabs(const EntityState* raw, unsigned int nSquad,
         bool owned;
         const char* why;
         if (seeding) {
-            // The save's own tabs, ranked identically on both clients: the
-            // historical rule, so nothing about a normal session changes.
-            owned = ownRanks_.empty() ? (rank == 0u) : (ownRanks_.count(rank) != 0);
+            // The save's own tabs, ranked identically on both clients: each
+            // player's own tab, and every further tab to the host so none is
+            // left without an owner (core/OwnRanks.h seededTabOwned).
+            owned = seededTabOwned(ownRanks_, isHostRole(), rank);
             why = "seed";
         } else {
             // A tab that did not exist at session start. Its rank is a local
@@ -511,7 +530,7 @@ void Replicator::decideTabs(const EntityState* raw, unsigned int nSquad,
                                  : ((verdict == -1) ? "pin-peer" : "host-fallback");
         }
         tabOwned_[ctnrs[i]] = owned;
-        if (!seeding) {
+        if (!seeding || rank >= 2u) { // the save's two player tabs stay silent
             char b[128];
             _snprintf(b, sizeof(b) - 1, "[squad] TABOWN cont=%u,%u rank=%u own=%d via=%s",
                       ctnrs[i].first, ctnrs[i].second, rank, owned ? 1 : 0, why);

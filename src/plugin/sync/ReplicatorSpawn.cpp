@@ -1161,11 +1161,24 @@ void Replicator::rekeyPeerBody(GameWorld* gw, const Key& oldK, const Key& newK,
     rb[sizeof(rb) - 1] = '\0'; coop::logLine(rb);
 }
 
+bool Replicator::squadMemberOf(bool ours, unsigned int out[5]) const {
+    for (std::set<Key>::const_iterator s = allSquad_.begin(); s != allSquad_.end(); ++s) {
+        if ((ownHands_.count(*s) != 0) != ours) continue;
+        out[0] = s->t; out[1] = s->c; out[2] = s->cs; out[3] = s->i; out[4] = s->s;
+        return true;
+    }
+    return false;
+}
+
 void Replicator::insertPeerMember(GameWorld* gw, Character* c, const Key& newK,
                                   const char* tag, bool ownIt) {
     if (!c) return;
     unsigned int nh[5] = { newK.t, newK.c, newK.cs, newK.i, newK.s };
-    bool ok = engine::joinPlayerSquadAt(gw, c, nh);
+    // If the target tab does not exist here yet, keep the body with a member of
+    // the same owner: one of ours when we take it over, else one of the peer's.
+    unsigned int fb[5] = { 0, 0, 0, 0, 0 };
+    const bool haveFb = squadMemberOf(ownIt, fb);
+    bool ok = engine::joinPlayerSquadAt(gw, c, nh, haveFb ? fb : 0);
     // Pin the body's ACTUAL local hand. setFaction assigns a local platoon index
     // that usually DIFFERS from the owner's streamed hand (each engine numbers
     // its platoon independently), and publishOwned keys ownership by the captured
@@ -1184,6 +1197,11 @@ void Replicator::insertPeerMember(GameWorld* gw, Character* c, const Key& newK,
     // the next poll. Claim it as ours-to-ignore before publishSquadMoves can
     // read it as a user action and publish it (see moveEcho_).
     if (ok) moveEcho_[newK.s] = nowMs();
+    // A body we minted as a proxy is now a real squad member (the friend's
+    // recruit). Minted bodies are destroyed when the friend leaves, which took
+    // the recruit with it - and the host's next save, or the reconnect push,
+    // made the loss permanent on both machines. From here it is released instead.
+    if (ok) mintedBodies_.erase(c);
     unsigned int lh[5] = { 0, 0, 0, 0, 0 };
     bool haveLh = false;
     __try {

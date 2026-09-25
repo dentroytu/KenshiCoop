@@ -1095,6 +1095,30 @@ static void testOwnRanks() {
         CHECK("JOIN->HOST switch re-resolves to {0}", ranksAre(r, 0, -1));
     }
 
+    // Session-start tab ownership: with the default roles, every tab of a save
+    // with FOUR squads is owned by exactly one side - the two players' own tabs
+    // as before, and the rest by the host (a third tab used to have no owner).
+    {
+        std::set<unsigned int> host, join;
+        resolveOwnRanks(host, true, false);
+        resolveOwnRanks(join, false, false);
+        bool exactlyOne = true;
+        for (unsigned int rank = 0; rank < 4; ++rank) {
+            const int owners = (coop::seededTabOwned(host, true, rank) ? 1 : 0) +
+                               (coop::seededTabOwned(join, false, rank) ? 1 : 0);
+            if (owners != 1) exactlyOne = false;
+        }
+        CHECK("every seeded tab has exactly one owner", exactlyOne);
+        CHECK("rank 1 stays the join's", coop::seededTabOwned(join, false, 1) &&
+                                         !coop::seededTabOwned(host, true, 1));
+        CHECK("rank 2 goes to the host", coop::seededTabOwned(host, true, 2) &&
+                                         !coop::seededTabOwned(join, false, 2));
+        std::set<unsigned int> legacy;
+        CHECK("legacy empty set: host owns 0 and 2, not 1",
+              coop::seededTabOwned(legacy, true, 0) && coop::seededTabOwned(legacy, true, 2) &&
+              !coop::seededTabOwned(legacy, true, 1));
+    }
+
     // An explicit env override is preserved across a role switch (the user asked
     // for a specific partition; the panel must not clobber it).
     {

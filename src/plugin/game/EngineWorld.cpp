@@ -228,7 +228,8 @@ int probeRecruit(GameWorld* gw, bool runtimeSubject,
     }
 }
 
-bool joinPlayerSquadAt(GameWorld* gw, Character* c, const unsigned int newHand[5]) {
+bool joinPlayerSquadAt(GameWorld* gw, Character* c, const unsigned int newHand[5],
+                       const unsigned int* fallbackHand) {
     if (!gw || !gw->player || !c || !newHand ||
         !g_playerFactionFn || !g_getPlatoonFn)
         return false;
@@ -261,8 +262,22 @@ bool joinPlayerSquadAt(GameWorld* gw, Character* c, const unsigned int newHand[5
             }
         }
         // Case B fallback: the reported tab is a runtime-minted platoon not
-        // present locally - drop into the leader's default tab so the body is
-        // still a panel member (control still follows the peer-owned pin).
+        // present locally. Join the tab of a member with the SAME owner (the
+        // caller's fallbackHand) so the body stays among its owner's people;
+        // only without one, the leader's tab, so it is still a panel member
+        // (control still follows the peer-owned pin).
+        if (!target && fallbackHand) {
+            for (unsigned int i = 0; i < pc && !target; ++i) {
+                Character* m = gw->player->playerCharacters[i];
+                if (!m || m == c) continue;
+                unsigned int mh[5];
+                if (!readObjectHand(static_cast<RootObject*>(m), mh)) continue;
+                if (mh[0] == fallbackHand[0] && mh[1] == fallbackHand[1] &&
+                    mh[2] == fallbackHand[2] && mh[3] == fallbackHand[3] &&
+                    mh[4] == fallbackHand[4])
+                    target = g_getPlatoonFn(m);
+            }
+        }
         if (!target && pc > 0 && gw->player->playerCharacters[0])
             target = g_getPlatoonFn(gw->player->playerCharacters[0]);
         if (!target) return false;
