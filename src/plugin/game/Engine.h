@@ -1284,6 +1284,14 @@ void         damageGuardStats(unsigned long* outGuarded, unsigned long* outPasse
 void         setCombatReport(bool on);
 void         clearReportAttackers();
 void         addReportAttacker(Character* c);
+// Host side: the friend's squad copies (remote swingers) replay the friend's
+// fight, and the join already reports that fight's damage - so a swing by one of
+// them on a body outside the player squad (the squad bodies set) lands no damage
+// here. Friendly fire on a squad member still lands natively. Rebuilt each tick.
+void          clearRemoteSwingers();   // clears the squad bodies too
+void          addRemoteSwinger(Character* c);
+void          addSquadBody(Character* c);
+unsigned long remoteSwingsVetoed();    // cumulative, for logs / oracles
 // Drain the accumulated join-dealt damage for one victim copy (returns false if
 // nothing pending). flesh/blood are the summed deltas since the last drain.
 bool         takeReportedDamage(Character* c, float* outFlesh, float* outBlood);

@@ -171,7 +171,10 @@ void Replicator::publishMedical(GameWorld* gw, NetLink& net, u32 ownerId) {
                     // copy is canonical (it spawns one on event-apply and the
                     // world-item channel streams it back as a proxy). Destroy
                     // the local one so the join doesn't end up with two.
-                    if (evType == EVT_AMPUTATE && !streamNpcs_ && !isNpc) {
+                    // By ROLE, not streamNpcs_: cell authority (on by default)
+                    // makes the join stream NPCs too, and then neither side
+                    // deduped - every severed limb lay on the ground twice.
+                    if (evType == EVT_AMPUTATE && !isHostRole() && !isNpc) {
                         int nd = engine::destroySeveredLimbsNear(gw, hand, 15.0f);
                         char db[120]; _snprintf(db, sizeof(db) - 1,
                             "[med] LIMB-ITEM DEDUPE hand=%u,%u destroyed=%d",
@@ -279,7 +282,7 @@ void Replicator::applyMedical(GameWorld* gw, Inbound& in, NetLink& net, u32 owne
         // item - it then streams to everyone via the world-item channel; the
         // join never creates one (the streamed copy is canonical).
         int lchg = engine::applyLimbStates(gw, c, p.limbState, p.limbSid,
-                                           /*createSeveredItem*/streamNpcs_);
+                                           /*createSeveredItem*/isHostRole());
         if (lchg != 0) {
             char lb[160]; _snprintf(lb, sizeof(lb) - 1,
                 "[med] LIMB APPLY hand=%u,%u mask=%d ls=%u,%u,%u,%u",

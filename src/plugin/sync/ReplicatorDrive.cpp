@@ -36,6 +36,13 @@ void Replicator::logHardSnap(Character* c, const EntityState& out, const char* k
     skipped = 0;
 }
 
+bool Replicator::ownsChar(Character* c) const {
+    unsigned int h[5];
+    if (!c || !engine::readObjectHand(reinterpret_cast<RootObject*>(c), h)) return false;
+    Key k; k.t = h[0]; k.c = h[1]; k.cs = h[2]; k.i = h[3]; k.s = h[4];
+    return ownHands_.find(k) != ownHands_.end();
+}
+
 void Replicator::applyTargets(GameWorld* gw) {
     (void)gw;
     unsigned long now = nowMs();
@@ -60,7 +67,20 @@ void Replicator::applyTargets(GameWorld* gw) {
         engine::clearReportAttackers();
         Character* pcs[64];
         unsigned int np = engine::listPlayerChars(gw, pcs, 64);
-        for (unsigned int i = 0; i < np; ++i) engine::addReportAttacker(pcs[i]);
+        // Only the characters WE own. The player squad also holds the host's
+        // characters (the copies we drive), and a guarded swing by one of those is
+        // the host's own fight replayed here: reporting it made the host apply that
+        // damage a second time (audit, 2026-09-25).
+        for (unsigned int i = 0; i < np; ++i)
+            if (ownsChar(pcs[i])) engine::addReportAttacker(pcs[i]);
+    } else if (dmgGuard_) {
+        // Host: the friend's squad copies are added as remote swingers in the
+        // drive loop below; every squad body is exempt as a victim (friendly fire
+        // lands natively - the host drops reports aimed at its own bodies).
+        engine::clearRemoteSwingers();
+        Character* pcs[64];
+        unsigned int np = engine::listPlayerChars(gw, pcs, 64);
+        for (unsigned int i = 0; i < np; ++i) engine::addSquadBody(pcs[i]);
     }
     // Driven-body pointer set rebuilds per tick too: enforceHostAuthority uses it
     // to recognise a streamed body whose LOCAL hand key changed (combat detach
@@ -133,6 +153,8 @@ void Replicator::applyTargets(GameWorld* gw) {
                 }
                 if (c) {
                     if (dmgGuard_) engine::addDamageGuard(c);
+                    if (dmgGuard_ && !reportCombat_ && engine::isLocalPlayerChar(gw, c))
+                        engine::addRemoteSwinger(c);
                     if (engine::isLocalPlayerChar(gw, c)) {
                         // Squad-class: full park. drivenChars_ membership also
                         // keeps host-authority suppression off the body.
@@ -309,6 +331,10 @@ void Replicator::applyTargets(GameWorld* gw) {
         // Every driven body is damage-guarded (locally-simulated hits must not
         // mutate the local-only medical model; outcomes arrive as host events).
         if (dmgGuard_) engine::addDamageGuard(c);
+        // Host: a driven squad body is the friend's character; its swings on NPCs
+        // are carried by the friend's own damage report, not landed here.
+        if (dmgGuard_ && !reportCombat_ && engine::isLocalPlayerChar(gw, c))
+            engine::addRemoteSwinger(c);
 
         // Owner-authoritative death veto (2026-07-15). The damage guard blocks
         // NEW melee wounds, but a lethal frame in an unguarded window (stream

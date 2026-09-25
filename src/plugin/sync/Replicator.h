@@ -90,6 +90,10 @@ public:
     // PEER. Consults the sets publishOwned refreshes each tick (allSquad_ +
     // ownHands_). Const + set-lookup only, so it is safe to call from the engine
     // tick (the UI-drag detour runs on the same main thread).
+    // True if c is one of the squad members this client owns (its hand is in
+    // ownHands_). Defined in ReplicatorDrive.cpp.
+    bool ownsChar(Character* c) const;
+
     int ownerClassForHand(const unsigned int h[5]) const {
         Key k; k.t = h[0]; k.c = h[1]; k.cs = h[2]; k.i = h[3]; k.s = h[4];
         if (allSquad_.find(k) == allSquad_.end()) return 0;
