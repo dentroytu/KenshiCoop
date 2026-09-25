@@ -25,6 +25,7 @@
 #include "Interp.h"
 #include "../../netproto/Wire.h"
 #include "../core/Inbound.h"
+#include "../core/TabLedger.h"   // squad-tab owners kept with the save
 #include "../net/NetLink.h"
 #include "SyncContext.h" // Phase 6: per-tick channel call environment
 #include "SyncTuning.h"  // Phase 6d: owned per-channel send-cadence tunables
@@ -94,6 +95,14 @@ public:
     // Own-characters-only control is on this tick (Config ownGuard + a friend
     // connected). Plugin.cpp sets it before the publish half.
     void setOwnGuardActive(bool on) { ownGuardActive_ = on; }
+    // Squad-tab owners that outlive a reload or a reconnect (core/TabLedger.h).
+    // Plugin.cpp loads them from the save when a world loads (after clearing),
+    // and the host writes them back into every save. Kept across resetSession,
+    // so a reconnect in the same world keeps each squad with its owner.
+    void setTabLedgerOn(bool on) { tabLedgerOn_ = on; }
+    void setTabLedger(const TabLedger& l) { tabLedger_ = l; }
+    const TabLedger& tabLedger() const { return tabLedger_; }
+    void clearTabLedger() { tabLedger_.clear(); }
     // Who owns a squad tab: 1 ours, 2 the friend's, 0 not decided yet (a tab
     // this tick created, or squad sync off).
     int tabOwnerClass(u32 container, u32 containerSerial) const {
@@ -2268,6 +2277,19 @@ private:
     // in the same millisecond it sent the move event.
     std::map<std::pair<u32, u32>, unsigned long> tabSeenMs_;
     enum { TAB_CLAIM_WAIT_MS = 5000 };
+    // Every tab owner decided or loaded (host/join roles, not "ours"): seeds the
+    // next session in this world and is what the host saves. NOT cleared by
+    // resetSession - only by a world load (see clearTabLedger).
+    TabLedger tabLedger_;
+    bool      tabLedgerOn_;
+    // A squad the peer created mid-session has a runtime container number of
+    // its own in each game. When its first member arrives here we make a new
+    // squad for it (insertPeerMember) and pair the two numbers, so its later
+    // members join that same squad. Save-stable after the next save + load.
+    std::map<std::pair<u32, u32>, std::pair<u32, u32> > peerTabLocal_;
+    // Character serial -> the peer squad it was split off for, until the move's
+    // echo edge shows the new local container.
+    std::map<u32, std::pair<u32, u32> > pendingPeerTab_;
     // Own-characters-only control (Config ownGuard, with a friend connected):
     // a roster edge on one of the friend's characters is never claimed or
     // published (see publishSquadMoves).

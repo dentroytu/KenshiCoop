@@ -843,6 +843,72 @@ function Test-OwnGuard {
                             takeRc = $take.rc; held = [int]$held; published = [int]$published; joinRecv = $joinGot; reqs = $reqs })
 }
 
+function Test-SquadPersist {
+    # squad_persist: a squad the JOIN made keeps its owner across a save + reload.
+    # The host must mirror the new squad as a squad of its own (PEER-TAB), write
+    # the owners into the save, and after the reload BOTH sides must seed that
+    # squad from the saved owners: join own=1, host own=0, via=ledger.
+    # -ExpectLoss (squad_persist_off, owners not kept): the rank rule seeds it
+    # instead and it goes to the host - proof that the gate can fail.
+    param([string]$HostFile, [string]$JoinFile, [switch]$ExpectLoss, [string]$GateName = "squad_persist")
+    $why = @()
+    $legs = {
+        param($f, $role)
+        $l = Select-String -Path $f -Pattern "SCENARIO SQP verdict role=$role legs=(\d)" | Select-Object -Last 1
+        return ($l -and $l.Matches[0].Groups[1].Value -eq '1')
+    }
+    if (-not (& $legs $HostFile 'host')) { $why += "host legs (save, ack, load, reload) incomplete" }
+    if (-not (& $legs $JoinFile 'join')) { $why += "join legs (recruit, split, reload) incomplete" }
+
+    # The host's squad for the join's new one: its local container is the one
+    # the save records, so it is the key on BOTH sides after the reload.
+    $pt = Select-String -Path $HostFile -Pattern "\[squad\] PEER-TAB peer=(\d+),(\d+) -> local=(\d+),(\d+)" | Select-Object -Last 1
+    if (-not $pt) {
+        $why += "host never mirrored the join's new squad (no PEER-TAB)"
+        Write-Host ("  SQUAD-PERSIST FAIL - " + ($why -join '; '))
+        return (Add-GateResult -Name $GateName -Status FAIL -Detail ($why -join '; '))
+    }
+    $cont = "$($pt.Matches[0].Groups[3].Value),$($pt.Matches[0].Groups[4].Value)"
+
+    # TABOWN for that squad logged AFTER each side's reload marker.
+    $afterReload = {
+        param($f)
+        $mark = Select-String -Path $f -Pattern "SCENARIO SQP reloaded" | Select-Object -First 1
+        if (-not $mark) { return $null }
+        $rx = "\[squad\] TABOWN cont=" + [regex]::Escape($cont) + " rank=(\d+) own=(\d) via=([\w-]+)"
+        return (Select-String -Path $f -Pattern $rx | Where-Object { $_.LineNumber -gt $mark.LineNumber } |
+                Select-Object -First 1)
+    }
+    $h = & $afterReload $HostFile
+    $j = & $afterReload $JoinFile
+    if (-not $h) { $why += "host: no TABOWN for $cont after the reload" }
+    if (-not $j) { $why += "join: no TABOWN for $cont after the reload" }
+    $hOwn = if ($h) { $h.Matches[0].Groups[2].Value } else { '?' }
+    $jOwn = if ($j) { $j.Matches[0].Groups[2].Value } else { '?' }
+    $hVia = if ($h) { $h.Matches[0].Groups[3].Value } else { '?' }
+    $jVia = if ($j) { $j.Matches[0].Groups[3].Value } else { '?' }
+    $rank = if ($j) { $j.Matches[0].Groups[1].Value } else { '?' }
+    $written = @(Select-String -Path $HostFile -Pattern "\[squads\] ledger written \(\w+\) save='coopresume' rows=(\d+) ok=1").Count
+
+    if ($ExpectLoss) {
+        if ($h -and $j -and -not ($jOwn -eq '0' -and $hOwn -eq '1')) {
+            $why += "without saved owners the squad did not go to the host (join own=$jOwn host own=$hOwn)"
+        }
+    } else {
+        if ($written -lt 1) { $why += "host never wrote the owners into the save" }
+        if ($j -and ($jOwn -ne '1' -or $jVia -ne 'ledger')) { $why += "join: own=$jOwn via=$jVia (want own=1 via=ledger)" }
+        if ($h -and ($hOwn -ne '0' -or $hVia -ne 'ledger')) { $why += "host: own=$hOwn via=$hVia (want own=0 via=ledger)" }
+    }
+    $ok = ($why.Count -eq 0)
+    Write-Host ("  SQUAD-PERSIST " + $(if ($ok) { "PASS" } else { "FAIL" }) +
+                " - squad $cont rank=${rank}: join own=$jOwn via=$jVia; host own=$hOwn via=$hVia; ledger writes=$written" +
+                $(if ($ExpectLoss) { " (negative control: the host should get it)" } else { "" }) +
+                $(if (-not $ok) { " - " + ($why -join '; ') } else { "" }))
+    return (Add-GateResult -Name $GateName -Status $(if ($ok) { "PASS" } else { "FAIL" }) `
+                -Metrics @{ joinOwn = $jOwn; hostOwn = $hOwn; joinVia = $jVia; hostVia = $hVia; writes = $written } `
+                -Detail ($why -join '; '))
+}
+
 function Test-SquadSync {
     param([string]$HostFile, [string]$JoinFile)
     $why = @()

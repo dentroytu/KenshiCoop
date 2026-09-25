@@ -1186,11 +1186,46 @@ void Replicator::insertPeerMember(GameWorld* gw, Character* c, const Key& newK,
                                   const char* tag, bool ownIt) {
     if (!c) return;
     unsigned int nh[5] = { newK.t, newK.c, newK.cs, newK.i, newK.s };
-    // If the target tab does not exist here yet, keep the body with a member of
-    // the same owner: one of ours when we take it over, else one of the peer's.
-    unsigned int fb[5] = { 0, 0, 0, 0, 0 };
-    const bool haveFb = squadMemberOf(ownIt, fb);
-    bool ok = engine::joinPlayerSquadAt(gw, c, nh, haveFb ? fb : 0);
+    // Which local tab is the author's tab? One with members under the same
+    // container (a save tab - the same number on both games), else the tab we
+    // made earlier for that peer squad (a runtime squad has a different number
+    // in each game; see peerTabLocal_).
+    const std::pair<u32, u32> peerTab((u32)newK.c, (u32)newK.cs);
+    bool tabHere = false;
+    for (std::set<Key>::const_iterator s = allSquad_.begin(); s != allSquad_.end() && !tabHere; ++s)
+        tabHere = (s->c == newK.c && s->cs == newK.cs);
+    if (!tabHere) {
+        // Checked live, not against allSquad_: a second member moved in the same
+        // event drain must find the squad the first one just made (the roster
+        // is only polled after the drain).
+        std::map<std::pair<u32, u32>, std::pair<u32, u32> >::const_iterator pt = peerTabLocal_.find(peerTab);
+        if (pt != peerTabLocal_.end() &&
+            engine::playerTabHasMember(gw, pt->second.first, pt->second.second)) {
+            nh[1] = pt->second.first; nh[2] = pt->second.second; tabHere = true;
+        }
+    }
+    // The body's hand before we move it: making a new squad renumbers the
+    // character serial, and the roster edge of our own move is keyed by the
+    // serial it had BEFORE (publishSquadMoves' echo lookup).
+    unsigned int pre[5] = { 0, 0, 0, 0, 0 };
+    const bool havePre = engine::readObjectHand(reinterpret_cast<RootObject*>(c), pre);
+    bool ok = false;
+    bool madeTab = false;
+    if (!tabHere && tag && tag[0] == 's' && engine::separateIntoNewSquad(gw, c)) {
+        // A squad the author made that has no counterpart here: give the body a
+        // new squad of its own instead of parking it in someone else's tab - the
+        // host would otherwise SAVE the friend's character inside its own squad,
+        // and the next load hands it to the host.
+        ok = true;
+        madeTab = true;
+    } else {
+        // If the target tab does not exist here yet, keep the body with a member
+        // of the same owner: one of ours when we take it over, else one of the
+        // peer's.
+        unsigned int fb[5] = { 0, 0, 0, 0, 0 };
+        const bool haveFb = squadMemberOf(ownIt, fb);
+        ok = engine::joinPlayerSquadAt(gw, c, nh, haveFb ? fb : 0);
+    }
     // Pin the body's ACTUAL local hand. setFaction assigns a local platoon index
     // that usually DIFFERS from the owner's streamed hand (each engine numbers
     // its platoon independently), and publishOwned keys ownership by the captured
@@ -1209,6 +1244,7 @@ void Replicator::insertPeerMember(GameWorld* gw, Character* c, const Key& newK,
     // the next poll. Claim it as ours-to-ignore before publishSquadMoves can
     // read it as a user action and publish it (see moveEcho_).
     if (ok) moveEcho_[newK.s] = nowMs();
+    if (ok && havePre && pre[4]) moveEcho_[pre[4]] = nowMs();
     // A body we minted as a proxy is now a real squad member (the friend's
     // recruit). Minted bodies are destroyed when the friend leaves, which took
     // the recruit with it - and the host's next save, or the reconnect push,
@@ -1228,6 +1264,31 @@ void Replicator::insertPeerMember(GameWorld* gw, Character* c, const Key& newK,
         else       { pinOwned_.erase(lk); pinPeer_.insert(lk); }
         if (ok) moveEcho_[lk.s] = nowMs();  // the engine may renumber the serial
         pinnedLocal = true;
+    }
+    // Pair the peer's new squad with the one we just made, so its later members
+    // join it. The engine usually shows the new container at once (and renumbers
+    // the serial); if the hand still reads a tab we already had, the move has not
+    // landed yet and publishSquadMoves pairs them on the move's echo edge.
+    if (madeTab) {
+        bool fresh = haveLh && (lk.c | lk.cs) != 0;
+        for (std::set<Key>::const_iterator s = allSquad_.begin(); s != allSquad_.end() && fresh; ++s)
+            if (s->c == lk.c && s->cs == lk.cs) fresh = false;
+        if (fresh) {
+            peerTabLocal_[peerTab] = std::make_pair((u32)lk.c, (u32)lk.cs);
+            for (std::map<u32, std::pair<u32, u32> >::iterator q = pendingPeerTab_.begin();
+                 q != pendingPeerTab_.end(); ) {
+                if (q->second == peerTab) pendingPeerTab_.erase(q++);
+                else ++q;
+            }
+            char pb[160]; _snprintf(pb, sizeof(pb) - 1,
+                "[squad] PEER-TAB peer=%u,%u -> local=%u,%u (a new squad for the friend's)",
+                peerTab.first, peerTab.second, lk.c, lk.cs);
+            pb[sizeof(pb) - 1] = '\0'; coop::logLine(pb);
+        } else {
+            pendingPeerTab_[newK.s] = peerTab;
+            if (haveLh) pendingPeerTab_[lk.s] = peerTab;
+            if (havePre && pre[4]) pendingPeerTab_[pre[4]] = peerTab;
+        }
     }
     int inSquad = -1;
     __try {

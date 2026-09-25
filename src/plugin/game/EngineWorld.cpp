@@ -296,6 +296,35 @@ bool joinPlayerSquadAt(GameWorld* gw, Character* c, const unsigned int newHand[5
     }
 }
 
+bool separateIntoNewSquad(GameWorld* gw, Character* c) {
+    if (!gw || !c || !g_separateSquadFn) return false;
+    __try {
+        if (!isPlayerSquad(gw, static_cast<RootObject*>(c))) return false;
+        g_separateSquadFn(c, true);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+bool playerTabHasMember(GameWorld* gw, unsigned int ctnr, unsigned int ctnrSerial) {
+    if (!gw || !gw->player) return false;
+    __try {
+        unsigned int pc = gw->player->playerCharacters.size();
+        for (unsigned int i = 0; i < pc; ++i) {
+            Character* m = gw->player->playerCharacters[i];
+            if (!m) continue;
+            unsigned int mh[5];
+            if (readObjectHand(static_cast<RootObject*>(m), mh) &&
+                mh[1] == ctnr && mh[2] == ctnrSerial)
+                return true;
+        }
+        return false;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
 unsigned int listPlayerRelations(GameWorld* gw, FactionRead* out, unsigned int maxOut) {
     if (!gw || !out || maxOut == 0 || !g_relGetFn) return 0;
     unsigned int n = 0;
