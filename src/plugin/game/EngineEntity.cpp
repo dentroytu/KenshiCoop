@@ -1242,6 +1242,17 @@ RootObject* findWorkFixtureNear(GameWorld* gw, int* outTask) {
             "engineering bench", "weapon smithy", "spinning wheel", "loom"
         };
         const unsigned int nprefs = sizeof(prefs) / sizeof(prefs[0]);
+        // The baked dummy by its stringID first ("Training Dummy MkI"): names are
+        // localized, and a Spanish Kenshi found no fixture here at all.
+        for (unsigned int i = 0; i < total; ++i) {
+            RootObject* o = g_npcQuery[i];
+            if (!o) continue;
+            GameData* gd = o->getGameData();
+            if (gd && strcmp(gd->stringID.c_str(), "898-gamedata.base") == 0) {
+                if (outTask) *outTask = USE_TRAINING_DUMMY;
+                return o;
+            }
+        }
         for (unsigned int k = 0; k < nprefs; ++k) {
             for (unsigned int i = 0; i < total; ++i) {
                 RootObject* o = g_npcQuery[i];

@@ -1022,11 +1022,28 @@ int placeBuildingAt(GameWorld* gw, const char* sid, float x, float y, float z,
 // placement: buildable, tiny footprint, no power/inputs. Caller holds SEH.
 // wantDoor selects the shack class instead (a real walk-in building whose
 // template mints DoorStuff children - the protocol-28 subject).
+//
+// Names are localized (a Spanish Kenshi calls the dummy "Maniquí de Entrenamiento
+// MkI"), so a name-only search found nothing there and every build test failed on
+// the host - or matched some unrelated template. The template the English names
+// resolve to is tried first by its stringID, which no language changes; the names
+// remain the fallback.
+static GameData* findTemplateBySid(unsigned int n, const char* sid) {
+    for (unsigned int i = 0; i < n; ++i) {
+        GameData* gd = g_dataScratch[i];
+        if (gd && strcmp(gd->stringID.c_str(), sid) == 0) return gd;
+    }
+    return 0;
+}
+
 static GameData* findBuildTemplate(GameWorld* gw, bool wantDoor) {
     if (!gw || !g_getDataOfTypeFn) return 0;
     g_dataScratch.clear();
     g_getDataOfTypeFn(&gw->gamedata, &g_dataScratch, BUILDING);
     unsigned int n = g_dataScratch.size();
+    // "Training Dummy MkI" / the walk-in shack the English names pick.
+    GameData* fixed = findTemplateBySid(n, wantDoor ? "778-gamedata.base" : "898-gamedata.base");
+    if (fixed) return fixed;
     const char* fixturePrefs[] = { "training dummy", "camp bed", "storage", "well" };
     const char* doorPrefs[]    = { "small shack", "shack", "storm house", "small house" };
     const char** prefs = wantDoor ? doorPrefs : fixturePrefs;
@@ -1402,6 +1419,19 @@ static GameData* findProdTemplate(GameWorld* gw, int kind, int skip) {
     else                { prefs = craftPrefs; nPrefs = 4; }
     GameData* seen[16];
     unsigned int nSeen = 0;
+    // First candidate by stringID (see findBuildTemplate on localized names): the
+    // generator and the crafting bench the English names resolve to.
+    // (kind 2: the chest the English names reach after five non-STORAGE rejects.)
+    const char* fixedSid = (kind == 0) ? "40636-Newwworld.mod"
+                         : (kind == 1) ? "2262-gamedata.base"
+                         : (kind == 2) ? "858-gamedata.base" : 0;
+    if (fixedSid) {
+        GameData* gd = findTemplateBySid(n, fixedSid);
+        if (gd) {
+            if (skip == 0) return gd;
+            seen[nSeen++] = gd;
+        }
+    }
     for (unsigned int k = 0; k < nPrefs; ++k) {
         for (unsigned int i = 0; i < n; ++i) {
             GameData* gd = g_dataScratch[i];
