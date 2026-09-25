@@ -2060,6 +2060,40 @@ void Replicator::publishSquadMoves(GameWorld* gw, NetLink& net, u32 ownerId) {
         Key nk; nk.t = edges[i].after[0]; nk.c = edges[i].after[1];
         nk.cs = edges[i].after[2]; nk.i = edges[i].after[3]; nk.s = edges[i].after[4];
         bool exited = (nk.t | nk.c | nk.cs | nk.i | nk.s) == 0;
+        // Own-characters-only control: an edge on one of the FRIEND's characters
+        // is not our player's action. The squad screen refuses those drags
+        // (EngineOwnGuard.cpp); this catches anything else that re-containers the
+        // body here. The friend's game still has it where it was, so claiming it
+        // would take it from them on both machines, and an exit would clear the
+        // pins of their own character. Keep driving it under the friend's key and
+        // publish nothing.
+        if (ownGuardActive_) {
+            Character* ec = edges[i].c;
+            const bool wasOwn = pinOwned_.count(ok) != 0 || prevOwnHands_.count(ok) != 0;
+            std::map<Character*, Key>::const_iterator cf =
+                ec ? canonicalOf_.find(ec) : canonicalOf_.end();
+            const bool friends = !wasOwn &&
+                (pinPeer_.count(ok) != 0 || prevAllSquad_.count(ok) != 0 ||
+                 cf != canonicalOf_.end());
+            if (friends) {
+                pinPeer_.erase(ok);
+                if (!exited) {
+                    pinPeer_.insert(nk);
+                    // The drive resolves the friend's key by hand first, and the
+                    // body no longer answers to it here: bind it by pointer, as
+                    // rekeyPeerBody does.
+                    if (cf != canonicalOf_.end() && (cf->second < nk || nk < cf->second))
+                        proxyByKey_[cf->second] = ec;
+                }
+                char hb[192]; _snprintf(hb, sizeof(hb) - 1,
+                    "[own] SQUAD-HOLD friend's character old=%u,%u,%u,%u,%u "
+                    "new=%u,%u,%u,%u,%u exit=%d (kept theirs, not published)",
+                    ok.t, ok.c, ok.cs, ok.i, ok.s, nk.t, nk.c, nk.cs, nk.i, nk.s,
+                    exited ? 1 : 0);
+                hb[sizeof(hb) - 1] = '\0'; coop::logLine(hb);
+                continue;
+            }
+        }
         // The old hand is dead either way - drop any pin it carried (a moved
         // recruit / a re-moved member must not leave a stale claim behind).
         pinOwned_.erase(ok);

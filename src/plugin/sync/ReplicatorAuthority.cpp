@@ -1279,9 +1279,11 @@ void Replicator::syncCellClaims(GameWorld* gw, Inbound& in, NetLink& net, u32 ow
             ctnrs.push_back(std::make_pair(raw[i].hContainer, raw[i].hContainerSerial));
         std::sort(ctnrs.begin(), ctnrs.end());
         ctnrs.erase(std::unique(ctnrs.begin(), ctnrs.end()), ctnrs.end());
+        std::set<u32> liveRanks;   // our owned tabs that still have members
         for (unsigned int ci = 0; ci < ctnrs.size(); ++ci) {
             unsigned int rank = tabRankFor(ctnrs[ci], ctnrs);
             if (!ownsTab(ctnrs[ci], rank)) continue;
+            liveRanks.insert((u32)rank);
             // The tab's leader stands for the tab: presence is about where the
             // squad IS, and a scattered squad still has one home cell.
             const EntityState* lead = 0;
@@ -1319,6 +1321,47 @@ void Replicator::syncCellClaims(GameWorld* gw, Inbound& in, NetLink& net, u32 ow
                 char b[144]; _snprintf(b, sizeof(b) - 1,
                     "[cell] CLAIM rank=%u cell=%d,%d seq=%u dwell=%u pos=%.0f,%.0f",
                     rank, cx, cz, seq, d.n, lead->x, lead->z);
+                b[sizeof(b) - 1] = '\0'; coop::logLine(b);
+            }
+        }
+        // A tab of ours that has gone (its last member moved to another squad)
+        // keeps its slot, since there is no release message - and a slot left on
+        // its last cell keeps the co-location collapse off for the rest of the
+        // session, because that cell has no partner on the other side. Point it
+        // at the cell our lowest live tab already claims: an ordinary seq-ordered
+        // claim, so both clients keep the same slot set and no new cell appears.
+        std::map<std::pair<u32, u32>, CellClaim>::const_iterator home = claimSlots_.end();
+        for (std::set<u32>::const_iterator lr = liveRanks.begin();
+             lr != liveRanks.end() && home == claimSlots_.end(); ++lr)
+            home = claimSlots_.find(std::make_pair(ownerId, *lr));
+        if (home != claimSlots_.end()) {
+            const int hx = home->second.cx, hz = home->second.cz;
+            std::vector<u32> gone;
+            for (std::map<std::pair<u32, u32>, CellClaim>::const_iterator s = claimSlots_.begin();
+                 s != claimSlots_.end(); ++s) {
+                if (s->first.first != ownerId || liveRanks.count(s->first.second)) continue;
+                if (s->second.cx == hx && s->second.cz == hz) continue;
+                gone.push_back(s->first.second);
+            }
+            for (unsigned int gi = 0; gi < gone.size(); ++gi) {
+                const u32 rank = gone[gi];
+                u32 seq = ++claimSeqOut_[rank];
+                CellClaimPacket p;
+                memset(&p, 0, sizeof(p));
+                p.type    = (u8)PKT_CELL_CLAIM;
+                p.ownerId = ownerId;
+                p.tabRank = rank;
+                p.seq     = seq;
+                p.cellX   = hx;
+                p.cellY   = hz;
+                net.queueCellClaim(p);
+                CellClaim cc;
+                cc.cx = hx; cc.cz = hz; cc.seq = seq; cc.recvMs = now;
+                claimSlots_[std::make_pair(ownerId, rank)] = cc;
+                claimDwell_.erase(rank);
+                changed = true;
+                char b[112]; _snprintf(b, sizeof(b) - 1,
+                    "[cell] RETIRE rank=%u -> cell=%d,%d seq=%u (tab gone)", rank, hx, hz, seq);
                 b[sizeof(b) - 1] = '\0'; coop::logLine(b);
             }
         }

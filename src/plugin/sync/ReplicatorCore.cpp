@@ -78,7 +78,7 @@ Replicator::Replicator()
       poolSeen_(-1), poolSent_(-1), poolSentMs_(0), poolTotal_(-1),
       poolSeq_(0), poolAcked_(0),
       moneySync_(true), recruitSync_(true),
-      squadSync_(true), tabsSeeded_(0),
+      squadSync_(true), tabsSeeded_(0), ownGuardActive_(false),
       cellAuth_(false), cellCollapse_(false), collapsed_(false),
       claimSendMs_(0), claimAssertMs_(0), claimMapMs_(0),
       facSeqOut_(1), facSampleMs_(0), factionSync_(true),
@@ -296,9 +296,13 @@ void Replicator::resetSession() {
     // the reloaded save re-seeds them at first census/poll.
     tabRank_.clear();
     tabOwned_.clear();
+    tabSeenMs_.clear();
+    prevOwnHands_.clear();
+    prevAllSquad_.clear();
     tabsSeeded_ = 0;
     rekeyedOld_.clear();
     engine::clearSquadRoster();
+    engine::clearSquadScreenPlatoons();   // platoon pointers dangle too
     probed_.clear();
     spawnReq_.clear();
     unresolvedHands_.clear();
@@ -527,6 +531,17 @@ void Replicator::decideTabs(const EntityState* raw, unsigned int nSquad,
                 if (pinOwned_.count(k)) { verdict = 1; break; }
                 if (pinPeer_.count(k))  verdict = -1;
             }
+            if (verdict == 0) {
+                // Nobody has claimed it YET: our own move pins its body later this
+                // tick (publishSquadMoves runs after publishOwned) and the friend's
+                // pin arrives with its event. Wait for one before falling back.
+                unsigned long nowT = nowMs();
+                std::map<std::pair<u32, u32>, unsigned long>::iterator st =
+                    tabSeenMs_.find(ctnrs[i]);
+                if (st == tabSeenMs_.end()) { tabSeenMs_[ctnrs[i]] = nowT; continue; }
+                if ((nowT - st->second) < (unsigned long)TAB_CLAIM_WAIT_MS) continue;
+            }
+            tabSeenMs_.erase(ctnrs[i]);
             owned = (verdict == 1) ? true
                                    : ((verdict == -1) ? false : isHostRole());
             why = (verdict == 1) ? "pin-own"
@@ -547,6 +562,9 @@ void Replicator::decideTabs(const EntityState* raw, unsigned int nSquad,
 bool Replicator::ownsTab(const std::pair<u32, u32>& key, unsigned int rank) const {
     std::map<std::pair<u32, u32>, bool>::const_iterator it = tabOwned_.find(key);
     if (it != tabOwned_.end()) return it->second;
+    // A new tab still waiting for a claim (decideTabs): the host holds it in the
+    // meantime, which is the verdict it used to get straight away.
+    if (tabSeenMs_.find(key) != tabSeenMs_.end()) return isHostRole();
     // Not yet decided (squadSync_ off, or the first tick of a fresh container):
     // the historical rule, so this is never MORE permissive than before.
     return ownRanks_.empty() ? (rank == 0u) : (ownRanks_.count(rank) != 0);

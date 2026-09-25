@@ -83,6 +83,34 @@ public:
     // prior one-directional behaviour is preserved.
     void setOwnRanks(const std::set<unsigned int>& r) { ownRanks_ = r; }
 
+    // True if c is one of the squad members this client owns (its hand is in
+    // ownHands_). Defined in ReplicatorDrive.cpp.
+    bool ownsChar(Character* c) const;
+    // The player squad split by owner: the friend's characters into peers[] (the
+    // return value is their count) and ours into own[] (*nOwn). A body we pinned
+    // after this tick's publishOwned (a move, a recruit) already counts as ours.
+    unsigned int splitSquad(GameWorld* gw, Character** peers, unsigned int maxPeers,
+                            Character** own, unsigned int maxOwn, unsigned int* nOwn) const;
+    // Own-characters-only control is on this tick (Config ownGuard + a friend
+    // connected). Plugin.cpp sets it before the publish half.
+    void setOwnGuardActive(bool on) { ownGuardActive_ = on; }
+    // Who owns a squad tab: 1 ours, 2 the friend's, 0 not decided yet (a tab
+    // this tick created, or squad sync off).
+    int tabOwnerClass(u32 container, u32 containerSerial) const {
+        std::map<std::pair<u32, u32>, bool>::const_iterator it =
+            tabOwned_.find(std::make_pair(container, containerSerial));
+        if (it == tabOwned_.end()) return 0;
+        return it->second ? 1 : 2;
+    }
+    // The squad screen's classifier: ownerClassForHand plus the pins, so a body
+    // moved or recruited since the last publishOwned is already on its side.
+    int squadOwnerClassForHand(const unsigned int h[5]) const {
+        Key k; k.t = h[0]; k.c = h[1]; k.cs = h[2]; k.i = h[3]; k.s = h[4];
+        if (pinOwned_.count(k) || ownHands_.count(k)) return 1;
+        if (pinPeer_.count(k) || allSquad_.count(k)) return 2;
+        return 0;
+    }
+
     // Cross-owner trade veto classifier (engine InvOwnerClassFn). Given a
     // save-stable owner hand (readObjectHand layout [type,container,
     // containerSerial,index,serial]) returns 0 = not a player-squad member,
@@ -90,10 +118,6 @@ public:
     // PEER. Consults the sets publishOwned refreshes each tick (allSquad_ +
     // ownHands_). Const + set-lookup only, so it is safe to call from the engine
     // tick (the UI-drag detour runs on the same main thread).
-    // True if c is one of the squad members this client owns (its hand is in
-    // ownHands_). Defined in ReplicatorDrive.cpp.
-    bool ownsChar(Character* c) const;
-
     int ownerClassForHand(const unsigned int h[5]) const {
         Key k; k.t = h[0]; k.c = h[1]; k.cs = h[2]; k.i = h[3]; k.s = h[4];
         if (allSquad_.find(k) == allSquad_.end()) return 0;
@@ -2236,6 +2260,23 @@ private:
     // EVT_SQUAD_MOVE exit CLEARS it - after which the body fell back to the
     // rank rule and was orphaned. A verdict on the CONTAINER outlives the pins.
     std::map<std::pair<u32, u32>, bool> tabOwned_;
+    // When a tab nobody has claimed yet was first seen. publishOwned runs before
+    // publishSquadMoves, so on the tick a move creates a tab the mover's pin is
+    // not there yet, and the friend's pin arrives with its event: decideTabs
+    // waits TAB_CLAIM_WAIT_MS for one of them before the host fallback. Measured
+    // 2026-09-25 (squad_sync): the join latched its own new squad as the host's
+    // in the same millisecond it sent the move event.
+    std::map<std::pair<u32, u32>, unsigned long> tabSeenMs_;
+    enum { TAB_CLAIM_WAIT_MS = 5000 };
+    // Own-characters-only control (Config ownGuard, with a friend connected):
+    // a roster edge on one of the friend's characters is never claimed or
+    // published (see publishSquadMoves).
+    bool ownGuardActive_;
+    // The owner split of the PREVIOUS publishOwned. publishSquadMoves runs after
+    // this tick's publishOwned, which already sees a moved body in its new tab
+    // under its new hand, so who owned it before the move is only here.
+    std::set<Key> prevOwnHands_;
+    std::set<Key> prevAllSquad_;
     // Number of tabs present at session-start seeding, i.e. the length of the
     // rank prefix that means the same thing on both clients. Ranks past it are
     // assigned in local first-seen order and DIVERGE (measured: host rank 2 =

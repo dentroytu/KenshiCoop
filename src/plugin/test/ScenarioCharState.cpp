@@ -2407,7 +2407,147 @@ const float EscapeScenario::PAST_EDGE  = 150.0f;
 
 } // namespace
 
+namespace {
+// own_guard (2026-09-25): each player controls only their own characters. Both
+// games hold both squads, so Kenshi let either player select the friend's
+// characters and order them. Each side here selects the OTHER side's tab leader
+// through PlayerInterface::selectObject - the call a portrait or world click makes
+// - and samples the selection on the following ticks: the guard must have taken
+// it away again every time. Then the host moves one of its characters into the
+// join's squad and the join's character into its own; the oracle checks that
+// neither move changed an owner. TOKELACOOP_OWN_GUARD=0 is the negative control
+// (the friend's character stays selected, and both moves change owner).
+class OwnGuardScenario : public TimedScenario {
+public:
+    // expectLeak: the negative control (guard off), where the selection must stick.
+    explicit OwnGuardScenario(bool expectLeak)
+        : TimedScenario(expectLeak ? "own_guard_off" : "own_guard", 0),
+          expectLeak_(expectLeak), tries_(0), resolved_(0), landed_(0), leaks_(0),
+          checks_(0), gave_(false), moved_(false), haveFriend_(false), leakLogged_(false),
+          lastLogMs_(0), nextTryMs_(TRY_MS) {
+        for (int i = 0; i < 5; ++i) friend_[i] = 0;
+    }
+
+    virtual void onStart(const ScenarioContext& ctx) {
+        char b[64];
+        _snprintf(b, sizeof(b) - 1, "SCENARIO OWNG start host=%d", ctx.isHost ? 1 : 0);
+        b[sizeof(b) - 1] = '\0'; coop::logLine(b);
+    }
+
+    virtual bool onTick(const ScenarioContext& ctx) {
+        if (ctx.elapsedMs >= DUR_MS) {
+            // landed: a select that really selected (read back in the same tick,
+            // before the guard's next pass) - without it a select that silently
+            // stopped working would look like a guard that works.
+            const bool pass = resolved_ > 0 && tries_ >= TRIES && checks_ > 0 && landed_ > 0 &&
+                              (expectLeak_ ? leaks_ > 0 : leaks_ == 0);
+            char b[176];
+            _snprintf(b, sizeof(b) - 1,
+                      "SCENARIO OWNG verdict role=%s pass=%d tries=%d resolved=%d checks=%d leaks=%d landed=%d",
+                      ctx.isHost ? "host" : "join", pass ? 1 : 0, tries_, resolved_, checks_, leaks_,
+                      landed_);
+            b[sizeof(b) - 1] = '\0'; coop::logLine(b);
+            setPassed(pass);
+            return true;
+        }
+        Character* peer = peerLeader(ctx);
+        if (ctx.isHost && !haveFriend_)
+            haveFriend_ = ovlRankContainer(ctx.gw, 1u, friend_);
+        // Sample every tick between tries: after a select, the guard has one tick.
+        // Only until the squad moves below reshuffle the tabs.
+        if (peer && lastLogMs_ != 0 && ctx.elapsedMs - lastLogMs_ >= 200 &&
+            ctx.elapsedMs < GIVE_MS) {
+            ++checks_;
+            if (engine::anyBodySelected(ctx.gw, &peer, 1)) {
+                ++leaks_;
+                if (!leakLogged_) {   // once per try; leaks_ still counts every tick
+                    leakLogged_ = true;
+                    char b[96];
+                    _snprintf(b, sizeof(b) - 1, "SCENARIO OWNG LEAK t=%lu (friend character still selected)",
+                              ctx.elapsedMs);
+                    b[sizeof(b) - 1] = '\0'; coop::logLine(b);
+                }
+            }
+        }
+        if (tries_ < TRIES && ctx.elapsedMs >= nextTryMs_) {
+            nextTryMs_ = ctx.elapsedMs + TRY_GAP_MS;
+            ++tries_;
+            if (peer) {
+                ++resolved_;
+                const bool ok = engine::selectBody(ctx.gw, peer);
+                const bool on = ok && engine::anyBodySelected(ctx.gw, &peer, 1);
+                if (on) ++landed_;
+                leakLogged_ = false;
+                lastLogMs_ = ctx.elapsedMs;
+                char b[112];
+                _snprintf(b, sizeof(b) - 1, "SCENARIO OWNG select-friend try=%d ok=%d landed=%d t=%lu",
+                          tries_, ok ? 1 : 0, on ? 1 : 0, ctx.elapsedMs);
+                b[sizeof(b) - 1] = '\0'; coop::logLine(b);
+            }
+        }
+        // Then the host moves characters between the two players' squads, the way a
+        // squad-screen drop would (the screens refuse both drops, but the two games
+        // do not always show the same squads). The oracle checks what the
+        // replication made of each roster edge. First one of the host's own into
+        // the join's squad: the join must not take it over...
+        if (ctx.isHost && !gave_ && tries_ >= TRIES && ctx.elapsedMs >= GIVE_MS) {
+            gave_ = true;
+            unsigned int oh[5];
+            unsigned int hb[5] = { 0, 0, 0, 0, 0 }, ha[5] = { 0, 0, 0, 0, 0 };
+            int rc = -1;
+            if (haveFriend_ && ovlRankContainer(ctx.gw, 0u, oh))
+                rc = engine::probeMoveSquadMember(ctx.gw, oh, friend_, /*lever*/ 1, hb, ha);
+            logMove("give", rc, hb, ha, ctx.elapsedMs);
+        }
+        // ...then the join's character into the host's squad: the host must not
+        // take it over either.
+        if (ctx.isHost && gave_ && !moved_ && ctx.elapsedMs >= TAKE_MS) {
+            moved_ = true;
+            unsigned int oh[5];
+            unsigned int hb[5] = { 0, 0, 0, 0, 0 }, ha[5] = { 0, 0, 0, 0, 0 };
+            int rc = -1;
+            if (haveFriend_ && ovlRankContainer(ctx.gw, 0u, oh))
+                rc = engine::probeMoveSquadMember(ctx.gw, friend_, oh, /*lever*/ 1, hb, ha);
+            logMove("move-friend", rc, hb, ha, ctx.elapsedMs);
+        }
+        return false;
+    }
+
+private:
+    static const int           TRIES      = 5;
+    static const unsigned long TRY_MS     = 6000;
+    static const unsigned long TRY_GAP_MS = 2000;
+    static const unsigned long GIVE_MS    = 16000;
+    static const unsigned long TAKE_MS    = 21000;
+    static const unsigned long DUR_MS     = 29000;
+
+    static void logMove(const char* what, int rc, const unsigned int hb[5],
+                        const unsigned int ha[5], unsigned long t) {
+        char b[200];
+        _snprintf(b, sizeof(b) - 1,
+                  "SCENARIO OWNG %s rc=%d before=%u,%u,%u,%u,%u after=%u,%u,%u,%u,%u t=%lu",
+                  what, rc, hb[0], hb[1], hb[2], hb[3], hb[4], ha[0], ha[1], ha[2], ha[3], ha[4], t);
+        b[sizeof(b) - 1] = '\0'; coop::logLine(b);
+    }
+
+    // The other side's tab leader (host owns rank 0, join rank 1 in the 2-tab saves).
+    static Character* peerLeader(const ScenarioContext& ctx) {
+        unsigned int h[5];
+        if (!ovlRankContainer(ctx.gw, ctx.isHost ? 1u : 0u, h)) return 0;
+        return engine::resolveCharByHand(h[3], h[4], h[0], h[1], h[2]);
+    }
+
+    bool          expectLeak_;
+    int           tries_, resolved_, landed_, leaks_, checks_;
+    bool          gave_, moved_, haveFriend_, leakLogged_;
+    unsigned int  friend_[5];   // host: the join's character, read before any move
+    unsigned long lastLogMs_, nextTryMs_;
+};
+} // namespace
+
 Scenario* makeCharStateScenario(const std::string& name) {
+    if (name == "own_guard")    return new OwnGuardScenario(false);
+    if (name == "own_guard_off") return new OwnGuardScenario(true); // guard off via DiagEnv
     if (name == "lockpick_escape") return new EscapeScenario("lockpick_escape", false);
     if (name == "escape_cohesion") return new EscapeScenario("escape_cohesion", true);
     if (name == "carry_order")  return new CarryOrderScenario();

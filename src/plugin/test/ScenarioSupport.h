@@ -82,6 +82,10 @@ Scenario* makeProbeScenario(const std::string& name);     // ScenarioProbes.cpp
 Scenario* makeBuildingScenario(const std::string& name);  // ScenarioBuildings.cpp
 Scenario* makeSessionScenario(const std::string& name);   // ScenarioSession.cpp
 
+// Lowest-hand member of the given squad-tab rank (its hand is also its inventory
+// container hand). Defined in ScenarioInventory.cpp; shared by newer scenarios.
+bool ovlRankContainer(GameWorld* gw, unsigned int rank, unsigned int out[5]);
+
 } // namespace coop
 
 #endif // TOKELACOOP_SCENARIO_SUPPORT_H

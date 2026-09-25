@@ -960,6 +960,18 @@ void Replicator::rekeyPeerBody(GameWorld* gw, const Key& oldK, const Key& newK,
             tabRank_.find(destTab);
         if (rit != tabRank_.end()) destOwned = ownsTab(destTab, rit->second);
     }
+    // Own-characters-only control: a character's owner never changes because it
+    // was moved, and the mover keeps its own pin - so claiming it here left BOTH
+    // games controlling it. The squad screens refuse a drop on the other player's
+    // squad, but the two games do not always show the same squads (a tab the
+    // receiver could not rebuild stays empty there), so this side must not claim.
+    if (destOwned && ownGuardActive_) {
+        char gb[176]; _snprintf(gb, sizeof(gb) - 1,
+            "[own] SQUAD-KEEP friend's character moved into our squad stays theirs new=%u,%u,%u,%u,%u",
+            newK.t, newK.c, newK.cs, newK.i, newK.s);
+        gb[sizeof(gb) - 1] = '\0'; coop::logLine(gb);
+        destOwned = false;
+    }
     // The author owns a peer-tab hand even if a local tab census would rank it
     // into a tab we own; but a transfer INTO a tab we own is exactly the control
     // hand-off, so we claim it instead of pinning it peer.

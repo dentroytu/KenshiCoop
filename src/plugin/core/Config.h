@@ -220,6 +220,10 @@ struct Config {
     // stayed 0). Outcomes stay owner-authoritative (KO/death/revive events).
     // "0" is the escape hatch.
     bool          damageGuard;
+    // Own-characters-only control (TOKELACOOP_OWN_GUARD, default ON): while a
+    // friend is connected, the friend's characters cannot stay selected here, so
+    // they cannot be ordered or have their inventory opened from the selection.
+    bool          ownGuard;
 
     // Peer-ready scenario arming (TOKELACOOP_ARM_TIMEOUT_MS). A scenario's clock
     // (onStart + elapsedMs) does not begin at gameplay start; it begins when this
