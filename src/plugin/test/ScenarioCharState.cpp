@@ -2415,7 +2415,7 @@ namespace {
 // - and samples the selection on the following ticks: the guard must have taken
 // it away again every time. Then the host moves one of its characters into the
 // join's squad and the join's character into its own; the oracle checks that
-// neither move changed an owner. KENSHICOOP_OWN_GUARD=0 is the negative control
+// neither move changed an owner. TOKELACOOP_OWN_GUARD=0 is the negative control
 // (the friend's character stays selected, and both moves change owner).
 class OwnGuardScenario : public TimedScenario {
 public:

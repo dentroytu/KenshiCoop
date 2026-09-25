@@ -5,8 +5,8 @@
 // Player text is UTF-8 with byte escapes (see UiLang.h). Keep a hex escape from
 // running into a following hex digit: "\xC3\xAD" "a", not "\xC3\xADa".
 
-#ifndef KENSHICOOP_REFUSAL_H
-#define KENSHICOOP_REFUSAL_H
+#ifndef TOKELACOOP_REFUSAL_H
+#define TOKELACOOP_REFUSAL_H
 
 #include "../../netproto/Wire.h"
 
@@ -82,21 +82,25 @@ inline RefusalText joinRefusalText(u32 code, u16 ours, bool es) {
         t.banner = es ? "Co-op: tu amigo tiene otra versi\xC3\xB3n (pulsa F2)"
                       : "Co-op: your friend has another version (press F2)";
         if (hv == 0) {
-            t.notice = es ? "Tu amigo tiene otra versi\xC3\xB3n de KenshiCoop (seguramente m\xC3\xA1s antigua)."
-                          : "Your friend has another KenshiCoop version (probably older).";
-            t.hint = es ? "P\xC3\xAD" "dele que instale la \xC3\xBAltima y vuelva a abrir Kenshi. "
+            // A host with no refusal code is v0.53 or older - back then the mod
+            // was still called KenshiCoop.
+            t.notice = es ? "Tu amigo tiene una versi\xC3\xB3n antigua del mod (seguramente KenshiCoop, "
+                            "el nombre que ten\xC3\xAD" "a antes)."
+                          : "Your friend has an old version of the mod (probably KenshiCoop, "
+                            "its former name).";
+            t.hint = es ? "P\xC3\xAD" "dele que instale la \xC3\xBAltima de TokelaCoop y vuelva a abrir Kenshi. "
                           "Luego pulsa Entendido y vuelve a conectar."
-                        : "Ask them to install the latest one and restart Kenshi. "
+                        : "Ask them to install the latest TokelaCoop and restart Kenshi. "
                           "Then press OK and connect again.";
         } else if (hv > ours) {
-            t.notice = es ? "Tu amigo tiene una versi\xC3\xB3n m\xC3\xA1s nueva de KenshiCoop."
-                          : "Your friend has a newer KenshiCoop version.";
+            t.notice = es ? "Tu amigo tiene una versi\xC3\xB3n m\xC3\xA1s nueva de TokelaCoop."
+                          : "Your friend has a newer TokelaCoop version.";
             t.hint = (es ? std::string("Instala la \xC3\xBAltima versi\xC3\xB3n y vuelve a abrir Kenshi. ")
                          : std::string("Install the latest version and restart Kenshi. ")) +
                      protoNumbers(es, ours, hv);
         } else {
-            t.notice = es ? "Tu amigo tiene una versi\xC3\xB3n m\xC3\xA1s antigua de KenshiCoop."
-                          : "Your friend has an older KenshiCoop version.";
+            t.notice = es ? "Tu amigo tiene una versi\xC3\xB3n m\xC3\xA1s antigua de TokelaCoop."
+                          : "Your friend has an older TokelaCoop version.";
             t.hint = (es ? std::string("P\xC3\xAD" "dele que instale la \xC3\xBAltima y vuelva a abrir Kenshi; "
                                        "luego pulsa Entendido y vuelve a conectar. ")
                          : std::string("Ask them to install the latest one and restart Kenshi; "
@@ -140,8 +144,8 @@ inline RefusalText joinRefusalText(u32 code, u16 ours, bool es) {
     b[sizeof(b) - 1] = '\0';
     t.level = 2; t.final = true;
     t.notice = b;
-    t.hint = es ? "Instalad los dos la \xC3\xBAltima versi\xC3\xB3n de KenshiCoop."
-                : "Both of you: install the latest KenshiCoop.";
+    t.hint = es ? "Instalad los dos la \xC3\xBAltima versi\xC3\xB3n de TokelaCoop."
+                : "Both of you: install the latest TokelaCoop.";
     t.banner = es ? "Co-op: no se pudo conectar (pulsa F2)" : "Co-op: could not connect (press F2)";
     return t;
 }
@@ -171,14 +175,15 @@ inline RefusalText hostRefusedText(u16 friendVersion, u16 ours, bool es) {
     if (friendVersion == 0 || friendVersion == ours) return t;
     t.level = 2;
     if (friendVersion < ours) {
-        t.notice = es ? "Tu amigo intent\xC3\xB3 entrar con una versi\xC3\xB3n m\xC3\xA1s antigua de KenshiCoop."
-                      : "Your friend tried to join with an older KenshiCoop version.";
+        // Not "of TokelaCoop": an older friend may still run it as KenshiCoop.
+        t.notice = es ? "Tu amigo intent\xC3\xB3 entrar con una versi\xC3\xB3n m\xC3\xA1s antigua del mod."
+                      : "Your friend tried to join with an older version of the mod.";
         t.hint = (es ? std::string("P\xC3\xAD" "dele que instale la \xC3\xBAltima y vuelva a abrir Kenshi. ")
                      : std::string("Ask them to install the latest one and restart Kenshi. ")) +
                  protoNumbers(es, ours, friendVersion);
     } else {
-        t.notice = es ? "Tu amigo intent\xC3\xB3 entrar con una versi\xC3\xB3n m\xC3\xA1s nueva de KenshiCoop."
-                      : "Your friend tried to join with a newer KenshiCoop version.";
+        t.notice = es ? "Tu amigo intent\xC3\xB3 entrar con una versi\xC3\xB3n m\xC3\xA1s nueva de TokelaCoop."
+                      : "Your friend tried to join with a newer TokelaCoop version.";
         t.hint = (es ? std::string("Instala la \xC3\xBAltima versi\xC3\xB3n y vuelve a abrir Kenshi. ")
                      : std::string("Install the latest version and restart Kenshi. ")) +
                  protoNumbers(es, ours, friendVersion);
@@ -190,4 +195,4 @@ inline RefusalText hostRefusedText(u16 friendVersion, u16 ours, bool es) {
 
 } // namespace coop
 
-#endif // KENSHICOOP_REFUSAL_H
+#endif // TOKELACOOP_REFUSAL_H

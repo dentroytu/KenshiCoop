@@ -70,10 +70,16 @@ std::map<std::string, std::string> parseFlatJson(const std::string& text) {
     return m;
 }
 
-// Absolute path to coop_config.json next to KenshiCoop.dll (fallback: cwd).
+// Absolute path to coop_config.json next to our own DLL (fallback: cwd). The
+// module is found by an address inside it, not by file name, so the lookup
+// survives a renamed DLL (KenshiCoop.dll became TokelaCoop.dll in v0.54).
 std::string configFilePath() {
     char buf[MAX_PATH];
-    HMODULE h = GetModuleHandleA("KenshiCoop.dll");
+    HMODULE h = 0;
+    if (!GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                            reinterpret_cast<LPCSTR>(&configFilePath), &h))
+        h = 0;
     DWORD n = GetModuleFileNameA(h, buf, MAX_PATH); // h == 0 would give the exe path
     if (h == 0 || n == 0 || n >= MAX_PATH) return "coop_config.json";
     std::string p(buf, n);
@@ -105,45 +111,45 @@ void loadConfig(Config& c) {
     // defaults; env vars still override every one of them (test harness).
     std::map<std::string, std::string> f = readConfigFile();
 
-    std::string mode = envOr("KENSHICOOP_MODE", fileOr(f, "role", "host").c_str());
+    std::string mode = envOr("TOKELACOOP_MODE", fileOr(f, "role", "host").c_str());
     c.isHost      = (mode != "join");
-    c.ip          = envOr("KENSHICOOP_IP", fileOr(f, "ip", "127.0.0.1").c_str());
-    c.port        = std::atoi(envOr("KENSHICOOP_PORT", fileOr(f, "port", "27800").c_str()).c_str());
-    c.save        = envOr("KENSHICOOP_SAVE", "");
-    c.testSeconds = std::atoi(envOr("KENSHICOOP_TEST_SECONDS", "0").c_str());
+    c.ip          = envOr("TOKELACOOP_IP", fileOr(f, "ip", "127.0.0.1").c_str());
+    c.port        = std::atoi(envOr("TOKELACOOP_PORT", fileOr(f, "port", "27800").c_str()).c_str());
+    c.save        = envOr("TOKELACOOP_SAVE", "");
+    c.testSeconds = std::atoi(envOr("TOKELACOOP_TEST_SECONDS", "0").c_str());
 
-    std::string defLog = c.isHost ? "KenshiCoop_host.log" : "KenshiCoop_join.log";
-    c.logPath  = envOr("KENSHICOOP_LOG", defLog.c_str());
-    c.scenario = envOr("KENSHICOOP_SCENARIO", "");
+    std::string defLog = c.isHost ? "TokelaCoop_host.log" : "TokelaCoop_join.log";
+    c.logPath  = envOr("TOKELACOOP_LOG", defLog.c_str());
+    c.scenario = envOr("TOKELACOOP_SCENARIO", "");
 
-    int d = std::atoi(envOr("KENSHICOOP_AUTOLOAD_DELAY_MS", "5000").c_str());
+    int d = std::atoi(envOr("TOKELACOOP_AUTOLOAD_DELAY_MS", "5000").c_str());
     c.autoLoadDelayMs = (d > 0) ? (unsigned long)d : 5000ul;
 
-    c.setupScene = envOr("KENSHICOOP_SETUP", "");
-    c.bakeSave   = envOr("KENSHICOOP_BAKESAVE", "");
-    c.probeRecruit = envOr("KENSHICOOP_PROBE_RECRUIT", "") == "1";
+    c.setupScene = envOr("TOKELACOOP_SETUP", "");
+    c.bakeSave   = envOr("TOKELACOOP_BAKESAVE", "");
+    c.probeRecruit = envOr("TOKELACOOP_PROBE_RECRUIT", "") == "1";
     // AI-suspend is the DEFAULT quieting layer for the join's driven world NPCs
-    // (review 2026-07-05). KENSHICOOP_AI_SUSPEND=0 is the escape hatch; the legacy
+    // (review 2026-07-05). TOKELACOOP_AI_SUSPEND=0 is the escape hatch; the legacy
     // probe env still forces it on so old harness call sites keep working.
-    c.aiSuspend = (envOr("KENSHICOOP_AI_SUSPEND", "1") != "0") ||
-                  (envOr("KENSHICOOP_PROBE_AISUSPEND", "") == "1");
-    c.noDetach  = envOr("KENSHICOOP_NO_DETACH", "") == "1";
-    c.damageGuard = envOr("KENSHICOOP_DAMAGE_GUARD", "1") != "0";
-    c.ownGuard    = envOr("KENSHICOOP_OWN_GUARD", "1") != "0";
+    c.aiSuspend = (envOr("TOKELACOOP_AI_SUSPEND", "1") != "0") ||
+                  (envOr("TOKELACOOP_PROBE_AISUSPEND", "") == "1");
+    c.noDetach  = envOr("TOKELACOOP_NO_DETACH", "") == "1";
+    c.damageGuard = envOr("TOKELACOOP_DAMAGE_GUARD", "1") != "0";
+    c.ownGuard    = envOr("TOKELACOOP_OWN_GUARD", "1") != "0";
     // Divergence-gated authority promoted to DEFAULT ON (step-4 A/B, 2026-07-05:
     // trusted-set engaged in 4/4 runs - grants 5-8, trusted ~5 of 12 driven - with
     // npc_track/pose gates at parity; the single red run was a host crash that
     // retry-passed). "0" is the escape hatch.
-    c.gateAuthority = envOr("KENSHICOOP_GATE_AUTHORITY", "1") != "0";
+    c.gateAuthority = envOr("TOKELACOOP_GATE_AUTHORITY", "1") != "0";
 
     // Inventory sync (Phase 4a). Env semantics: "1" = force on, "0" = force off
     // (escape hatch), unset = ON for REAL sessions (scenario == "" - the 2026-07-07
     // remote session played with it off and equipment changes never crossed) and the
     // manual inventory setup scene. Scripted test scenarios that need it (the inv_*,
     // trade_*, world_*_drop, vendor/store/weapon_loot family) now force it ON via
-    // their manifest DiagEnv (KENSHICOOP_INV_SYNC=1) instead of being named here.
+    // their manifest DiagEnv (TOKELACOOP_INV_SYNC=1) instead of being named here.
     {
-        std::string env = envOr("KENSHICOOP_INV_SYNC", "");
+        std::string env = envOr("TOKELACOOP_INV_SYNC", "");
         bool auto_ = (c.scenario == "") || (c.setupScene == "inventory");
         c.invSync = (env == "1") || (env != "0" && auto_);
     }
@@ -152,9 +158,9 @@ void loadConfig(Config& c) {
     // "0" = force off (escape hatch), unset = ON whenever invSync is on - the drag
     // dupe/wipe/weapon-vanish is a real-session bug, so the fix defaults on with the
     // channel it repairs. The trade_probe diagnostic (which baselines the UNFIXED
-    // signatures) forces it OFF via its manifest DiagEnv (KENSHICOOP_XFER_SYNC=0).
+    // signatures) forces it OFF via its manifest DiagEnv (TOKELACOOP_XFER_SYNC=0).
     {
-        std::string env = envOr("KENSHICOOP_XFER_SYNC", "");
+        std::string env = envOr("TOKELACOOP_XFER_SYNC", "");
         c.xferSync = (env == "1") || (env != "0" && c.invSync);
     }
 
@@ -166,9 +172,9 @@ void loadConfig(Config& c) {
     // drag leaked as a phantom ground drop. Protocol 37 is post-hoc (diffs container
     // totals) and therefore path-agnostic, so REAL sessions now ALLOW + replicate.
     // Env semantics: "1" = force the veto on; unset/"0" = off. The dedicated
-    // xfer_block scenario arms it via its manifest DiagEnv (KENSHICOOP_BLOCK_XFER=1).
+    // xfer_block scenario arms it via its manifest DiagEnv (TOKELACOOP_BLOCK_XFER=1).
     {
-        std::string env = envOr("KENSHICOOP_BLOCK_XFER", "");
+        std::string env = envOr("TOKELACOOP_BLOCK_XFER", "");
         c.blockXfer = (env == "1");
         if (c.blockXfer) c.xferSync = false; // veto supersedes replicate
     }
@@ -177,9 +183,9 @@ void loadConfig(Config& c) {
     // (escape hatch), unset = ON for REAL sessions (scenario == "" - dropped gear was
     // invisible cross-client in the 2026-07-07 remote session with it off). The
     // scripted world scenarios that need it (world_item_*, world_*_drop, limb_loss)
-    // force it ON via their manifest DiagEnv (KENSHICOOP_WORLD_SYNC=1).
+    // force it ON via their manifest DiagEnv (TOKELACOOP_WORLD_SYNC=1).
     {
-        std::string env = envOr("KENSHICOOP_WORLD_SYNC", "");
+        std::string env = envOr("TOKELACOOP_WORLD_SYNC", "");
         bool auto_ = (c.scenario == ""); // free play / real co-op session
         c.worldSync = (env == "1") || (env != "0" && auto_);
     }
@@ -188,62 +194,62 @@ void loadConfig(Config& c) {
     // owner-authoritative vitals for player-squad members + treatment forwarding.
     // Without it, spikes 21-23's truth holds: driven copies' vitals diverge
     // forever and cross-player first aid is lost. "0" is the A/B escape hatch.
-    c.medSync = envOr("KENSHICOOP_MED_SYNC", "1") != "0";
+    c.medSync = envOr("TOKELACOOP_MED_SYNC", "1") != "0";
 
     // Consensus game-speed sync: DEFAULT ON - requests min-arbitrated by the
     // host, combat caps fast-forward at 1x. "0" is the A/B escape hatch. The
     // speed_probe spike (which drives the quiet/loud writers directly) and
-    // time_probe force it OFF via their manifest DiagEnv (KENSHICOOP_SPEED_SYNC=0).
-    c.speedSync = envOr("KENSHICOOP_SPEED_SYNC", "1") != "0";
-    c.speedCombatCap = envOr("KENSHICOOP_SPEED_COMBAT_CAP", "1") != "0";
-    c.trackMove = envOr("KENSHICOOP_TRACK_MOVE", "0") == "1";
+    // time_probe force it OFF via their manifest DiagEnv (TOKELACOOP_SPEED_SYNC=0).
+    c.speedSync = envOr("TOKELACOOP_SPEED_SYNC", "1") != "0";
+    c.speedCombatCap = envOr("TOKELACOOP_SPEED_COMBAT_CAP", "1") != "0";
+    c.trackMove = envOr("TOKELACOOP_TRACK_MOVE", "0") == "1";
 
     // Character stats sync (protocol 17): DEFAULT ON - owner-authoritative
     // CharStats stream for player-squad members. Without it a driven copy
     // keeps save-load stats all session, and the peer's engine resolves REAL
     // fights with those stale numbers. "0" is the A/B escape hatch.
-    c.statsSync = envOr("KENSHICOOP_STATS_SYNC", "1") != "0";
+    c.statsSync = envOr("TOKELACOOP_STATS_SYNC", "1") != "0";
 
     // Carried-body sync (protocol 18): DEFAULT ON - reliable pickup/drop
     // edges + self-healing carried state for player-squad members. Without
     // it the peer's down-enforcement drags/teleports a carried KO'd body
     // along the ground behind its carrier. "0" is the A/B escape hatch.
-    c.carrySync = envOr("KENSHICOOP_CARRY_SYNC", "1") != "0";
+    c.carrySync = envOr("TOKELACOOP_CARRY_SYNC", "1") != "0";
 
     // Furniture occupancy sync (protocol 19, DEFAULT ON): reliable enter/exit
     // edges + self-healing BODY_IN_BED/BODY_IN_CAGE state, executed engine-
     // native (setBedMode/setPrisonMode) between each machine's local pair.
     // "0" is the A/B escape hatch.
-    c.furnSync = envOr("KENSHICOOP_FURN_SYNC", "1") != "0";
+    c.furnSync = envOr("TOKELACOOP_FURN_SYNC", "1") != "0";
     // Chained/pole prisoner sync (protocol 41, DEFAULT ON): rides the furniture
     // pipeline as kind=3 (Character::isChained -> setChainedMode). "0" disables
     // just the chain kind (beds/cages keep working).
-    c.chainSync = envOr("KENSHICOOP_CHAIN_SYNC", "1") != "0";
-    c.stealthSync = envOr("KENSHICOOP_STEALTH_SYNC", "1") != "0";
-    c.proneSync   = envOr("KENSHICOOP_PRONE_SYNC", "1") != "0";
-    c.moneySync   = envOr("KENSHICOOP_MONEY_SYNC", "1") != "0";
-    c.spawnSync   = envOr("KENSHICOOP_SPAWN_SYNC", "1") != "0";
-    c.recruitSync = envOr("KENSHICOOP_RECRUIT_SYNC", "1") != "0";
-    c.factionSync = envOr("KENSHICOOP_FACTION_SYNC", "1") != "0";
-    c.timeSync    = envOr("KENSHICOOP_TIME_SYNC", "1") != "0";
-    c.timeBrake   = envOr("KENSHICOOP_TIME_BRAKE", "1") != "0";
-    c.doorSync    = envOr("KENSHICOOP_DOOR_SYNC", "1") != "0";
-    c.buildSync   = envOr("KENSHICOOP_BUILD_SYNC", "1") != "0";
-    c.bdoorSync   = envOr("KENSHICOOP_BDOOR_SYNC", "1") != "0";
-    c.hungerSync  = envOr("KENSHICOOP_HUNGER_SYNC", "1") != "0";
-    c.saveSync    = envOr("KENSHICOOP_SAVE_SYNC", "1") != "0";
-    c.loadSync    = envOr("KENSHICOOP_LOAD_SYNC", "1") != "0";
-    c.prodSync    = envOr("KENSHICOOP_PROD_SYNC", "1") != "0";
-    c.researchSync = envOr("KENSHICOOP_RESEARCH_SYNC", "1") != "0";
-    c.deedSync    = envOr("KENSHICOOP_DEED_SYNC", "1") != "0";
-    c.fixtureSync = envOr("KENSHICOOP_FIXTURE_SYNC", "1") != "0";
-    c.storeSync   = envOr("KENSHICOOP_STORE_SYNC", "1") != "0";
-    c.squadSync   = envOr("KENSHICOOP_SQUAD_SYNC", "1") != "0";
-    c.latejoinSync = envOr("KENSHICOOP_LATEJOIN_SYNC", "1") != "0";
+    c.chainSync = envOr("TOKELACOOP_CHAIN_SYNC", "1") != "0";
+    c.stealthSync = envOr("TOKELACOOP_STEALTH_SYNC", "1") != "0";
+    c.proneSync   = envOr("TOKELACOOP_PRONE_SYNC", "1") != "0";
+    c.moneySync   = envOr("TOKELACOOP_MONEY_SYNC", "1") != "0";
+    c.spawnSync   = envOr("TOKELACOOP_SPAWN_SYNC", "1") != "0";
+    c.recruitSync = envOr("TOKELACOOP_RECRUIT_SYNC", "1") != "0";
+    c.factionSync = envOr("TOKELACOOP_FACTION_SYNC", "1") != "0";
+    c.timeSync    = envOr("TOKELACOOP_TIME_SYNC", "1") != "0";
+    c.timeBrake   = envOr("TOKELACOOP_TIME_BRAKE", "1") != "0";
+    c.doorSync    = envOr("TOKELACOOP_DOOR_SYNC", "1") != "0";
+    c.buildSync   = envOr("TOKELACOOP_BUILD_SYNC", "1") != "0";
+    c.bdoorSync   = envOr("TOKELACOOP_BDOOR_SYNC", "1") != "0";
+    c.hungerSync  = envOr("TOKELACOOP_HUNGER_SYNC", "1") != "0";
+    c.saveSync    = envOr("TOKELACOOP_SAVE_SYNC", "1") != "0";
+    c.loadSync    = envOr("TOKELACOOP_LOAD_SYNC", "1") != "0";
+    c.prodSync    = envOr("TOKELACOOP_PROD_SYNC", "1") != "0";
+    c.researchSync = envOr("TOKELACOOP_RESEARCH_SYNC", "1") != "0";
+    c.deedSync    = envOr("TOKELACOOP_DEED_SYNC", "1") != "0";
+    c.fixtureSync = envOr("TOKELACOOP_FIXTURE_SYNC", "1") != "0";
+    c.storeSync   = envOr("TOKELACOOP_STORE_SYNC", "1") != "0";
+    c.squadSync   = envOr("TOKELACOOP_SQUAD_SYNC", "1") != "0";
+    c.latejoinSync = envOr("TOKELACOOP_LATEJOIN_SYNC", "1") != "0";
     // NOTE: every channel above DEFAULTS ON for real sessions; the diagnostic
     // "*_probe" scenarios (and time_probe/speed_sync) that need a channel OFF to
     // measure the unsynced baseline force it via their manifest DiagEnv (e.g.
-    // shop_probe -> KENSHICOOP_MONEY_SYNC=0). This keeps scenario NAMES out of the
+    // shop_probe -> TOKELACOOP_MONEY_SYNC=0). This keeps scenario NAMES out of the
     // shipped plugin - the manifest (scripts/scenarios.psd1) is the single source
     // of truth for per-scenario channel A/B; see Contract.Tests's DiagEnv guard.
 
@@ -251,62 +257,62 @@ void loadConfig(Config& c) {
     // harness runs on it); "steam" tunnels ENet over Steam P2P by SteamID (no
     // port forwarding / CGNAT-immune). steamPeer is the OTHER player's steamid64
     // (two-code exchange); steamPing arms the channel-1 reachability spike.
-    c.transport = envOr("KENSHICOOP_TRANSPORT", fileOr(f, "transport", "udp").c_str());
+    c.transport = envOr("TOKELACOOP_TRANSPORT", fileOr(f, "transport", "udp").c_str());
     c.steamPeer = (unsigned long long)_strtoui64(
-        envOr("KENSHICOOP_STEAM_PEER", fileOr(f, "steamPeer", "0").c_str()).c_str(), 0, 10);
-    c.steamPing = (unsigned long long)_strtoui64(envOr("KENSHICOOP_STEAM_PING", "0").c_str(), 0, 10);
+        envOr("TOKELACOOP_STEAM_PEER", fileOr(f, "steamPeer", "0").c_str()).c_str(), 0, 10);
+    c.steamPing = (unsigned long long)_strtoui64(envOr("TOKELACOOP_STEAM_PING", "0").c_str(), 0, 10);
 
     // In-game panel session control: opt-in legacy auto-start. Default OFF so a
     // panel-driven (env-free) install defers the session to the Connect button;
     // the test harness overrides this in Plugin.cpp (scenario / test-seconds).
     // Accepts "1"/"true" from the file's JSON bool.
     {
-        std::string ac = envOr("KENSHICOOP_AUTOCONNECT", fileOr(f, "autoConnect", "0").c_str());
+        std::string ac = envOr("TOKELACOOP_AUTOCONNECT", fileOr(f, "autoConnect", "0").c_str());
         c.autoConnect = (ac == "1" || ac == "true");
     }
 
     // Protocol 36 movement-smoothness knobs. Defaults are the historical
     // constants; any positive env value overrides for live A/B tuning.
     {
-        c.sendStamp = envOr("KENSHICOOP_SEND_STAMP", "1") != "0";
+        c.sendStamp = envOr("TOKELACOOP_SEND_STAMP", "1") != "0";
         int v;
-        v = std::atoi(envOr("KENSHICOOP_INTERP_MIN_DELAY_MS", "0").c_str());
+        v = std::atoi(envOr("TOKELACOOP_INTERP_MIN_DELAY_MS", "0").c_str());
         c.interpMinDelayMs = (v > 0) ? (unsigned int)v : 50u;
-        v = std::atoi(envOr("KENSHICOOP_INTERP_MAX_DELAY_MS", "0").c_str());
+        v = std::atoi(envOr("TOKELACOOP_INTERP_MAX_DELAY_MS", "0").c_str());
         c.interpMaxDelayMs = (v > 0) ? (unsigned int)v : 200u;
-        v = std::atoi(envOr("KENSHICOOP_INTERP_MAX_EXTRAP_MS", "0").c_str());
+        v = std::atoi(envOr("TOKELACOOP_INTERP_MAX_EXTRAP_MS", "0").c_str());
         c.interpMaxExtrapMs = (v > 0) ? (unsigned int)v : 250u;
-        v = std::atoi(envOr("KENSHICOOP_INTERP_MAX_CADENCE_DELAY_MS", "0").c_str());
+        v = std::atoi(envOr("TOKELACOOP_INTERP_MAX_CADENCE_DELAY_MS", "0").c_str());
         c.interpMaxCadenceDelayMs = (v > 0) ? (unsigned int)v : 1200u;
-        v = std::atoi(envOr("KENSHICOOP_INTERP_STALE_MS", "0").c_str());
+        v = std::atoi(envOr("TOKELACOOP_INTERP_STALE_MS", "0").c_str());
         c.interpStaleMs = (v > 0) ? (unsigned int)v : 2000u;
         double f;
-        f = std::atof(envOr("KENSHICOOP_INTERP_SNAP_DIST", "0").c_str());
+        f = std::atof(envOr("TOKELACOOP_INTERP_SNAP_DIST", "0").c_str());
         c.interpSnapDist = (f > 0.0) ? (float)f : 50.0f;
         // The A/B control for the cadence-scaled buffer is
-        // KENSHICOOP_INTERP_MAX_CADENCE_DELAY_MS=200, which pins the ceiling
+        // TOKELACOOP_INTERP_MAX_CADENCE_DELAY_MS=200, which pins the ceiling
         // back to interpMaxDelayMs for every tier. K alone cannot: the mid
         // band's ~500 ms cadence still clears 200 ms at any K above 0.4.
-        f = std::atof(envOr("KENSHICOOP_INTERP_CADENCE_K", "0").c_str());
+        f = std::atof(envOr("TOKELACOOP_INTERP_CADENCE_K", "0").c_str());
         c.interpCadenceK = (f > 0.0) ? (float)f : 2.0f;
-        f = std::atof(envOr("KENSHICOOP_CATCHUP_K", "0").c_str());
+        f = std::atof(envOr("TOKELACOOP_CATCHUP_K", "0").c_str());
         c.catchupK = (f > 0.0) ? (float)f : 2.0f;
-        f = std::atof(envOr("KENSHICOOP_SNAP_DIST", "0").c_str());
+        f = std::atof(envOr("TOKELACOOP_SNAP_DIST", "0").c_str());
         c.snapDist = (f > 0.0) ? (float)f : 8.0f;
-        f = std::atof(envOr("KENSHICOOP_SNAP_SECONDS", "0").c_str());
+        f = std::atof(envOr("TOKELACOOP_SNAP_SECONDS", "0").c_str());
         c.snapSeconds = (f > 0.0) ? (float)f : 0.75f;
         // Combat convergence bands (0 = keep the drive's ReplicatorUtil default).
-        c.combatSoftDist    = (float)std::atof(envOr("KENSHICOOP_COMBAT_SOFT_DIST", "0").c_str());
-        c.combatSnapDist    = (float)std::atof(envOr("KENSHICOOP_COMBAT_SNAP_DIST", "0").c_str());
-        c.combatBigSnapDist = (float)std::atof(envOr("KENSHICOOP_COMBAT_BIG_SNAP_DIST", "0").c_str());
-        c.combatSlideMax    = (float)std::atof(envOr("KENSHICOOP_COMBAT_SLIDE_MAX", "0").c_str());
-        c.combatConvergeMs  = (unsigned int)std::atoi(envOr("KENSHICOOP_COMBAT_CONVERGE_MS", "0").c_str());
+        c.combatSoftDist    = (float)std::atof(envOr("TOKELACOOP_COMBAT_SOFT_DIST", "0").c_str());
+        c.combatSnapDist    = (float)std::atof(envOr("TOKELACOOP_COMBAT_SNAP_DIST", "0").c_str());
+        c.combatBigSnapDist = (float)std::atof(envOr("TOKELACOOP_COMBAT_BIG_SNAP_DIST", "0").c_str());
+        c.combatSlideMax    = (float)std::atof(envOr("TOKELACOOP_COMBAT_SLIDE_MAX", "0").c_str());
+        c.combatConvergeMs  = (unsigned int)std::atoi(envOr("TOKELACOOP_COMBAT_CONVERGE_MS", "0").c_str());
         // Census radius: "0" (explicit) disables; absent = 2000 u default.
-        std::string cr = envOr("KENSHICOOP_CENSUS_RADIUS", "");
+        std::string cr = envOr("TOKELACOOP_CENSUS_RADIUS", "");
         c.censusRadius = cr.empty() ? 2000.0f : (float)std::atof(cr.c_str());
         if (c.censusRadius < 0.0f) c.censusRadius = 0.0f;
         // Census-mint radius: "0" (explicit) disables; absent = 600 u default.
-        std::string mr = envOr("KENSHICOOP_SPAWN_MINT_RADIUS", "");
+        std::string mr = envOr("TOKELACOOP_SPAWN_MINT_RADIUS", "");
         c.spawnMintRadius = mr.empty() ? 600.0f : (float)std::atof(mr.c_str());
         if (c.spawnMintRadius < 0.0f) c.spawnMintRadius = 0.0f;
         // Census park distance: "0" (explicit) disables; absent = 120 u
@@ -314,7 +320,7 @@ void loadConfig(Config& c) {
         // bar NPC seated at a different stool per sim - run 185524 showed
         // parking those fights the seat AI every frame); a genuinely
         // divergent wanderer (the pack-hidden class) measures 500-900 u.
-        std::string cp = envOr("KENSHICOOP_CENSUS_PARK", "");
+        std::string cp = envOr("TOKELACOOP_CENSUS_PARK", "");
         c.censusParkDist = cp.empty() ? 120.0f : (float)std::atof(cp.c_str());
         if (c.censusParkDist < 0.0f) c.censusParkDist = 0.0f;
         // Census walk band: how far past the park distance a diverged copy is
@@ -330,7 +336,7 @@ void loadConfig(Config& c) {
         // where its counterpart has never been - and there is nothing to
         // converge to on foot; walking would cross whatever lies between and
         // take a minute of world time to arrive. 400 u sits clear of both.
-        std::string cw = envOr("KENSHICOOP_CENSUS_WALK", "");
+        std::string cw = envOr("TOKELACOOP_CENSUS_WALK", "");
         c.censusWalkDist = cw.empty() ? 400.0f : (float)std::atof(cw.c_str());
         if (c.censusWalkDist < 0.0f) c.censusWalkDist = 0.0f;
         // Census adoption radius: how far from a census row's reported position
@@ -361,13 +367,13 @@ void loadConfig(Config& c) {
         // the join had HIDDEN, which pairs rows against bodies of any template at
         // any time in the run - a lower bound on "was a twin available", not a
         // measurement of how far the actual twin was.)
-        std::string adr = envOr("KENSHICOOP_ADOPT_RADIUS", "");
+        std::string adr = envOr("TOKELACOOP_ADOPT_RADIUS", "");
         c.adoptRadius = adr.empty() ? 250.0f : (float)std::atof(adr.c_str());
         if (c.adoptRadius < 0.0f) c.adoptRadius = 0.0f;
         // Attention gate: "0" (explicit) disables - every body counts as
         // observed and reconciliation behaves exactly as it did before the
         // gate existed. Absent = 1000 u default.
-        std::string ar = envOr("KENSHICOOP_ATTENTION_RADIUS", "");
+        std::string ar = envOr("TOKELACOOP_ATTENTION_RADIUS", "");
         c.attentionRadius = ar.empty() ? 1000.0f : (float)std::atof(ar.c_str());
         if (c.attentionRadius < 0.0f) c.attentionRadius = 0.0f;
         // Presence authority (protocol 49). DEFAULT ON as of v0.47: it has run
@@ -377,61 +383,61 @@ void loadConfig(Config& c) {
         // unconditional host authority.
         //
         // The scenario tier does NOT inherit this default. Set-CoopDiagEnv
-        // (scripts/CoopHarness.psm1) pins KENSHICOOP_CELL_AUTH=0 for every
+        // (scripts/CoopHarness.psm1) pins TOKELACOOP_CELL_AUTH=0 for every
         // scenario that does not ask for it, which is what keeps the tier a
         // fail-open proof rather than a co-test of this flag.
-        c.cellAuth = envOr("KENSHICOOP_CELL_AUTH", "1") != "0";
+        c.cellAuth = envOr("TOKELACOOP_CELL_AUTH", "1") != "0";
         // Co-location collapse: hand every claimed cell to the host while the
         // squads are on top of each other. Only consulted when cellAuth is on -
         // with authority off the host already owns everything. "0" restores the
         // uncollapsed split, which is the arm the A/B compares against.
-        c.cellCollapse = envOr("KENSHICOOP_CELL_COLLAPSE", "1") != "0";
+        c.cellCollapse = envOr("TOKELACOOP_CELL_COLLAPSE", "1") != "0";
         // Census-band AI freeze: quiesce a diverging census-band body's local
         // AI so it can't flee/aggro the join's guards. DEFAULT ON; the A/B
         // escape hatch restores the position-park-only behavior.
-        c.censusFreezeAi = envOr("KENSHICOOP_CENSUS_FREEZE_AI", "1") != "0";
+        c.censusFreezeAi = envOr("TOKELACOOP_CENSUS_FREEZE_AI", "1") != "0";
         // Camera-anchored interest (protocol 43): fold the local camera +
         // peer camera hint into the interest anchors. DEFAULT ON; the A/B
         // escape hatch restores tab-leader-only anchors.
-        c.camInterest = envOr("KENSHICOOP_CAM_INTEREST", "1") != "0";
+        c.camInterest = envOr("TOKELACOOP_CAM_INTEREST", "1") != "0";
         // Task-selection observation spike: OFF by default (diagnostic only).
-        c.taskSelectSpike = envOr("KENSHICOOP_TASK_SPIKE", "0") != "0";
+        c.taskSelectSpike = envOr("TOKELACOOP_TASK_SPIKE", "0") != "0";
         // Jail put-to-work desync spike: OFF by default (diagnostic only).
-        c.jailProbe = envOr("KENSHICOOP_JAIL_PROBE", "0") != "0";
+        c.jailProbe = envOr("TOKELACOOP_JAIL_PROBE", "0") != "0";
         // Jail put-to-work observation spike (Phase A): OFF by default.
-        c.jailObserve = envOr("KENSHICOOP_JAIL_OBSERVE", "0") != "0";
+        c.jailObserve = envOr("TOKELACOOP_JAIL_OBSERVE", "0") != "0";
         // Starve hold: "0" (explicit) restores legacy release-on-stale;
         // absent = 10 s guard-hold default.
-        std::string sh = envOr("KENSHICOOP_STARVE_HOLD_MS", "");
+        std::string sh = envOr("TOKELACOOP_STARVE_HOLD_MS", "");
         int shv = sh.empty() ? 10000 : std::atoi(sh.c_str());
         c.starveHoldMs = (shv > 0) ? (unsigned int)shv : 0u;
     }
 
-    int delay  = std::atoi(envOr("KENSHICOOP_NETSIM_DELAY_MS", "0").c_str());
-    int jitter = std::atoi(envOr("KENSHICOOP_NETSIM_JITTER_MS", "0").c_str());
-    int loss   = std::atoi(envOr("KENSHICOOP_NETSIM_LOSS_PCT", "0").c_str());
+    int delay  = std::atoi(envOr("TOKELACOOP_NETSIM_DELAY_MS", "0").c_str());
+    int jitter = std::atoi(envOr("TOKELACOOP_NETSIM_JITTER_MS", "0").c_str());
+    int loss   = std::atoi(envOr("TOKELACOOP_NETSIM_LOSS_PCT", "0").c_str());
     c.netSimDelayMs  = (delay  > 0) ? (unsigned int)delay  : 0u;
     c.netSimJitterMs = (jitter > 0) ? (unsigned int)jitter : 0u;
     c.netSimLossPct  = (loss   > 0) ? (unsigned int)(loss > 100 ? 100 : loss) : 0u;
 
-    c.fakeClockSkewMs = (long)std::atoi(envOr("KENSHICOOP_FAKE_CLOCK_SKEW_MS", "0").c_str());
+    c.fakeClockSkewMs = (long)std::atoi(envOr("TOKELACOOP_FAKE_CLOCK_SKEW_MS", "0").c_str());
 
     c.fakeProtoHost = 0;
     c.fakeProtoJoin = 0;
-#ifdef KENSHICOOP_HARNESS
-    c.fakeProtoHost = (unsigned int)std::atoi(envOr("KENSHICOOP_FAKE_PROTOCOL_HOST", "0").c_str()) & 0xFFFFu;
-    c.fakeProtoJoin = (unsigned int)std::atoi(envOr("KENSHICOOP_FAKE_PROTOCOL_JOIN", "0").c_str()) & 0xFFFFu;
+#ifdef TOKELACOOP_HARNESS
+    c.fakeProtoHost = (unsigned int)std::atoi(envOr("TOKELACOOP_FAKE_PROTOCOL_HOST", "0").c_str()) & 0xFFFFu;
+    c.fakeProtoJoin = (unsigned int)std::atoi(envOr("TOKELACOOP_FAKE_PROTOCOL_JOIN", "0").c_str()) & 0xFFFFu;
 #endif
 
-    int armTimeout = std::atoi(envOr("KENSHICOOP_ARM_TIMEOUT_MS", "45000").c_str());
+    int armTimeout = std::atoi(envOr("TOKELACOOP_ARM_TIMEOUT_MS", "45000").c_str());
     c.scenarioArmTimeoutMs = (armTimeout > 0) ? (unsigned long)armTimeout : 0ul;
 
     // Ownership squad-tab ranks: parse a CSV of unsigned ints (e.g. "0", "1", "1,2").
-    // KENSHICOOP_OWN_SQUAD is primary; KENSHICOOP_OWN_RANK is an accepted alias. Empty
+    // TOKELACOOP_OWN_SQUAD is primary; TOKELACOOP_OWN_RANK is an accepted alias. Empty
     // env -> default (host owns tab {0} / join owns tab {1}).
     c.ownRanks.clear();
     {
-        std::string ranks = envOr("KENSHICOOP_OWN_SQUAD", envOr("KENSHICOOP_OWN_RANK", "").c_str());
+        std::string ranks = envOr("TOKELACOOP_OWN_SQUAD", envOr("TOKELACOOP_OWN_RANK", "").c_str());
         c.ownRanksFromEnv = parseRankList(ranks, c.ownRanks);
         resolveOwnRanks(c.ownRanks, c.isHost, c.ownRanksFromEnv);
     }
@@ -440,7 +446,7 @@ void loadConfig(Config& c) {
 std::string describeConfig(const Config& c) {
     // Compact "on/off" channel roster + the knobs most likely to explain a
     // divergence. Kept on one line so it is greppable in the log.
-    std::string s = "KenshiCoop: effective cfg";
+    std::string s = "TokelaCoop: effective cfg";
     s += " scenario='" + c.scenario + "'";
     if (!c.setupScene.empty()) s += " setup='" + c.setupScene + "'";
     s += " transport=" + c.transport;

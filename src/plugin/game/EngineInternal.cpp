@@ -539,7 +539,7 @@ bool g_speedCombatHint = false;
 
 bool speedDbgOn() {
     static int on = -1;
-    if (on < 0) { const char* e = getenv("KENSHICOOP_DEBUG_SPEED"); on = (e && e[0] == '1') ? 1 : 0; }
+    if (on < 0) { const char* e = getenv("TOKELACOOP_DEBUG_SPEED"); on = (e && e[0] == '1') ? 1 : 0; }
     return on == 1;
 }
 
@@ -751,12 +751,12 @@ static Item*          g_pendRemItem  = 0; // last item removed onto the cursor
 static unsigned int   g_pendRemOwnerHand[5] = { 0, 0, 0, 0, 0 }; // its owner-char hand
 static bool           g_havePendRemOwner = false;                 // hand above is valid
 
-// KENSHICOOP_INV_DUMP diagnostic gate (read once). When on, EVERY squad<->squad
+// TOKELACOOP_INV_DUMP diagnostic gate (read once). When on, EVERY squad<->squad
 // drag logs a "[xfer] DRAG" line (src/dst owner class + block decision) - the A1
 // evidence for the drag call sequence, thread-affinity and refused-add behaviour.
 static int xferDumpFlag() {
     static int v = -1;
-    if (v < 0) { const char* e = getenv("KENSHICOOP_INV_DUMP"); v = (e && e[0] == '1') ? 1 : 0; }
+    if (v < 0) { const char* e = getenv("TOKELACOOP_INV_DUMP"); v = (e && e[0] == '1') ? 1 : 0; }
     return v;
 }
 
@@ -1175,7 +1175,7 @@ void __fastcall periodicUpdate_hook(Character* self) {
     g_periodicOrig(self);
 }
 
-// ---- Task-selection observation spike (KENSHICOOP_TASK_SPIKE) --------------
+// ---- Task-selection observation spike (TOKELACOOP_TASK_SPIKE) --------------
 // The theoretical AI cut point (design chat 2026-07-18): CharBody::setCurrentAction
 // is the ONE seam every task-SELECTION result (AI scorer OR player order) flows
 // through before the body EXECUTES it - virtual vtable 0x18 / RVA 0x5C6740, wholly
@@ -1900,7 +1900,7 @@ void resolve() {
     // Spike 402: prove which executable is actually mapped and record the
     // KenshiLib-remapped entry points for the native save/object-serialisation
     // pipeline.  This is deliberately address-only: no serialiser is invoked.
-    const char* spikeId = std::getenv("KENSHICOOP_SPIKE");
+    const char* spikeId = std::getenv("TOKELACOOP_SPIKE");
     if (spikeId && strcmp(spikeId, "402") == 0) {
         const unsigned __int64 base =
             (unsigned __int64)GetModuleHandleA(NULL);
@@ -1984,7 +1984,7 @@ bool gameplayLive(GameWorld* gw) {
 // probeNativeSnapshot (the spike-402 native-snapshot round-trip probe) moved to
 // EngineProbe.cpp (Phase 5e, HARNESS-ONLY). It uses the external leader(); the
 // spike-402 ADDRESS-only trace above stays here (it runs from installEngineDetours
-// at startup, gated by KENSHICOOP_SPIKE=402).
+// at startup, gated by TOKELACOOP_SPIKE=402).
 
 // Overwrite SaveManager::currentGame in place. getCurrentGame() returns a
 // reference to the member (modelled as a pointer via g_saveMgrCurGameFn), so we

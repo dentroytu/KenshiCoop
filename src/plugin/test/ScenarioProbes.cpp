@@ -15,7 +15,7 @@ namespace {
 
 // ===========================================================================
 // SpikeScenario - generic investigative harness for the autonomous spike loop.
-// The concrete probe is selected by the KENSHICOOP_SPIKE env var ("1".."50").
+// The concrete probe is selected by the TOKELACOOP_SPIKE env var ("1".."50").
 // Each probe emits "SPIKE <id> ..." evidence lines that run_spike.ps1 collects
 // and the per-spike findings doc summarizes. It is DIAGNOSTIC: passed() means
 // "the probe executed and produced evidence", not a cross-client sync gate.
@@ -32,7 +32,7 @@ public:
           nativeDone_(false), lastLogMs_(0), durMs_(30000), wmStep_(0),
           r4Step_(0), r4Ops_(0), r4NextMs_(0), r4Have_(false), r4Placed_(false),
           r4Started_(false) {
-        const char* id = std::getenv("KENSHICOOP_SPIKE");
+        const char* id = std::getenv("TOKELACOOP_SPIKE");
         id_ = id ? id : "0";
         wmSid_[0] = '\0';
         r4Sid_[0] = '\0';

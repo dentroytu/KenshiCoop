@@ -14,8 +14,8 @@
 // This header is engine-free (file IO + wire only); Plugin.cpp drives it from
 // the main thread. VS2010 (v100) compatible.
 
-#ifndef KENSHICOOP_SAVEXFER_H
-#define KENSHICOOP_SAVEXFER_H
+#ifndef TOKELACOOP_SAVEXFER_H
+#define TOKELACOOP_SAVEXFER_H
 
 #include <string>
 #include "../../netproto/Wire.h"
@@ -34,7 +34,7 @@ namespace savexfer {
 // %LOCALAPPDATA%\kenshi\save\<name> convention every harness script assumes.
 std::string saveFolderFor(const std::string& name);
 
-#ifdef KENSHICOOP_PROTOTEST
+#ifdef TOKELACOOP_PROTOTEST
 // Prototest-only seam: pin the save-root to a caller-owned temp dir so the
 // receiver round-trip test (main.cpp testSaveXferRoundTrip) stages/commits
 // there instead of the user's real %LOCALAPPDATA%\kenshi\save.
@@ -144,4 +144,4 @@ void abortAll();
 } // namespace savexfer
 } // namespace coop
 
-#endif // KENSHICOOP_SAVEXFER_H
+#endif // TOKELACOOP_SAVEXFER_H

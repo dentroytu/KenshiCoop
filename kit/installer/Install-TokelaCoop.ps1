@@ -1,23 +1,26 @@
 ﻿<#
 .SYNOPSIS
-  One-click KenshiCoop install: finds Kenshi, makes sure RE_Kenshi is there,
-  copies the mod and turns it on. Run through "Instalar KenshiCoop.cmd".
+  One-click TokelaCoop install: finds Kenshi, makes sure RE_Kenshi is there,
+  copies the mod and turns it on. Run through "Instalar TokelaCoop.cmd".
 
 .DESCRIPTION
   1. Find Kenshi (every Steam library, GOG, or ask for the folder).
   2. RE_Kenshi: if missing, download the pinned release from GitHub, check its
      SHA-256 and open its official installer (the only supported way on Kenshi
      1.0.68) with the Kenshi folder already on the clipboard.
-  3. Copy the mod into <Kenshi>\mods\KenshiCoop (keeping an existing
-     coop_config.json) and unblock the files.
-  4. Enable KenshiCoop.mod in <Kenshi>\data\mods.cfg.
-  5. Warn about a Workshop copy of KenshiCoop (would load twice).
+  3. Copy the mod into <Kenshi>\mods\TokelaCoop (keeping an existing
+     coop_config.json, or carrying over the one from an old mods\KenshiCoop)
+     and unblock the files.
+  4. Enable TokelaCoop.mod in <Kenshi>\data\mods.cfg; an old KenshiCoop.mod line
+     (the name up to v0.53) is replaced in place.
+  5. Remove an old mods\KenshiCoop, so the old and new plugin never load together.
+  6. Warn about a Workshop copy of the mod under either name (would load twice).
   Re-running it updates the mod in place.
 
 .EXAMPLE
-  powershell -ExecutionPolicy Bypass -File installer\Install-KenshiCoop.ps1
+  powershell -ExecutionPolicy Bypass -File installer\Install-TokelaCoop.ps1
 .EXAMPLE
-  powershell -ExecutionPolicy Bypass -File installer\Install-KenshiCoop.ps1 -KenshiPath "D:\Games\Kenshi"
+  powershell -ExecutionPolicy Bypass -File installer\Install-TokelaCoop.ps1 -KenshiPath "D:\Games\Kenshi"
 #>
 [CmdletBinding()]
 param(
@@ -29,7 +32,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $here   = Split-Path -Parent $MyInvocation.MyCommand.Path
 $kitDir = Split-Path -Parent $here
-Import-Module (Join-Path $here 'KenshiCoopInstaller.psm1') -Force -DisableNameChecking
+Import-Module (Join-Path $here 'TokelaCoopInstaller.psm1') -Force -DisableNameChecking
 
 function Step([string]$es, [string]$en) { Write-Host ''; Write-Host ('>> ' + (T $es $en)) -ForegroundColor Cyan }
 function Ok([string]$es, [string]$en)   { Write-Host ('   [OK] ' + (T $es $en)) -ForegroundColor Green }
@@ -48,18 +51,24 @@ function Pick-Folder {
 
 $exitCode = 0
 try {
+    # The kit's version (make_mod_kit.ps1 writes it to PROVENANCE.json).
+    $title = 'TokelaCoop'
+    try {
+        $prov = Get-Content -LiteralPath (Join-Path $kitDir 'PROVENANCE.json') -Raw -ErrorAction Stop | ConvertFrom-Json
+        if ($prov.version) { $title = "TokelaCoop v$($prov.version)" }
+    } catch {}
     Write-Host '==============================================' -ForegroundColor Cyan
-    Write-Host (T '   KenshiCoop - instalador' '   KenshiCoop - installer') -ForegroundColor Cyan
+    Write-Host (T "   $title - instalador" "   $title - installer") -ForegroundColor Cyan
     Write-Host '==============================================' -ForegroundColor Cyan
 
     # Unblock the extracted kit first (a downloaded zip tags every file).
     Get-ChildItem -LiteralPath $kitDir -Recurse -File -ErrorAction SilentlyContinue |
         Unblock-File -ErrorAction SilentlyContinue
 
-    $kitMod = Join-Path $kitDir 'KenshiCoop'
-    if (-not (Test-Path -LiteralPath (Join-Path $kitMod 'KenshiCoop.dll'))) {
-        throw (T "No encuentro la carpeta KenshiCoop junto al instalador ($kitMod). Descomprime el zip entero y vuelve a probar." `
-                 "The KenshiCoop folder is missing next to the installer ($kitMod). Extract the whole zip and try again.")
+    $kitMod = Join-Path $kitDir 'TokelaCoop'
+    if (-not (Test-Path -LiteralPath (Join-Path $kitMod 'TokelaCoop.dll'))) {
+        throw (T "No encuentro la carpeta TokelaCoop junto al instalador ($kitMod). Descomprime el zip entero y vuelve a probar." `
+                 "The TokelaCoop folder is missing next to the installer ($kitMod). Extract the whole zip and try again.")
     }
 
     # 1. Kenshi ------------------------------------------------------------------
@@ -105,23 +114,23 @@ try {
     }
 
     # 2. RE_Kenshi --------------------------------------------------------------
-    Step 'Comprobando RE_Kenshi (el cargador de mods que necesita KenshiCoop)...' `
-         'Checking RE_Kenshi (the mod loader KenshiCoop needs)...'
+    Step 'Comprobando RE_Kenshi (el cargador de mods que necesita TokelaCoop)...' `
+         'Checking RE_Kenshi (the mod loader TokelaCoop needs)...'
     $rek = Get-REKenshiState $kenshi
     if ($rek.Installed -and $rek.Enabled) {
         if ($rek.Version -ne 'unknown') { Ok "RE_Kenshi $($rek.Version) instalado." "RE_Kenshi $($rek.Version) installed." }
         else {
             Ok 'RE_Kenshi instalado.' 'RE_Kenshi installed.'
-            Warn "No es una versión probada con KenshiCoop (probadas: 0.3.4 y 0.3.5). Si el panel F2 no aparece, reinstala RE_Kenshi $((Get-KcRelease).Version)." `
-                 "Not a version tested with KenshiCoop (tested: 0.3.4 and 0.3.5). If the F2 panel does not show, reinstall RE_Kenshi $((Get-KcRelease).Version)."
+            Warn "No es una versión probada con TokelaCoop (probadas: 0.3.4 y 0.3.5). Si el panel F2 no aparece, reinstala RE_Kenshi $((Get-KcRelease).Version)." `
+                 "Not a version tested with TokelaCoop (tested: 0.3.4 and 0.3.5). If the F2 panel does not show, reinstall RE_Kenshi $((Get-KcRelease).Version)."
         }
     } elseif ($SkipREKenshi) {
-        Warn 'RE_Kenshi no está instalado (lo saltas con -SkipREKenshi). KenshiCoop no cargará sin él.' `
-             'RE_Kenshi is not installed (skipped with -SkipREKenshi). KenshiCoop will not load without it.'
+        Warn 'RE_Kenshi no está instalado (lo saltas con -SkipREKenshi). TokelaCoop no cargará sin él.' `
+             'RE_Kenshi is not installed (skipped with -SkipREKenshi). TokelaCoop will not load without it.'
     } else {
         if ($rek.Installed) { Warn 'RE_Kenshi está pero desactivado.' 'RE_Kenshi is present but disabled.' }
         else { Info 'No está instalado. Lo descargo de GitHub (unos 12 MB)...' 'Not installed. Downloading it from GitHub (about 12 MB)...' }
-        $exe = Get-REKenshiInstaller (Join-Path $env:TEMP 'KenshiCoop-installer')
+        $exe = Get-REKenshiInstaller (Join-Path $env:TEMP 'TokelaCoop-installer')
         Ok 'Descarga verificada.' 'Download verified.'
         try { Set-Clipboard -Value $kenshi } catch {}
         Write-Host ''
@@ -139,30 +148,47 @@ try {
         }
     }
 
-    # 3. KenshiCoop files --------------------------------------------------------
-    Step 'Copiando KenshiCoop a la carpeta mods...' 'Copying KenshiCoop into the mods folder...'
-    $dst = Install-KenshiCoopFiles $kitMod $kenshi
+    # 3. TokelaCoop files --------------------------------------------------------
+    Step 'Copiando TokelaCoop a la carpeta mods...' 'Copying TokelaCoop into the mods folder...'
+    $dst = Install-TokelaCoopFiles $kitMod $kenshi
     Ok $dst $dst
 
-    # 4. Enable the mod -----------------------------------------------------------
-    Step 'Activando KenshiCoop en la lista de mods...' 'Enabling KenshiCoop in the mod list...'
-    if (Enable-KenshiCoopMod $kenshi) { Ok 'Activado (data\mods.cfg).' 'Enabled (data\mods.cfg).' }
+    # 4. Enable the mod (and switch off the old KenshiCoop) ----------------------
+    Step 'Activando TokelaCoop en la lista de mods...' 'Enabling TokelaCoop in the mod list...'
+    if (Enable-TokelaCoopMod $kenshi) { Ok 'Activado (data\mods.cfg).' 'Enabled (data\mods.cfg).' }
     else { Ok 'Ya estaba activado.' 'Already enabled.' }
 
-    # 5. Leftovers that break things ---------------------------------------------
-    $ws = @(Find-WorkshopKenshiCoop $kenshi)
+    # 5. The old KenshiCoop (the name up to v0.53) --------------------------------
+    # Only after mods.cfg no longer lists it: if the removal fails, it is already off.
+    try {
+        $kept = Save-LegacyConfig $kenshi
+        if ($kept) {
+            Warn "Tu configuración de KenshiCoop era distinta; la dejo en $kept por si la necesitas." `
+                 "Your KenshiCoop settings were different; kept them in $kept in case you need them."
+        }
+        $old = Remove-LegacyKenshiCoop $kenshi
+        if ($old) {
+            Ok "Quitada la versión antigua (KenshiCoop): $old" "Removed the old version (KenshiCoop): $old"
+        }
+    } catch {
+        Warn "No pude borrar la carpeta mods\KenshiCoop (ya está desactivada). Bórrala a mano: $($_.Exception.Message)" `
+             "Could not delete the mods\KenshiCoop folder (it is already disabled). Delete it by hand: $($_.Exception.Message)"
+    }
+
+    # 6. Leftovers that break things ---------------------------------------------
+    $ws = @(Find-WorkshopTokelaCoop $kenshi)
     if ($ws.Count -gt 0) {
-        Warn 'También tienes KenshiCoop desde Steam Workshop; se cargaría dos veces. Date de baja en Workshop:' `
-             'You also have KenshiCoop from Steam Workshop; it would load twice. Unsubscribe from it in the Workshop:'
+        Warn 'También tienes el mod (TokelaCoop o KenshiCoop) desde Steam Workshop; se cargaría dos veces. Date de baja en Workshop:' `
+             'You also have the mod (TokelaCoop or KenshiCoop) from Steam Workshop; it would load twice. Unsubscribe from it in the Workshop:'
         foreach ($w in $ws) { Info $w $w }
     }
 
     Write-Host ''
     Write-Host '==============================================' -ForegroundColor Green
-    Write-Host (T '   Listo. KenshiCoop está instalado.' '   Done. KenshiCoop is installed.') -ForegroundColor Green
+    Write-Host (T '   Listo. TokelaCoop está instalado.' '   Done. TokelaCoop is installed.') -ForegroundColor Green
     Write-Host '==============================================' -ForegroundColor Green
-    Info 'Para jugar con un amigo (los dos con KenshiCoop instalado y Steam abierto):' `
-         'To play with a friend (both with KenshiCoop installed and Steam running):'
+    Info 'Para jugar con un amigo (los dos con TokelaCoop instalado y Steam abierto):' `
+         'To play with a friend (both with TokelaCoop installed and Steam running):'
     Info '  1. Abrid Kenshi. En el menú principal debe verse la versión de RE_Kenshi.' `
          '  1. Start Kenshi. The main menu should show the RE_Kenshi version.'
     Info '  2. El que hospeda carga su partida, pulsa F2 y "Invite a Steam friend".' `

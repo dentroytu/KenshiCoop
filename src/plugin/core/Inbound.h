@@ -6,8 +6,8 @@
 // point. Built for VS2010 (v100): a Win32 CRITICAL_SECTION (std::mutex needs
 // VS2012+).
 
-#ifndef KENSHICOOP_INBOUND_H
-#define KENSHICOOP_INBOUND_H
+#ifndef TOKELACOOP_INBOUND_H
+#define TOKELACOOP_INBOUND_H
 
 #include <windows.h>
 #include <deque>
@@ -944,4 +944,4 @@ private:
 
 } // namespace coop
 
-#endif // KENSHICOOP_INBOUND_H
+#endif // TOKELACOOP_INBOUND_H

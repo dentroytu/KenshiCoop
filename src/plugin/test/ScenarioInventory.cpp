@@ -543,7 +543,7 @@ private:
     //    cross-owner write the reconcile is entitled to undo.
     //  * INDEPENDENCE - the mint goes straight to the engine factory at an explicit level,
     //    not through the sync's fabricate path, so it is graded correctly even in a run
-    //    with KENSHICOOP_GEAR_LEVEL=0. The host's copy, by contrast, can only arrive
+    //    with TOKELACOOP_GEAR_LEVEL=0. The host's copy, by contrast, can only arrive
     //    through the inventory snapshot channel - the path under test. If that path drops
     //    the grade, host and join disagree before the drag even happens, and ATAKE then
     //    shows whether the trade itself preserves what each side has.
@@ -664,7 +664,7 @@ private:
     unsigned int  rankHand_[2][5];
 };
 
-// xfer_block (cross-owner trade VETO validation): with KENSHICOOP_BLOCK_XFER on, a
+// xfer_block (cross-owner trade VETO validation): with TOKELACOOP_BLOCK_XFER on, a
 // direct squad-to-squad drag between DIFFERENT-owner tabs must be REFUSED at the
 // engine (the item is conserved in the source bag), while a SAME-owner drag still
 // succeeds. The HOST drives both via engine::moveItemBetweenContainers(...,
@@ -2743,7 +2743,7 @@ private:
 
 Scenario* makeInventoryScenario(const std::string& name) {
     // Same scenario twice: the plain run proves the round trip converges, and the
-    // _refuse run drives it with the first re-home refused (KENSHICOOP_WD_REFUSE_REHOME),
+    // _refuse run drives it with the first re-home refused (TOKELACOOP_WD_REFUSE_REHOME),
     // which is the only deterministic way to exercise the retry + verify-then-destroy
     // recovery - the path whose absence turned a refusal into a permanent duplicate.
     // _refuse_all refuses EVERY attempt, so the only way out is the verify-then-destroy
@@ -2763,13 +2763,13 @@ Scenario* makeInventoryScenario(const std::string& name) {
     // track retirement and the top-level-only drop mirror both showed.
     if (name == "inv_dump_all")   return new InvDumpAllScenario("inv_dump_all");
     // Same burst with the author's ground tracks discarded the instant they are made
-    // (KENSHICOOP_WD_FORGET_TRACK). That is the state the tick-denominated retirement put a real
+    // (TOKELACOOP_WD_FORGET_TRACK). That is the state the tick-denominated retirement put a real
     // session into, and it is the only deterministic way to gate what happens next: the author
     // must PARK the peer's identified pickup and keep trying, rather than answer it once and
     // leave its own copy on the ground for the rest of the session.
     if (name == "inv_dump_all_forget") return new InvDumpAllScenario("inv_dump_all_forget");
     // ...and the same burst where the author's first pickup-time read of the object reports it
-    // gone and later reads succeed (KENSHICOOP_WD_TRANSIENT_DEAD). A verdict drawn from that one
+    // gone and later reads succeed (TOKELACOOP_WD_TRANSIENT_DEAD). A verdict drawn from that one
     // read is the duplicate; a retry converges.
     if (name == "inv_dump_all_transient") return new InvDumpAllScenario("inv_dump_all_transient");
     if (name == "inv_order")    return new InventorySyncScenario();

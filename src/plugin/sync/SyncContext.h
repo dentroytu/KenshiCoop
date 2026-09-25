@@ -21,8 +21,8 @@
 // clock at its own point in the tick, so the sample/resend timing is byte-for-
 // byte what it was before the context existed.
 
-#ifndef KENSHICOOP_SYNC_CONTEXT_H
-#define KENSHICOOP_SYNC_CONTEXT_H
+#ifndef TOKELACOOP_SYNC_CONTEXT_H
+#define TOKELACOOP_SYNC_CONTEXT_H
 
 class GameWorld;
 
@@ -41,4 +41,4 @@ struct SyncContext {
 
 } // namespace coop
 
-#endif // KENSHICOOP_SYNC_CONTEXT_H
+#endif // TOKELACOOP_SYNC_CONTEXT_H

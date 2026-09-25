@@ -1,5 +1,11 @@
-# KenshiCoop: instalar fácil, conectar fácil y mods (2 jugadores)
+# TokelaCoop (antes KenshiCoop): instalar fácil, conectar fácil y mods (2 jugadores)
 
+> **Nota (2026-09-25):** desde la v0.54 el proyecto se llama **TokelaCoop** (`TokelaCoop.dll`,
+> `mods\TokelaCoop`, `TokelaCoop.mod`, `TokelaCoop-kit.zip`, `TokelaCoop_*.log`, repo `dentroytu/TokelaCoop`).
+> Este documento es una foto de cuando se llamaba KenshiCoop y conserva ese nombre; los archivos, carpetas y
+> comandos de hoy son los de TokelaCoop. El riesgo de cargar el plugin dos veces (§2) ahora también cubre la
+> copia antigua `mods\KenshiCoop`: el instalador la retira y el plugin se niega a arrancar si la ve cargada.
+>
 > Investigación del 2026-09-23, hecha desde macOS leyendo el repo, GitHub y la web.
 > Aquí no se ha compilado ni ejecutado nada. **Sin verificar** marca lo que no se ha podido comprobar.
 > El alcance es **host + 1 amigo**. El guard de 2 jugadores ya está en `src/plugin/net/NetLink.cpp:481-488`.

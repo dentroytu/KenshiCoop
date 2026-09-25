@@ -907,7 +907,7 @@ const char* const RejoinItemsScenario::SAVE_NAME = "coopresume";
 } // namespace
 
 // world_item_burst (W1 batch overflow): drop SEVERAL non-gear items in ONE tick, more than the
-// per-tick send batch holds (shrunk by KENSHICOOP_WI_BATCH_MAX so a test can reach it at all).
+// per-tick send batch holds (shrunk by TOKELACOOP_WI_BATCH_MAX so a test can reach it at all).
 // The overflow used to be marked as sent without being sent, so the tail of a burst stayed
 // invisible on the peer until the 5 s safety resend happened to carry it - "I dropped it and it
 // never showed up over there". The verdict deliberately measures the SPREAD between the peer
@@ -1022,13 +1022,13 @@ const float WorldItemBurstScenario::RADIUS = 60.0f;
 // an earlier version of this had the join destroy its own proxy seven seconds
 // before the host's cull, and the PRE-FIX build passed it comfortably because the
 // sweep had long since cleaned up. So the race is INJECTED instead:
-// KENSHICOOP_WI_TEST_STALE frees the proxy through the engine immediately before
+// TOKELACOOP_WI_TEST_STALE frees the proxy through the engine immediately before
 // the cull that is about to run on it. Everything else is a normal drop and cull.
 //
 // The scenario only stages; the assertions are the oracle's, because they are
 // about what the mod did NOT do (no second destroy, no CLAIM off a dead read).
-// Needs the manifest DiagEnv (KENSHICOOP_INV_DUMP for the [wi] trace lines,
-// KENSHICOOP_WI_TEST_STALE for the injection).
+// Needs the manifest DiagEnv (TOKELACOOP_INV_DUMP for the [wi] trace lines,
+// TOKELACOOP_WI_TEST_STALE for the injection).
 class WorldItemStaleScenario : public Scenario {
 public:
     WorldItemStaleScenario()

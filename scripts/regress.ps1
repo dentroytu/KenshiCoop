@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Tiered regression suite for KenshiCoop: build + deploy once, run the unit
+  Tiered regression suite for TokelaCoop: build + deploy once, run the unit
   layer, then the manifest-driven scenario matrix (smoke or full tier, with
   optional WAN / clock-skew variants), and print a single PASS/FAIL summary.
   Appends per-gate metrics to tools\test-runs\history.jsonl for trending.
@@ -107,7 +107,7 @@ foreach ($name in $ordered) {
     }
 }
 
-Write-Host "=== KenshiCoop regression: tier=$Tier ($($runsPlanned.Count) run(s)) ==="
+Write-Host "=== TokelaCoop regression: tier=$Tier ($($runsPlanned.Count) run(s)) ==="
 foreach ($r in $runsPlanned) { Write-Host ("  - {0} [{1}]" -f $r.scenario, $r.variant) }
 
 # ---- 2. Build + deploy once ----------------------------------------------------

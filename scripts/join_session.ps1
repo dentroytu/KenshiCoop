@@ -85,27 +85,27 @@ $outDir = Join-Path $repoRoot "tools\test-runs\session_$stamp"
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 $joinLog = Join-Path $outDir "join.log"
 
-$env:KENSHICOOP_MODE         = "join"
-$env:KENSHICOOP_IP           = $HostIp
-$env:KENSHICOOP_PORT         = "$Port"
-$env:KENSHICOOP_SAVE         = $Save
-$env:KENSHICOOP_LOG          = $joinLog
-$env:KENSHICOOP_SCENARIO     = $Scenario
-$env:KENSHICOOP_SETUP        = ""
-$env:KENSHICOOP_TEST_SECONDS = if (-not $isFree) { "600" }
+$env:TOKELACOOP_MODE         = "join"
+$env:TOKELACOOP_IP           = $HostIp
+$env:TOKELACOOP_PORT         = "$Port"
+$env:TOKELACOOP_SAVE         = $Save
+$env:TOKELACOOP_LOG          = $joinLog
+$env:TOKELACOOP_SCENARIO     = $Scenario
+$env:TOKELACOOP_SETUP        = ""
+$env:TOKELACOOP_TEST_SECONDS = if (-not $isFree) { "600" }
                                elseif ($FreePlayMinutes -gt 0) { "$($FreePlayMinutes * 60)" }
                                else { "0" }
-$env:KENSHICOOP_FAKE_CLOCK_SKEW_MS = "0"
-$env:KENSHICOOP_ARM_TIMEOUT_MS     = "$($prof.ArmTimeoutMs)"
+$env:TOKELACOOP_FAKE_CLOCK_SKEW_MS = "0"
+$env:TOKELACOOP_ARM_TIMEOUT_MS     = "$($prof.ArmTimeoutMs)"
 if ($useSteam) {
     $hostId64 = ConvertTo-SteamId64 $HostSteamId
-    $env:KENSHICOOP_TRANSPORT  = "steam"
-    $env:KENSHICOOP_STEAM_PEER = "$hostId64"
+    $env:TOKELACOOP_TRANSPORT  = "steam"
+    $env:TOKELACOOP_STEAM_PEER = "$hostId64"
     Write-Host "Transport: STEAM P2P -> host SteamID $hostId64 (no IP / port forwarding)."
     Write-Host "Reminder: the host must launch with YOUR SteamID as -PeerSteamId."
 } else {
-    $env:KENSHICOOP_TRANSPORT  = "udp"
-    $env:KENSHICOOP_STEAM_PEER = "0"
+    $env:TOKELACOOP_TRANSPORT  = "udp"
+    $env:TOKELACOOP_STEAM_PEER = "0"
 }
 
 $target = if ($useSteam) { "steam:$(ConvertTo-SteamId64 $HostSteamId)" } else { "${HostIp}:$Port" }

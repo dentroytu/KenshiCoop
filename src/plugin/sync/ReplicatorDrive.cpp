@@ -255,7 +255,7 @@ void Replicator::applyTargets(GameWorld* gw) {
             }
             continue;
         }
-        // Phase 0 crash breadcrumb (KENSHICOOP_DEBUG_DRIVE_TRAIL=1, OFF by
+        // Phase 0 crash breadcrumb (TOKELACOOP_DEBUG_DRIVE_TRAIL=1, OFF by
         // default = zero cost): name the PROXY-driven body just before we drive
         // it. CoopLog flushes every line, so the last flushed [drive] proxy line
         // before a hard crash identifies the body we touched - the UAF-on-stale-
@@ -264,7 +264,7 @@ void Replicator::applyTargets(GameWorld* gw) {
         if (viaProxy) {
             static int driveTrail = -1;
             if (driveTrail < 0) {
-                const char* e = getenv("KENSHICOOP_DEBUG_DRIVE_TRAIL");
+                const char* e = getenv("TOKELACOOP_DEBUG_DRIVE_TRAIL");
                 driveTrail = (e && e[0] == '1') ? 1 : 0;
             }
             if (driveTrail) {
@@ -417,7 +417,7 @@ void Replicator::applyTargets(GameWorld* gw) {
             }
         }
 
-        // ---- Phase A jail-observe (KENSHICOOP_JAIL_OBSERVE, read-only spike) ----
+        // ---- Phase A jail-observe (TOKELACOOP_JAIL_OBSERVE, read-only spike) ----
         // For a peer-owned captive (the join's jailed PC as driven on the host),
         // temporarily let the host's LOCAL sim run it unopposed: skip drive,
         // AI-suspend AND furniture self-heal, and log the full trajectory. This
@@ -597,7 +597,7 @@ void Replicator::applyTargets(GameWorld* gw) {
             bool haveFr = engine::readFurniture(c, &lfr);
             int localKind = (haveFr && lfr.valid) ? lfr.kind : 0;
             if (localKind == 3 && !chainSync_) localKind = 0;
-            // Jail put-to-work desync spike (KENSHICOOP_JAIL_PROBE, read-only):
+            // Jail put-to-work desync spike (TOKELACOOP_JAIL_PROBE, read-only):
             // the DRIVEN view of a peer-owned captive (the host's copy of the
             // join's jailed PC). streamKind is what the owner reports;
             // localKind is where our copy actually sits. A streamKind=2/3 with
@@ -683,7 +683,7 @@ void Replicator::applyTargets(GameWorld* gw) {
                         "[furn] HEAL ENTER occ=%u,%u kind=3 was=%d ok=%d (fallthrough)",
                         out.hIndex, out.hSerial, localKind, ok ? 1 : 0);
                     b[sizeof(b) - 1] = '\0'; coop::logLine(b);
-                    // Jail spike (KENSHICOOP_JAIL_PROBE, read-only): quantify the
+                    // Jail spike (TOKELACOOP_JAIL_PROBE, read-only): quantify the
                     // re-seat as the user sees it. divergence = how far the local
                     // copy had drifted from the owner's streamed pos when we
                     // re-chained it (the visible teleport magnitude); localStep =
@@ -2238,7 +2238,7 @@ void Replicator::applyRest(Character* c, Driven& d, const EntityState& out,
         // Step-2 pruning candidate: with AI-suspend as the default quieting layer
         // the town-AI's re-tasker never runs, so the detach (which carries the
         // hand-identity hazard - it re-containers the body) may be redundant.
-        // detachUses_ measures how often this fires; KENSHICOOP_NO_DETACH=1 skips
+        // detachUses_ measures how often this fires; TOKELACOOP_NO_DETACH=1 skips
         // it for a manual A/B before any deletion.
         // NEVER detach a player-squad member: separateIntoMyOwnSquad re-containers
         // the body into a NEW platoon (a new hand), destroying the save-stable

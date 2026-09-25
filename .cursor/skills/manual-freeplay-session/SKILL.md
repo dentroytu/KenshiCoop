@@ -1,7 +1,7 @@
 ---
 name: manual-freeplay-session
 description: >-
-  Launch a manual free-play KenshiCoop session with host + join tiled
+  Launch a manual free-play TokelaCoop session with host + join tiled
   side-by-side on the ultrawide monitor so one person can play both clients.
   Boots both clients to the title screen (no auto-load, no auto-connect); the
   user loads a save and goes online by hand via the F2 panel. Covers the exact

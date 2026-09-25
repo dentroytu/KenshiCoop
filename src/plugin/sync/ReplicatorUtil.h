@@ -22,8 +22,8 @@
 //                           research/recruits/squad-moves/stealth/speed/time,
 //                           onPeerConnected
 
-#ifndef KENSHICOOP_REPLICATOR_UTIL_H
-#define KENSHICOOP_REPLICATOR_UTIL_H
+#ifndef TOKELACOOP_REPLICATOR_UTIL_H
+#define TOKELACOOP_REPLICATOR_UTIL_H
 
 #define _CRT_SECURE_NO_WARNINGS 1
 
@@ -44,7 +44,7 @@
 #include <string>  // weapon-census keys (Phase W2)
 #include <cstdio>
 #include <cstring>
-#include <cstdlib> // getenv (KENSHICOOP_INV_DUMP diagnostic gate)
+#include <cstdlib> // getenv (TOKELACOOP_INV_DUMP diagnostic gate)
 #include <cmath>
 
 class Character;
@@ -79,7 +79,7 @@ const float SNAP_SECONDS = 0.75f; // velocity-aware snap gate default: hard-snap
                                   // than this much travel time (measured steady-
                                   // state trail while tracking a sprinter: ~0.17s;
                                   // WAN adds ~0.3s - 0.75s only fires on genuine
-                                  // fell-behind/warp) (KENSHICOOP_SNAP_SECONDS)
+                                  // fell-behind/warp) (TOKELACOOP_SNAP_SECONDS)
 const float REPARK_DIST = 1.0f;   // at rest, re-place if it drifts past this
 const float CATCHUP_K   = 2.0f;   // gap-proportional speed boost (chase a moving tgt)
                                   // (default for catchupK_ - env-tunable, proto 36)
@@ -203,7 +203,7 @@ const unsigned long SNEAK_APPLY_MS   = 1000; // min gap between setStealthMode a
 const unsigned long PRONE_APPLY_MS   = 1000; // min gap between setProneState applies
 const unsigned long STEALTH_SEND_MS  = 250;  // detection snapshot cadence (~4 Hz)
 const unsigned long STEALTH_RESEND_MS = 2000; // unchanged-map safety resend (unreliable channel)
-// Step 4 divergence-gated authority (doctrine 18, behind KENSHICOOP_GATE_AUTHORITY).
+// Step 4 divergence-gated authority (doctrine 18, behind TOKELACOOP_GATE_AUTHORITY).
 // applyTargets runs per FRAME, so the streak is frame-denominated: ~2 s at 75 fps.
 const unsigned int  TRUST_STREAK_FRAMES = 150;  // sustained agreement before trusting
 const float         TRUST_DRIFT_MAX     = 4.0f; // trusted body must stay this close
@@ -275,4 +275,4 @@ inline bool isGearType(unsigned int t) { return engine::isConservedItemType(t); 
 
 } // namespace coop
 
-#endif // KENSHICOOP_REPLICATOR_UTIL_H
+#endif // TOKELACOOP_REPLICATOR_UTIL_H

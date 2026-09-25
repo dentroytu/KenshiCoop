@@ -2,7 +2,7 @@
 .SYNOPSIS
   One-time provisioning of the LAN host machine (machine 2) for remote-host
   validation runs: push the mod + fixture saves + runner scripts, open the UDP
-  firewall port, and register the KenshiCoopHost scheduled task that launches
+  firewall port, and register the TokelaCoopHost scheduled task that launches
   the game in the interactive session.
 
 .DESCRIPTION
@@ -89,17 +89,17 @@ if ($LASTEXITCODE -ne 0) { throw "scp of runner scripts failed" }
 Write-Host "  runner scripts: pushed -> $($cfg.dropDir)"
 
 # ---- 3. Mod deploy --------------------------------------------------------------------
-$dll  = Join-Path $repoRoot "src\plugin\x64\Harness\KenshiCoop.dll"
-$json = Join-Path $repoRoot "dist\mods\KenshiCoop\RE_Kenshi.json"
-$mod  = "C:\Program Files (x86)\Steam\steamapps\common\Kenshi\mods\KenshiCoop\KenshiCoop.mod"
+$dll  = Join-Path $repoRoot "src\plugin\x64\Harness\TokelaCoop.dll"
+$json = Join-Path $repoRoot "dist\mods\TokelaCoop\RE_Kenshi.json"
+$mod  = Join-Path $repoRoot "dist\mods\TokelaCoop\TokelaCoop.mod"   # the repo owns the data mod
 if (-not (Test-Path $dll)) { throw "Build the plugin first (scripts\build_plugin.cmd): $dll" }
-$modDirFwd = "$($cfg.kenshiDir -replace '\\', '/')/mods/KenshiCoop"
-[void](Invoke-LanSsh "mkdir `"$($cfg.kenshiDir)\mods\KenshiCoop`" 2>nul & echo OK")
+$modDirFwd = "$($cfg.kenshiDir -replace '\\', '/')/mods/TokelaCoop"
+[void](Invoke-LanSsh "mkdir `"$($cfg.kenshiDir)\mods\TokelaCoop`" 2>nul & echo OK")
 $push = @($dll, $json)
 if (Test-Path $mod) { $push += $mod }
 & scp -o BatchMode=yes @push "${target}:$modDirFwd/"
 if ($LASTEXITCODE -ne 0) { throw "scp of mod failed (is Kenshi running on $($cfg.host)?)" }
-Write-Host "  mod: pushed -> $($cfg.kenshiDir)\mods\KenshiCoop"
+Write-Host "  mod: pushed -> $($cfg.kenshiDir)\mods\TokelaCoop"
 
 # ---- 4. Fixture saves -------------------------------------------------------------------
 if (-not $SkipSaves) {
@@ -130,15 +130,15 @@ if (-not $SkipSaves) {
 }
 
 # ---- 5. Firewall rule ---------------------------------------------------------------------
-$r = Invoke-LanSsh "netsh advfirewall firewall show rule name=KenshiCoop >nul 2>&1 && echo RULE-EXISTS || (netsh advfirewall firewall add rule name=KenshiCoop dir=in action=allow protocol=UDP localport=$Port && echo RULE-ADDED)"
+$r = Invoke-LanSsh "(netsh advfirewall firewall show rule name=TokelaCoop >nul 2>&1 || netsh advfirewall firewall show rule name=KenshiCoop >nul 2>&1) && echo RULE-EXISTS || (netsh advfirewall firewall add rule name=TokelaCoop dir=in action=allow protocol=UDP localport=$Port && echo RULE-ADDED)"
 if ("$($r.out)" -match "RULE-(EXISTS|ADDED)") { Write-Host "  firewall: UDP $Port allowed ($($Matches[1]))" }
 else { Write-Warning "firewall rule could not be verified/added: $($r.out) (admin SSH required)" }
 
 # ---- 6. Scheduled task -----------------------------------------------------------------------
 $taskCmd = "powershell -NoProfile -ExecutionPolicy Bypass -File $($cfg.dropDir)\lan_host_run.ps1"
-$r = Invoke-LanSsh "schtasks /create /tn KenshiCoopHost /tr `"$taskCmd`" /sc once /st 00:00 /it /f"
+$r = Invoke-LanSsh "schtasks /create /tn TokelaCoopHost /tr `"$taskCmd`" /sc once /st 00:00 /it /f"
 if ($r.exit -ne 0) { throw "scheduled task registration failed: $($r.out)" }
-Write-Host "  scheduled task: KenshiCoopHost registered (interactive)"
+Write-Host "  scheduled task: TokelaCoopHost registered (interactive)"
 
 Write-Host ""
 Write-Host "== Provisioning complete =="
@@ -146,6 +146,8 @@ Write-Host "Reminders for $($cfg.host):"
 Write-Host "  * Keep a user logged into the desktop (the task launches interactively)."
 Write-Host "  * Windowed mode must be on (Full Screen=No)."
 Write-Host "  * Same Steam account on both machines: keep ONE client in OFFLINE mode."
-Write-Host "  * Enable the KenshiCoop mod once in Kenshi's Mods tab if this is the first install."
+Write-Host "  * Enable the TokelaCoop mod once in Kenshi's Mods tab if this is the first install."
+Write-Host "    A machine set up before v0.54 still has KenshiCoop: untick it and delete"
+Write-Host "    mods\KenshiCoop there, and delete its old KenshiCoopHost scheduled task."
 Write-Host ""
 Write-Host "Next: powershell -ExecutionPolicy Bypass -File scripts\run_lan_test.ps1 -Scenario coop_presence"

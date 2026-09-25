@@ -75,7 +75,7 @@
 - **RE_Kenshi** is a Nexus mod (0.3.1+) that, among other features, loads native
   Ogre/Kenshi plugin DLLs. It reads a `RE_Kenshi.json` placed in a normal Kenshi
   mod folder and loads every DLL it lists. The JSON is just:
-  `{ "Plugins" : [ "KenshiCoop.dll" ] }`.
+  `{ "Plugins" : [ "TokelaCoop.dll" ] }`.
 - **KenshiLib** is the library a plugin links against. It provides the
   function-hooking API, runtime address resolution against the loaded
   `Kenshi_x64.exe`, and a large set of **reverse-engineered game class layouts**
@@ -646,7 +646,7 @@ called only on the main thread inside `__try/__except`.
 
 **Hooks installed (via `AddHook` on resolved `_NV_` addresses):**
 - `GameWorld::_NV_mainLoop_GPUSensitiveStuff` — the per-frame main-thread tick.
-- `TitleScreen::_NV_update` — safe point to trigger an auto-load (only when `KENSHICOOP_SAVE` is set).
+- `TitleScreen::_NV_update` — safe point to trigger an auto-load (only when `TOKELACOOP_SAVE` is set).
 - `Character::runSlaveAnim` — discovery hook to harvest clip↔task names.
 
 ---
@@ -683,7 +683,7 @@ logs.
 
 - `struct ScenarioContext { GameWorld* gw; bool isHost; u32 localId; DWORD elapsedMs; unsigned tick; }` — per-frame context passed to a scenario (`gw` is never null while running; `elapsedMs` is wall-clock since `onStart`; `isHost` selects authoritative vs observer behavior).
 - `class Scenario` (abstract):
-  - `virtual const char* name() const = 0` — stable id (must match `KENSHICOOP_SCENARIO`).
+  - `virtual const char* name() const = 0` — stable id (must match `TOKELACOOP_SCENARIO`).
   - `virtual void onStart(const ScenarioContext& ctx) = 0` — called once on the first in-game frame.
   - `virtual bool onTick(const ScenarioContext& ctx) = 0` — called each frame; return `true` when complete (harness logs `SCENARIO RESULT` and exits).
   - `virtual bool passed() const = 0` — final in-plugin verdict (queried once after `onTick` returns true).
@@ -774,16 +774,16 @@ net thread can write too.
 
 Read once in `startPlugin()`; no recompile needed to change role/behavior.
 
-- `KENSHICOOP_MODE` — `host` (default) or `join`.
-- `KENSHICOOP_IP` — host IP when joining (default `127.0.0.1`).
-- `KENSHICOOP_PORT` — UDP port (default `27800`).
-- `KENSHICOOP_SAVE` — existing save folder name to auto-load from the title screen (default empty = manual). Auto-loading a non-existent save crashes the game.
-- `KENSHICOOP_AUTOLOAD_DELAY_MS` — settle time before issuing the deferred load (default `5000`).
-- `KENSHICOOP_TEST_SECONDS` — if >0, self-exit (via `TerminateProcess`) this many seconds after gameplay starts (default `0` = never). Used by the test runner.
-- `KENSHICOOP_LOG` — path to the dedicated coop log (default `KenshiCoop_host.log` / `KenshiCoop_join.log`).
-- `KENSHICOOP_SCENARIO` — name of a compiled scenario to run after load (default empty = normal co-op tick).
-- `KENSHICOOP_AUTOSPAWN` — host-only manual-validation helper: spawn N distinct-hand units into the squad once after gameplay settles.
-- `KENSHICOOP_OWN_INDICES` — squad ownership partition for the inhabit model: `""` = own all (default); `"0"` = own only index 0; `"~0"` = own all except 0; `"1,3"` = own indices 1 and 3.
+- `TOKELACOOP_MODE` — `host` (default) or `join`.
+- `TOKELACOOP_IP` — host IP when joining (default `127.0.0.1`).
+- `TOKELACOOP_PORT` — UDP port (default `27800`).
+- `TOKELACOOP_SAVE` — existing save folder name to auto-load from the title screen (default empty = manual). Auto-loading a non-existent save crashes the game.
+- `TOKELACOOP_AUTOLOAD_DELAY_MS` — settle time before issuing the deferred load (default `5000`).
+- `TOKELACOOP_TEST_SECONDS` — if >0, self-exit (via `TerminateProcess`) this many seconds after gameplay starts (default `0` = never). Used by the test runner.
+- `TOKELACOOP_LOG` — path to the dedicated coop log (default `TokelaCoop_host.log` / `TokelaCoop_join.log`).
+- `TOKELACOOP_SCENARIO` — name of a compiled scenario to run after load (default empty = normal co-op tick).
+- `TOKELACOOP_AUTOSPAWN` — host-only manual-validation helper: spawn N distinct-hand units into the squad once after gameplay settles.
+- `TOKELACOOP_OWN_INDICES` — squad ownership partition for the inhabit model: `""` = own all (default); `"0"` = own only index 0; `"~0"` = own all except 0; `"1,3"` = own indices 1 and 3.
 
 ---
 
@@ -800,7 +800,7 @@ implementations.
 
 ### 15.1 Accessibility & shipping status
 
-- **Headers:** included on the compile path already (`KenshiCoop.vcxproj` adds
+- **Headers:** included on the compile path already (`TokelaCoop.vcxproj` adds
   `$(KENSHILIB_DIR)/Include`). You can `#include <ogre/OgreSceneNode.h>`,
   `<mygui/MyGUI.h>`, `<ois/OIS.h>` today.
 - **Linking:** `OgreMain_x64.lib` is linked, so Ogre exported symbols (singletons,

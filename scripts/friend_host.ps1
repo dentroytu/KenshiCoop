@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  The friend-side HOST runner for a KenshiCoop remote test session. Ships
+  The friend-side HOST runner for a TokelaCoop remote test session. Ships
   INSIDE the host-role remote kit (scripts\make_remote_kit.ps1 -Role host);
   runs from the unzipped kit folder. This is the real-session topology: the
   friend hosts (best experience on their machine), you join and iterate.
@@ -20,7 +20,7 @@
   refuses), prints this machine's public IP (send it to the joining player),
   launches the game as the HOST, waits for the session to end (scenario
   self-exit, or the friend closes the window in free play), and bundles
-  host.log + screenshots into KenshiCoop-results-<stamp>.zip to send back
+  host.log + screenshots into TokelaCoop-results-<stamp>.zip to send back
   for offline judging (analyze_run.ps1).
 
   Run with -CheckOnly the day before a scheduled session to verify the
@@ -109,17 +109,21 @@ if ($useSteam -or "$($kit.transport)" -eq "steam") { Show-MySteamId }
 function Ensure-CoopFirewallRule {
     param([int]$RulePort)
     try {
-        $rule = & netsh advfirewall firewall show rule name=KenshiCoop 2>&1
-        if ("$rule" -notmatch "KenshiCoop") {
-            & netsh advfirewall firewall add rule name=KenshiCoop dir=in action=allow protocol=UDP localport=$RulePort | Out-Null
+        # A PC set up before v0.54 has the same rule under the old name, KenshiCoop:
+        # it opens the same port, so it counts (adding one needs an admin shell).
+        $rule = & netsh advfirewall firewall show rule name=TokelaCoop 2>&1
+        $oldRule = & netsh advfirewall firewall show rule name=KenshiCoop 2>&1
+        if ("$oldRule" -match "KenshiCoop") { $rule = "TokelaCoop (as KenshiCoop)" }
+        if ("$rule" -notmatch "TokelaCoop") {
+            & netsh advfirewall firewall add rule name=TokelaCoop dir=in action=allow protocol=UDP localport=$RulePort | Out-Null
             Write-Host "Firewall: inbound UDP $RulePort allowed (rule added)."
         } else {
-            Write-Host "Firewall: KenshiCoop rule already present."
+            Write-Host "Firewall: TokelaCoop rule already present."
         }
         return $true
     } catch {
         Write-Warning "Could not add the firewall rule automatically (needs admin PowerShell)."
-        Write-Warning "Run once as admin: netsh advfirewall firewall add rule name=KenshiCoop dir=in action=allow protocol=UDP localport=$RulePort"
+        Write-Warning "Run once as admin: netsh advfirewall firewall add rule name=TokelaCoop dir=in action=allow protocol=UDP localport=$RulePort"
         return $false
     }
 }
@@ -205,10 +209,11 @@ Write-Host "Kenshi install: $KenshiDir"
 Test-CoopPrereqs -KenshiDir $KenshiDir -UseSteam $useSteam
 
 # ---- Install mod + save ------------------------------------------------------------
-$modDst = Join-Path $KenshiDir "mods\KenshiCoop"
+$modDst = Join-Path $KenshiDir "mods\TokelaCoop"
 New-Item -ItemType Directory -Force -Path $modDst | Out-Null
 Copy-Item -Force (Join-Path $kitDir "mod\*") $modDst
 Write-Host "Mod installed -> $modDst"
+Switch-ToTokelaCoop -KenshiDir $KenshiDir
 
 $saveRoot = Join-Path $env:LOCALAPPDATA "kenshi\save"
 New-Item -ItemType Directory -Force -Path $saveRoot | Out-Null
@@ -294,26 +299,26 @@ $outDir = Join-Path $kitDir "results_$stamp"
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 $hostLog = Join-Path $outDir "host.log"
 
-$env:KENSHICOOP_MODE         = "host"
-$env:KENSHICOOP_IP           = "0.0.0.0"
-$env:KENSHICOOP_PORT         = "$Port"
-$env:KENSHICOOP_SAVE         = $save
-$env:KENSHICOOP_LOG          = $hostLog
-$env:KENSHICOOP_SCENARIO     = $Scenario
-$env:KENSHICOOP_SETUP        = ""
-$env:KENSHICOOP_TEST_SECONDS = if ($Scenario -ne "") { "600" }
+$env:TOKELACOOP_MODE         = "host"
+$env:TOKELACOOP_IP           = "0.0.0.0"
+$env:TOKELACOOP_PORT         = "$Port"
+$env:TOKELACOOP_SAVE         = $save
+$env:TOKELACOOP_LOG          = $hostLog
+$env:TOKELACOOP_SCENARIO     = $Scenario
+$env:TOKELACOOP_SETUP        = ""
+$env:TOKELACOOP_TEST_SECONDS = if ($Scenario -ne "") { "600" }
                                elseif ($FreePlayMinutes -gt 0) { "$($FreePlayMinutes * 60)" }
                                else { "0" }
-$env:KENSHICOOP_FAKE_CLOCK_SKEW_MS = "0"
+$env:TOKELACOOP_FAKE_CLOCK_SKEW_MS = "0"
 # Scenario actions arm when the joining player's stream arrives; generous
 # fallback for a slow internet connect.
-$env:KENSHICOOP_ARM_TIMEOUT_MS = "240000"
+$env:TOKELACOOP_ARM_TIMEOUT_MS = "240000"
 if ($useSteam) {
-    $env:KENSHICOOP_TRANSPORT  = "steam"
-    $env:KENSHICOOP_STEAM_PEER = "$(ConvertTo-SteamId64 $PeerSteamId)"
+    $env:TOKELACOOP_TRANSPORT  = "steam"
+    $env:TOKELACOOP_STEAM_PEER = "$(ConvertTo-SteamId64 $PeerSteamId)"
 } else {
-    $env:KENSHICOOP_TRANSPORT  = "udp"
-    $env:KENSHICOOP_STEAM_PEER = "0"
+    $env:TOKELACOOP_TRANSPORT  = "udp"
+    $env:TOKELACOOP_STEAM_PEER = "0"
 }
 
 function Wait-ForLogLine {
@@ -418,7 +423,7 @@ utc offset:    $((Get-TimeZone).BaseUtcOffset)
 run stamp:     $stamp
 "@ | Set-Content (Join-Path $outDir "session_info.txt") -Encoding UTF8
 
-$zip = Join-Path $kitDir "KenshiCoop-results-$stamp.zip"
+$zip = Join-Path $kitDir "TokelaCoop-results-$stamp.zip"
 Compress-Archive -Path "$outDir\*" -DestinationPath $zip -Force
 Write-Host ""
 Write-Host "==================================================================="

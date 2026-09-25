@@ -688,7 +688,7 @@ bool cameraFocusOn(GameWorld* gw, Character* c) {
 // Camera anchor stores (protocol 43, camera-anchored interest). Main-thread
 // only: the sync layer publishes these each tick (syncCamHint), and
 // interestCenters reads them in the same tick.
-static bool  s_camInterest    = true;  // KENSHICOOP_CAM_INTEREST master enable
+static bool  s_camInterest    = true;  // TOKELACOOP_CAM_INTEREST master enable
 static bool  s_localCamValid  = false;
 static float s_localCam[3]    = { 0.0f, 0.0f, 0.0f };
 static bool  s_peerCamValid   = false;
@@ -1050,7 +1050,7 @@ void charName(Character* c, char* out, unsigned int cap) {
 // markerDestroySeh + the public markerCreate/markerUpdate/markerDestroy) moved to
 // EngineUi.cpp (Phase 5e code motion) alongside the co-op panel + status overlay
 // that reuse the same ScreenLabel SEH shims. Their public declarations stay in
-// Engine.h (the Replicator uses them for KENSHICOOP_DEBUG_MARKERS).
+// Engine.h (the Replicator uses them for TOKELACOOP_DEBUG_MARKERS).
 
 // The helpers from here to readObjectHand have EXTERNAL linkage (declared in
 // EngineInternal.h): the inventory, spawn/combat and world TUs share them.
@@ -1242,6 +1242,17 @@ RootObject* findWorkFixtureNear(GameWorld* gw, int* outTask) {
             "engineering bench", "weapon smithy", "spinning wheel", "loom"
         };
         const unsigned int nprefs = sizeof(prefs) / sizeof(prefs[0]);
+        // The baked dummy by its stringID first ("Training Dummy MkI"): names are
+        // localized, and a Spanish Kenshi found no fixture here at all.
+        for (unsigned int i = 0; i < total; ++i) {
+            RootObject* o = g_npcQuery[i];
+            if (!o) continue;
+            GameData* gd = o->getGameData();
+            if (gd && strcmp(gd->stringID.c_str(), "898-gamedata.base") == 0) {
+                if (outTask) *outTask = USE_TRAINING_DUMMY;
+                return o;
+            }
+        }
         for (unsigned int k = 0; k < nprefs; ++k) {
             for (unsigned int i = 0; i < total; ++i) {
                 RootObject* o = g_npcQuery[i];

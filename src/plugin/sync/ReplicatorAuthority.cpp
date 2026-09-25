@@ -16,7 +16,7 @@ namespace coop {
 void Replicator::debugMark(Character* c, int colorId, const char* tag) {
     static int en = -1;
     if (en < 0) {
-        const char* e = getenv("KENSHICOOP_DEBUG_MARKERS");
+        const char* e = getenv("TOKELACOOP_DEBUG_MARKERS");
         en = (e && e[0] == '1') ? 1 : 0;
     }
     if (en != 1 || !c) return;
@@ -680,7 +680,7 @@ void Replicator::enforceHostAuthority(GameWorld* gw, u32 localId) {
     //           while the census was stale, or escaping judgment entirely)
     // ghost is the bucket the field reports live in - it should only ever be
     // transient (one debounce, ~1 s). Test-ExistenceParity gates on it.
-    // KENSHICOOP_DEBUG_CENSUS=1 additionally dumps a row per ghost.
+    // TOKELACOOP_DEBUG_CENSUS=1 additionally dumps a row per ghost.
     static unsigned long auditMs = 0; // main-thread only
     if ((now - auditMs) >= 5000) {
         auditMs = now;
@@ -703,7 +703,7 @@ void Replicator::enforceHostAuthority(GameWorld* gw, u32 localId) {
         unsigned int dormPcRows = 0;   // offender dumps this sample (see below)
         static int dumpGhost = -1;
         if (dumpGhost < 0) {
-            const char* e = getenv("KENSHICOOP_DEBUG_CENSUS");
+            const char* e = getenv("TOKELACOOP_DEBUG_CENSUS");
             dumpGhost = (e && e[0] == '1') ? 1 : 0;
         }
         std::set<Character*> counted;
@@ -714,7 +714,7 @@ void Replicator::enforceHostAuthority(GameWorld* gw, u32 localId) {
         // ANY bucket here - the ghost count silently stops at the horizon while
         // the player keeps seeing bodies past it. If ghostMax rides up against
         // the radius (and ghostEdge is non-zero), the cull horizon is the
-        // binding constraint and KENSHICOOP_CENSUS_RADIUS is the lever; if
+        // binding constraint and TOKELACOOP_CENSUS_RADIUS is the lever; if
         // ghosts cluster close in, the cause is debounce/staleness/caps instead.
         // Distances are measured against the RAW anchors - how far out ghosts
         // sit, regardless of who can speak for the region - while the
@@ -1760,7 +1760,7 @@ float Replicator::parkDivergedCopy(Character* c, const EntityState& st, const Ke
     return d;
 }
 
-// Census-band AI freeze (KENSHICOOP_CENSUS_FREEZE_AI, join only): the position
+// Census-band AI freeze (TOKELACOOP_CENSUS_FREEZE_AI, join only): the position
 // park above teleports a diverged census-band body back to the host's spot, but
 // its LOCAL AI kept re-deciding to flee/fight (a captive/working slave with no
 // supervisor on the join), so it ran off and aggroed the join's guards while the
@@ -1771,7 +1771,7 @@ float Replicator::parkDivergedCopy(Character* c, const EntityState& st, const Ke
 // fleeing), then re-checked (released if it settled, re-frozen if it diverges
 // again). Runs AFTER applyTargets' per-tick clearAiSuspend(), so the suspend
 // added here stands for the tick; addAiSuspend is a no-op if the AI-suspend
-// detour is not installed (KENSHICOOP_AI_SUSPEND=0).
+// detour is not installed (TOKELACOOP_AI_SUSPEND=0).
 void Replicator::censusFreezeDivergedAi(Character* c, const Key& k, float drift) {
     if (!c) return;
     // 20 s hold (was 5 s): a diverged working slave released after only 5 s

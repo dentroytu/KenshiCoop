@@ -1,4 +1,4 @@
-// netsim - a WAN-conditions UDP relay proxy for KenshiCoop validation.
+// netsim - a WAN-conditions UDP relay proxy for TokelaCoop validation.
 //
 // Sits BETWEEN the join client and the host:
 //     join  ->  127.0.0.1:listenPort  ->  netsim  ->  hostIp:hostPort
@@ -6,7 +6,7 @@
 // in BOTH directions - connection handshake, reliable channel, unreliable
 // channel, all packet families alike.
 //
-// This is the crucial difference from the in-plugin KENSHICOOP_NETSIM_* sim
+// This is the crucial difference from the in-plugin TOKELACOOP_NETSIM_* sim
 // (which delays/drops only received ENTITY batches, above ENet): here the loss
 // happens BELOW ENet, so ENet's real retransmission/ordering machinery is
 // engaged - a dropped reliable datagram is genuinely re-sent and arrives LATE,

@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  One-shot autonomous iteration cycle for KenshiCoop:
+  One-shot autonomous iteration cycle for TokelaCoop:
   kill stale Kenshi -> build the plugin -> deploy to both installs ->
   run the host+join functional test -> exit with PASS/FAIL.
 
@@ -25,7 +25,7 @@ param(
     [switch]$Sync,
     [switch]$SkipBuild,
     [int]$Port = 27800,
-    # Optional compiled scenario to run (KENSHICOOP_SCENARIO); passthrough to run_test.ps1.
+    # Optional compiled scenario to run (TOKELACOOP_SCENARIO); passthrough to run_test.ps1.
     [string]$Scenario = "",
     [double]$Tolerance = 3.0,
     # Passthrough: host-only setup/re-arm scene (see run_test.ps1 -Setup). Use "craft"
@@ -70,7 +70,7 @@ if (-not $gone) {
 }
 
 # Confirm the deployed DLL is actually unlocked before we bother building.
-$deployedDll = "C:\Program Files (x86)\Steam\steamapps\common\Kenshi\mods\KenshiCoop\KenshiCoop.dll"
+$deployedDll = "C:\Program Files (x86)\Steam\steamapps\common\Kenshi\mods\TokelaCoop\TokelaCoop.dll"
 if (Test-Path $deployedDll) {
     $unlocked = $false
     for ($i = 0; $i -lt 10; $i++) {

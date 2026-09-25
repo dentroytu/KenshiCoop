@@ -6,7 +6,7 @@
 
 .DESCRIPTION
   Amortizes the (slow) build over many diagnostic probes that share one DLL. The
-  per-spike SpikeScenario branch is selected at runtime by KENSHICOOP_SPIKE, so a
+  per-spike SpikeScenario branch is selected at runtime by TOKELACOOP_SPIKE, so a
   single build can serve every probe currently compiled into the dispatcher.
 
 .EXAMPLE

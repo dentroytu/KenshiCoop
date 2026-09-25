@@ -5,7 +5,7 @@
 // Must NOT: change any SCENARIO log string (oracle API, resources/CODE_MAP.md).
 
 #include "ScenarioSupport.h"
-#include <cstdlib>  // getenv/atoi - combat_battle size (KENSHICOOP_BATTLE_N)
+#include <cstdlib>  // getenv/atoi - combat_battle size (TOKELACOOP_BATTLE_N)
 
 namespace coop {
 namespace {
@@ -1081,7 +1081,7 @@ private:
 // via the interp + graded-snap combat path; Test-CombatSnapRate gates the [combat]
 // snap teleport buckets (churn rate / persistence / wrong-target), and the enriched
 // [combat] stats rollup records the aggregate. N is env-tunable
-// (KENSHICOOP_BATTLE_N, default 16, clamp 4..MAX_BATTLERS) so ONE build runs the
+// (TOKELACOOP_BATTLE_N, default 16, clamp 4..MAX_BATTLERS) so ONE build runs the
 // 10v10 / 20v20 / 40v40 ladder. Both sides log SCENARIO MEMBER/RECV like crowd.
 class CombatBattleScenario : public TimedScenario {
 public:
@@ -1168,7 +1168,7 @@ private:
     static const unsigned int  MAX_REMEMBER = 80;
 
     unsigned int battleN() const {
-        const char* e = ::getenv("KENSHICOOP_BATTLE_N");
+        const char* e = ::getenv("TOKELACOOP_BATTLE_N");
         unsigned int n = e ? (unsigned int)::atoi(e) : 16u;
         if (n < MIN_BATTLERS)  n = MIN_BATTLERS;
         if (n > MAX_BATTLERS)  n = MAX_BATTLERS;
@@ -1215,7 +1215,7 @@ private:
 // ---- combat_win: buffed PCs WIN a real fight --------------------------------
 // A second warp shape distinct from the NPC-vs-NPC posturing of combat_battle:
 // here each side buffs its OWN player-squad to 120 in EVERY stat, and the host
-// runtime-spawns N unbuffed enemies (KENSHICOOP_WIN_N, default 8) ordered onto
+// runtime-spawns N unbuffed enemies (TOKELACOOP_WIN_N, default 8) ordered onto
 // the PC leader. The buffed PCs cut them down, so the join-side stress shifts to
 // dying / fleeing / KO churn and rapid target loss - a different driver of the
 // combat snap/warp path than sustained melee. Both sides log SCENARIO MEMBER/RECV
@@ -1317,7 +1317,7 @@ private:
     static const unsigned int  MAX_REMEMBER = 64;
 
     unsigned int winN() const {
-        const char* e = ::getenv("KENSHICOOP_WIN_N");
+        const char* e = ::getenv("TOKELACOOP_WIN_N");
         unsigned int n = e ? (unsigned int)::atoi(e) : 8u;
         if (n < MIN_ENEMIES) n = MIN_ENEMIES;
         if (n > MAX_ENEMIES) n = MAX_ENEMIES;
@@ -2177,7 +2177,7 @@ const float AssaultTravelScenario::ARRIVE_DIST = 60.0f;
 const float AssaultTravelScenario::WALK_SPEED  = 18.0f;
 const float AssaultTravelScenario::MIN_TRAVEL  = 300.0f;
 const float AssaultTravelScenario::MAX_STEP    = 150.0f;
-// Inside the 600 u default mint radius (KENSHICOOP_SPAWN_MINT_RADIUS) and well
+// Inside the 600 u default mint radius (TOKELACOOP_SPAWN_MINT_RADIUS) and well
 // outside the ~200 u stream bubble: the join has to mint from the census, which
 // is the path the field session took.
 const float AssaultTravelScenario::MINT_DIST   = 450.0f;

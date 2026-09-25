@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
   Two-machine LAN test runner: the LAN machine (machine 2, provisioned by
-  setup_lan_host.ps1) plays HOST via its KenshiCoopHost scheduled task; this
+  setup_lan_host.ps1) plays HOST via its TokelaCoopHost scheduled task; this
   machine launches only the JOIN - mirroring the real session topology where
   the friend hosts and you iterate on the join client.
 
@@ -101,7 +101,7 @@ if (-not (Test-Path $joinExe)) { throw "Join Kenshi not found: $joinExe" }
 $saveRoot = Join-Path $env:LOCALAPPDATA "kenshi\save"
 if (-not (Test-Path (Join-Path $saveRoot $Save))) { throw "Save '$Save' not found locally in $saveRoot" }
 
-Write-Host "== KenshiCoop LAN test run =="
+Write-Host "== TokelaCoop LAN test run =="
 Write-Host "  remote host: $target ($($cfg.kenshiDir))"
 Write-Host "  save:        $Save"
 Write-Host "  scenario:    $Scenario (tolerance $Tolerance u)"
@@ -132,8 +132,8 @@ if (-not $SkipBuild) {
     if ($LASTEXITCODE -ne 0) { throw "local deploy failed" }
 }
 Write-Host "=== push DLL to $($cfg.host) (protocol lockstep) ==="
-$dll = Join-Path $repoRoot "src\plugin\x64\Harness\KenshiCoop.dll"
-$modDirFwd = "$($cfg.kenshiDir -replace '\\', '/')/mods/KenshiCoop"
+$dll = Join-Path $repoRoot "src\plugin\x64\Harness\TokelaCoop.dll"
+$modDirFwd = "$($cfg.kenshiDir -replace '\\', '/')/mods/TokelaCoop"
 & scp -o BatchMode=yes $dll "${target}:$modDirFwd/"
 if ($LASTEXITCODE -ne 0) { throw "DLL push failed (is Kenshi running on $($cfg.host)?)" }
 
@@ -162,19 +162,19 @@ $runArgs = [pscustomobject]@{
     shotDelaySec = $hostShotDelay
     kenshiDir    = $cfg.kenshiDir
     env          = [pscustomobject]@{
-        KENSHICOOP_MODE               = "host"
-        KENSHICOOP_IP                 = "0.0.0.0"
-        KENSHICOOP_PORT               = "$Port"
-        KENSHICOOP_SAVE               = $Save
-        KENSHICOOP_TEST_SECONDS       = "$Seconds"
-        KENSHICOOP_SCENARIO           = $Scenario
-        KENSHICOOP_SETUP              = $Setup
-        KENSHICOOP_PROBE_AISUSPEND    = ""
-        KENSHICOOP_NETSIM_DELAY_MS    = "0"
-        KENSHICOOP_NETSIM_JITTER_MS   = "0"
-        KENSHICOOP_NETSIM_LOSS_PCT    = "0"
-        KENSHICOOP_FAKE_CLOCK_SKEW_MS = "0"
-        KENSHICOOP_ARM_TIMEOUT_MS     = "$armTimeoutMs"
+        TOKELACOOP_MODE               = "host"
+        TOKELACOOP_IP                 = "0.0.0.0"
+        TOKELACOOP_PORT               = "$Port"
+        TOKELACOOP_SAVE               = $Save
+        TOKELACOOP_TEST_SECONDS       = "$Seconds"
+        TOKELACOOP_SCENARIO           = $Scenario
+        TOKELACOOP_SETUP              = $Setup
+        TOKELACOOP_PROBE_AISUSPEND    = ""
+        TOKELACOOP_NETSIM_DELAY_MS    = "0"
+        TOKELACOOP_NETSIM_JITTER_MS   = "0"
+        TOKELACOOP_NETSIM_LOSS_PCT    = "0"
+        TOKELACOOP_FAKE_CLOCK_SKEW_MS = "0"
+        TOKELACOOP_ARM_TIMEOUT_MS     = "$armTimeoutMs"
     }
 }
 # Merge the scenario's manifest DiagEnv into the remote host env (channel A/B
@@ -192,7 +192,7 @@ if ($LASTEXITCODE -ne 0) { throw "args push failed" }
 
 # Clean any stale remote game, then fire the task.
 [void](Invoke-LanSsh "taskkill /IM Kenshi_x64.exe /F 2>nul & taskkill /IM kenshi_x64.exe /F 2>nul & echo CLEAN")
-$r = Invoke-LanSsh "schtasks /run /tn KenshiCoopHost"
+$r = Invoke-LanSsh "schtasks /run /tn TokelaCoopHost"
 if ($r.exit -ne 0) { throw "task trigger failed: $($r.out)" }
 Write-Host "Remote host task triggered; waiting for it to reach gameplay ..."
 
@@ -227,23 +227,23 @@ if ($Wan -ne "") {
 }
 
 try {
-    $env:KENSHICOOP_MODE               = "join"
-    $env:KENSHICOOP_IP                 = $joinIp
-    $env:KENSHICOOP_PORT               = "$joinPort"
-    $env:KENSHICOOP_SAVE               = $Save
-    $env:KENSHICOOP_TEST_SECONDS       = "$Seconds"
-    $env:KENSHICOOP_LOG                = $joinLog
-    $env:KENSHICOOP_SCENARIO           = $Scenario
-    $env:KENSHICOOP_SETUP              = ""
-    $env:KENSHICOOP_PROBE_AISUSPEND    = ""
+    $env:TOKELACOOP_MODE               = "join"
+    $env:TOKELACOOP_IP                 = $joinIp
+    $env:TOKELACOOP_PORT               = "$joinPort"
+    $env:TOKELACOOP_SAVE               = $Save
+    $env:TOKELACOOP_TEST_SECONDS       = "$Seconds"
+    $env:TOKELACOOP_LOG                = $joinLog
+    $env:TOKELACOOP_SCENARIO           = $Scenario
+    $env:TOKELACOOP_SETUP              = ""
+    $env:TOKELACOOP_PROBE_AISUSPEND    = ""
     # Per-scenario channel A/B knobs + diagnostic traces from the manifest DiagEnv
     # (mirrors the remote host env above; hermetic clear + apply on the join side).
     [void](Set-CoopDiagEnv -Entry $manifestEntry)
-    $env:KENSHICOOP_NETSIM_DELAY_MS    = "0"
-    $env:KENSHICOOP_NETSIM_JITTER_MS   = "0"
-    $env:KENSHICOOP_NETSIM_LOSS_PCT    = "0"
-    $env:KENSHICOOP_FAKE_CLOCK_SKEW_MS = "$FakeClockSkewMs"
-    $env:KENSHICOOP_ARM_TIMEOUT_MS     = "$armTimeoutMs"
+    $env:TOKELACOOP_NETSIM_DELAY_MS    = "0"
+    $env:TOKELACOOP_NETSIM_JITTER_MS   = "0"
+    $env:TOKELACOOP_NETSIM_LOSS_PCT    = "0"
+    $env:TOKELACOOP_FAKE_CLOCK_SKEW_MS = "$FakeClockSkewMs"
+    $env:TOKELACOOP_ARM_TIMEOUT_MS     = "$armTimeoutMs"
 
     Write-Host "Launching local JOIN -> ${joinIp}:$joinPort ..."
     $out = & (Join-Path $scriptDir "start_kenshi.ps1") -ExePath $joinExe -WorkDir $JoinDir -TimeoutSec $prof.StartTimeoutSec 6>&1

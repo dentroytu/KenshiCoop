@@ -37,7 +37,7 @@ function New-CrawlLog {
           [int]$Prone, [int]$Crip, [double]$Dx = 0.0, [int]$Mv = 1,
           [string]$Path2 = 'advance', [int]$Hk = 1)
     $lines = @(
-        "[10:00:00.000] KenshiCoop: gameplay started",
+        "[10:00:00.000] TokelaCoop: gameplay started",
         "[10:00:00.100] CLOCKSYNC offset=0 rtt=10"
     )
     # Pre-cut baseline: upright and healthy on both sides. Span is measured from

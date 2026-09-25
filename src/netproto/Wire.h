@@ -1,12 +1,12 @@
-// KenshiCoop unified wire protocol (clean rebuild, v1).
+// TokelaCoop unified wire protocol (clean rebuild, v1).
 //
 // Compiled by the VS2010 (v100) plugin only. Keep it plain C++03: no <cstdint>
 // reliance, no constexpr, no scoped enums, no STL on the wire. Wire format is
 // packed, little-endian; x86-64 is little-endian on both ends so we send the
 // struct bytes directly.
 
-#ifndef KENSHICOOP_WIRE_H
-#define KENSHICOOP_WIRE_H
+#ifndef TOKELACOOP_WIRE_H
+#define TOKELACOOP_WIRE_H
 
 #include <string.h> // memcpy
 
@@ -1634,7 +1634,7 @@ struct TimePongPacket {
 
 // Active-mod list (protocol 56). Each side sends its own once on the connect
 // edge; the receiver diffs it against its own list and warns (panel, banner,
-// KenshiCoop_mods_diff.txt). Advisory only - a mismatch never disconnects.
+// TokelaCoop_mods_diff.txt). Advisory only - a mismatch never disconnects.
 // text: one "file|version\n" line per active mod in load order (ModInfo::file
 // + GameDataHeader::version), '\0'-padded. hash is fnv1a over the used bytes,
 // so equal lists compare without parsing.
@@ -1669,4 +1669,4 @@ inline bool readPacket(const void* data, unsigned int len, T* out) {
 
 } // namespace coop
 
-#endif // KENSHICOOP_WIRE_H
+#endif // TOKELACOOP_WIRE_H

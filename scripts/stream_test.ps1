@@ -14,13 +14,13 @@
       live world and announces it with a LOAD_GO ([boot] baking / GO->join).
     * JOIN  stays at the MAIN MENU (it goes ONLINE via auto-start and takes the
       menu bootstrap branch, which returns before any config auto-load) with
-      KENSHICOOP_FORCE_STREAM=1 so it NACKs the LOAD_GO even though the shared
+      TOKELACOOP_FORCE_STREAM=1 so it NACKs the LOAD_GO even though the shared
       folder would MATCH - forcing the host to stream the folder (SaveXfer over
       CH_BULK). The join stages + CRC-verifies + commits it, then loads. (The
       join is handed the save NAME only so the title hook installs under the
       test's self-exit timer; it never auto-loads it - see the launch comment.)
 
-  Both clients self-exit (KENSHICOOP_TEST_SECONDS), the per-client logs are
+  Both clients self-exit (TOKELACOOP_TEST_SECONDS), the per-client logs are
   written straight into the out dir, and the run is graded by the connect_stream
   oracle (Test-ConnectStream): it REQUIRES the transfer edges (NACK -> XFER-BEGIN
   -> XFER-COMMIT badCrc=0 -> XFER-ACK ok=1 -> transfer-committed load -> gameplay),
@@ -82,7 +82,7 @@ if (-not (Test-Path (Join-Path $saveRoot $Save))) {
 $hostLog = Join-Path $OutDir "host.log"
 $joinLog = Join-Path $OutDir "join.log"
 
-Write-Host "== KenshiCoop STREAM (missing-save bootstrap) test =="
+Write-Host "== TokelaCoop STREAM (missing-save bootstrap) test =="
 Write-Host "  host save:  $Save (baked + streamed to the join)"
 Write-Host "  join:       stays at menu online, FORCE_STREAM=1 (NACKs to pull the folder)"
 Write-Host "  seconds:    $Seconds (self-exit)"
@@ -114,20 +114,20 @@ if (-not $SkipDeploy) {
 
 function Set-CoopEnv {
     param([string]$Mode, [string]$SaveName, [string]$Log, [string]$ForceStream)
-    $env:KENSHICOOP_MODE          = $Mode
+    $env:TOKELACOOP_MODE          = $Mode
     # Same-machine loopback: force direct UDP (Steam P2P can't self-connect).
-    $env:KENSHICOOP_TRANSPORT     = "udp"
-    $env:KENSHICOOP_STEAM_PEER    = "0"
-    $env:KENSHICOOP_PORT          = "$Port"
-    $env:KENSHICOOP_IP            = $Ip
-    $env:KENSHICOOP_SAVE          = $SaveName   # host: real save; join: "" (menu)
+    $env:TOKELACOOP_TRANSPORT     = "udp"
+    $env:TOKELACOOP_STEAM_PEER    = "0"
+    $env:TOKELACOOP_PORT          = "$Port"
+    $env:TOKELACOOP_IP            = $Ip
+    $env:TOKELACOOP_SAVE          = $SaveName   # host: real save; join: "" (menu)
     # TEST_SECONDS>0 both self-exits AND forces the load-time auto-start, so the
     # join goes ONLINE from the menu with no manual F2 (see Plugin.cpp autoStart).
-    $env:KENSHICOOP_TEST_SECONDS  = "$Seconds"
-    $env:KENSHICOOP_SCENARIO      = ""          # normal co-op tick, no scenario
-    $env:KENSHICOOP_LOG           = $Log
+    $env:TOKELACOOP_TEST_SECONDS  = "$Seconds"
+    $env:TOKELACOOP_SCENARIO      = ""          # normal co-op tick, no scenario
+    $env:TOKELACOOP_LOG           = $Log
     # The whole point: join NACKs a matching save so the transfer really runs.
-    $env:KENSHICOOP_FORCE_STREAM  = $ForceStream
+    $env:TOKELACOOP_FORCE_STREAM  = $ForceStream
     # Keep the coordinated save/load channels ON (defaults) - leave them unset.
 }
 

@@ -1,5 +1,5 @@
-#ifndef KENSHICOOP_SYNC_TUNING_H
-#define KENSHICOOP_SYNC_TUNING_H
+#ifndef TOKELACOOP_SYNC_TUNING_H
+#define TOKELACOOP_SYNC_TUNING_H
 
 // SyncTuning.h - Phase 6d: the one owned home for the change-gated SAMPLED
 // channels' send cadence. Before this, every channel in ReplicatorChannels.cpp
@@ -74,4 +74,4 @@ struct SyncTuning {
 
 } // namespace coop
 
-#endif // KENSHICOOP_SYNC_TUNING_H
+#endif // TOKELACOOP_SYNC_TUNING_H

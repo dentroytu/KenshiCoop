@@ -22,8 +22,8 @@
 // which reuses the normal Steam-transport connect path. Manual ID entry stays as
 // a fallback for setups where the overlay is unavailable.
 
-#ifndef KENSHICOOP_STEAMINVITE_H
-#define KENSHICOOP_STEAMINVITE_H
+#ifndef TOKELACOOP_STEAMINVITE_H
+#define TOKELACOOP_STEAMINVITE_H
 
 namespace coop {
 namespace steaminvite {
@@ -83,4 +83,4 @@ void reset();
 } // namespace steaminvite
 } // namespace coop
 
-#endif // KENSHICOOP_STEAMINVITE_H
+#endif // TOKELACOOP_STEAMINVITE_H

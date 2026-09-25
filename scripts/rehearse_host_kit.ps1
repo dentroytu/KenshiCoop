@@ -54,7 +54,7 @@ function Invoke-LanSsh {
     return @{ exit = $LASTEXITCODE; out = ($out | ForEach-Object { "$_" }) }
 }
 
-$kitTestDir = "C:\KenshiCoopKitTest"
+$kitTestDir = "C:\TokelaCoopKitTest"
 $stampDir = Join-Path $repoRoot ("tools\test-runs\kitrehearsal_" + (Get-Date -Format "yyyyMMdd_HHmmss"))
 New-Item -ItemType Directory -Force -Path $stampDir | Out-Null
 
@@ -66,7 +66,7 @@ $kitArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass",
 if ($SkipBuild) { $kitArgs += "-SkipBuild" }
 & powershell @kitArgs
 if ($LASTEXITCODE -ne 0) { throw "kit assembly failed" }
-$kitZip = Get-ChildItem (Join-Path $repoRoot "dist\KenshiCoop-remote-kit-*.zip") | Sort-Object LastWriteTime | Select-Object -Last 1
+$kitZip = Get-ChildItem (Join-Path $repoRoot "dist\TokelaCoop-remote-kit-*.zip") | Sort-Object LastWriteTime | Select-Object -Last 1
 Write-Host "  kit: $($kitZip.FullName)"
 
 # Local deploy so the join runs the same build as the kit.
@@ -77,7 +77,7 @@ if ($LASTEXITCODE -ne 0) { throw "local deploy failed" }
 Write-Host ""
 Write-Host "=== 2. install kit on $($cfg.host) (as the friend would) ==="
 [void](Invoke-LanSsh "taskkill /IM Kenshi_x64.exe /F 2>nul & rmdir /S /Q `"$kitTestDir`" 2>nul & mkdir `"$kitTestDir`" & echo OK")
-& scp -o BatchMode=yes $kitZip.FullName "${target}:C:/KenshiCoopKitTest/kit.zip"
+& scp -o BatchMode=yes $kitZip.FullName "${target}:C:/TokelaCoopKitTest/kit.zip"
 if ($LASTEXITCODE -ne 0) { throw "kit push failed" }
 $r = Invoke-LanSsh "powershell -NoProfile -Command `"Expand-Archive -Path $kitTestDir\kit.zip -DestinationPath $kitTestDir -Force; 'EXPANDED'`""
 if ("$($r.out)" -notmatch "EXPANDED") { throw "kit expand failed: $($r.out)" }
@@ -87,7 +87,7 @@ Write-Host "  kit expanded -> $kitTestDir"
 Write-Host ""
 Write-Host "=== 3. run friend_host.ps1 on $($cfg.host) ==="
 $taskCmd = "powershell -NoProfile -ExecutionPolicy Bypass -File $kitTestDir\friend_host.ps1 -NoPrompt"
-$r = Invoke-LanSsh "schtasks /create /tn KenshiCoopKitHost /tr `"$taskCmd`" /sc once /st 00:00 /it /f && schtasks /run /tn KenshiCoopKitHost"
+$r = Invoke-LanSsh "schtasks /create /tn TokelaCoopKitHost /tr `"$taskCmd`" /sc once /st 00:00 /it /f && schtasks /run /tn TokelaCoopKitHost"
 if ($r.exit -ne 0) { throw "kit host task failed: $($r.out)" }
 Write-Host "  friend_host task triggered; waiting for the host to reach gameplay ..."
 $deadline = (Get-Date).AddSeconds(240)
@@ -135,19 +135,19 @@ Write-Host "=== 5. collect the friend results zip ==="
 $deadline = (Get-Date).AddSeconds(180)
 $zipName = ""
 while ((Get-Date) -lt $deadline) {
-    $r = Invoke-LanSsh "dir /B `"$kitTestDir\KenshiCoop-results-*.zip`" 2>nul"
-    $cand = @($r.out) | Where-Object { "$_" -match "^KenshiCoop-results-.*\.zip$" } | Select-Object -Last 1
+    $r = Invoke-LanSsh "dir /B `"$kitTestDir\TokelaCoop-results-*.zip`" 2>nul"
+    $cand = @($r.out) | Where-Object { "$_" -match "^TokelaCoop-results-.*\.zip$" } | Select-Object -Last 1
     if ($null -ne $cand) { $zipName = "$cand".Trim(); break }
     Start-Sleep -Seconds 5
 }
 if ($zipName -eq "") { throw "friend_host produced no results zip" }
-& scp -o BatchMode=yes "${target}:C:/KenshiCoopKitTest/$zipName" "$stampDir/"
+& scp -o BatchMode=yes "${target}:C:/TokelaCoopKitTest/$zipName" "$stampDir/"
 if ($LASTEXITCODE -ne 0) { throw "results zip collection failed" }
 Expand-Archive -Path (Join-Path $stampDir $zipName) -DestinationPath $stampDir -Force
 Write-Host "  collected + expanded: $zipName"
 
 # Cleanup remote kit test artifacts.
-[void](Invoke-LanSsh "schtasks /delete /tn KenshiCoopKitHost /f 2>nul & rmdir /S /Q `"$kitTestDir`" 2>nul & echo CLEANED")
+[void](Invoke-LanSsh "schtasks /delete /tn TokelaCoopKitHost /f 2>nul & rmdir /S /Q `"$kitTestDir`" 2>nul & echo CLEANED")
 
 # ---- 6. Judge --------------------------------------------------------------------------------
 Write-Host ""

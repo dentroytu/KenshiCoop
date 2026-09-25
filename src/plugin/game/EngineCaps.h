@@ -28,8 +28,8 @@
 // game or logger dependency so the unit layer (prototest) can exercise it
 // directly against synthetic rows.
 
-#ifndef KENSHICOOP_ENGINE_CAPS_H
-#define KENSHICOOP_ENGINE_CAPS_H
+#ifndef TOKELACOOP_ENGINE_CAPS_H
+#define TOKELACOOP_ENGINE_CAPS_H
 
 namespace coop {
 namespace engine {
@@ -130,4 +130,4 @@ bool capAvailable(Capability c);
 } // namespace engine
 } // namespace coop
 
-#endif // KENSHICOOP_ENGINE_CAPS_H
+#endif // TOKELACOOP_ENGINE_CAPS_H

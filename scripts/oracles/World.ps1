@@ -762,7 +762,7 @@ function Test-SquadProbe {
 # own_guard (2026-09-25): each side selects the other side's tab leader five times
 # and samples the selection afterwards; the own-characters-only guard must have
 # taken every one away (leaks=0 on both sides) and logged that it did.
-# -ExpectLeak flips it for the KENSHICOOP_OWN_GUARD=0 negative control.
+# -ExpectLeak flips it for the TOKELACOOP_OWN_GUARD=0 negative control.
 function Test-OwnGuard {
     param([string]$HostFile, [string]$JoinFile, [switch]$ExpectLeak, [string]$GateName = "own_guard")
     $rx = "SCENARIO OWNG verdict role=(\w+) pass=(\d) tries=(\d+) resolved=(\d+) checks=(\d+) leaks=(\d+) landed=(\d+)"
@@ -1449,7 +1449,7 @@ function Test-DeedProbe {
     $recvH = @(Select-String -Path $HostFile -Pattern $script:DeedRecvRegex -ErrorAction SilentlyContinue)
     $recvJ = @(Select-String -Path $JoinFile -Pattern $script:DeedRecvRegex -ErrorAction SilentlyContinue)
     if ($recvH.Count -gt 0 -or $recvJ.Count -gt 0) {
-        $why += "[deed] RECV seen with KENSHICOOP_DEED_SYNC=0 (host=$($recvH.Count) join=$($recvJ.Count)) - the hatch does not gate the channel"
+        $why += "[deed] RECV seen with TOKELACOOP_DEED_SYNC=0 (host=$($recvH.Count) join=$($recvJ.Count)) - the hatch does not gate the channel"
     }
     foreach ($leg in @(@($hW, $jOwn, 'host', 'join'), @($jW, $hOwn, 'join', 'host'))) {
         $w = $leg[0]; $peerOwn = $leg[1]

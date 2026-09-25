@@ -658,7 +658,7 @@ void Replicator::logSmoothSummary() {
     // Step-2 pruning evidence: how often the legacy quieting patchwork actually
     // fired this run. Sustained relapse=0 across regressions = the I11 re-quiet is
     // dead code under default AI-suspend and can be deleted; detach counts feed the
-    // KENSHICOOP_NO_DETACH A/B decision.
+    // TOKELACOOP_NO_DETACH A/B decision.
     char q[160];
     _snprintf(q, sizeof(q) - 1,
               "SCENARIO QUIET relapse=%lu sitOrders=%lu detach=%lu noDetach=%d "

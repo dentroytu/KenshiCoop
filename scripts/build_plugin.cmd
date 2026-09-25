@@ -1,5 +1,5 @@
 @echo off
-REM Build KenshiCoop.dll with the legacy v100 (VC++ 2010) x64 toolchain on a
+REM Build TokelaCoop.dll with the legacy v100 (VC++ 2010) x64 toolchain on a
 REM machine that has only "Windows SDK 7.1 + VC2010 SP1 compiler update" (no full
 REM VS2010). We hand MSBuild a complete PATH/INCLUDE/LIB and UseEnv=true so it does
 REM not rely on VS2010 registry/SDK auto-detection.
@@ -50,11 +50,14 @@ set "INCLUDE=%VC%\include;%SDK%\Include;%REPO%\third_party\vc10_compat;%KL%\Kens
 REM Libs: VC10 x64 CRT + Win SDK 7.1 x64 + KenshiLib (kenshilib.lib, OgreMain_x64.lib).
 set "LIB=%VC%\lib\amd64;%SDK%\Lib\x64;%KL%\KenshiLib\Libraries"
 
-echo === Building KenshiCoop.dll (%CONFIG%^|x64, v100) ===
+echo === Building TokelaCoop.dll (%CONFIG%^|x64, v100) ===
 where cl.exe
 
 REM UseEnv=true: use the INCLUDE/LIB/PATH above instead of registry-derived paths.
 REM TrackFileAccess=false: avoid Tracker.exe TRK0002 under redirected shells.
-"%MSBUILD%" "%REPO%\src\plugin\KenshiCoop.vcxproj" /p:Configuration=%CONFIG% /p:Platform=x64 /p:UseEnv=true /p:TrackFileAccess=false /nologo /v:minimal
+"%MSBUILD%" "%REPO%\src\plugin\TokelaCoop.vcxproj" /p:Configuration=%CONFIG% /p:Platform=x64 /p:UseEnv=true /p:TrackFileAccess=false /nologo /v:minimal
+set "RC=%ERRORLEVEL%"
 
-endlocal
+REM Hand MSBuild's result back: a bare endlocal returned 0 even when the build
+REM failed, so a caller could go on with a stale DLL.
+endlocal & exit /b %RC%

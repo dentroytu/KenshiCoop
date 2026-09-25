@@ -1,14 +1,14 @@
 @echo off
-rem Double-click entry point for hosting a KenshiCoop session. Prompts for the
+rem Double-click entry point for hosting a TokelaCoop session. Prompts for the
 rem one thing the script can't know (the other player's Steam code) and hands
 rem off to friend_host.ps1 - so players never have to open PowerShell or type
 rem a command line. Ships inside the kit next to friend_host.ps1.
 setlocal
 cd /d "%~dp0"
-title KenshiCoop - HOST
+title TokelaCoop - HOST
 echo.
 echo  =================================
-echo    KenshiCoop  -  HOST a session
+echo    TokelaCoop  -  HOST a session
 echo  =================================
 echo.
 rem Show THIS player's friend code first (read from Steam) so both players

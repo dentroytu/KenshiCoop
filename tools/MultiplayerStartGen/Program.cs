@@ -1,8 +1,8 @@
-// MultiplayerStartGen - generates dist/mods/KenshiCoop/KenshiCoop.mod, the FCS data
-// half of the KenshiCoop mod. It carries TWO co-op game starts:
+// MultiplayerStartGen - generates dist/mods/TokelaCoop/TokelaCoop.mod, the FCS data
+// half of the TokelaCoop mod. It carries TWO co-op game starts:
 //
-//   "Multiplayer (Wanderer x2)"   vanilla Wanderer start, two wanderers, one squad each.
-//   "Multiplayer+ (Wanderer x2)"  the same shape with money = 500000. The KenshiCoop
+//   "TokelaCoop (Wanderer x2)"   vanilla Wanderer start, two wanderers, one squad each.
+//   "TokelaCoop+ (Wanderer x2)"  the same shape with money = 500000. The TokelaCoop
 //                                 plugin recognises this start by its squad-2 leader
 //                                 template and floors every stat on the player squad
 //                                 at 50 (FCS cannot express per-skill values; a
@@ -11,7 +11,9 @@
 //
 // The two names are a matched pair on purpose: same start, with and without the
 // boost. The "+" variant shipped as "Wanderer+ x2" in v0.50 and was renamed for
-// v0.51 - a DISPLAY name only, so no save is affected (see STRING IDs below).
+// v0.51 - a DISPLAY name only, so no save is affected (see STRING IDs below). In
+// v0.54 the project became TokelaCoop and the pair went from "Multiplayer (Wanderer
+// x2)" / "Multiplayer+ (Wanderer x2)" to the names below, again display names only.
 //
 // DESIGN RULE (inherited from the original start by zeroit789, PR #15): stay
 // vanilla-equivalent. Squad 1 always reuses the untouched vanilla Wanderer
@@ -21,8 +23,14 @@
 // STRING IDs ARE FROZEN. Kenshi saves store the StringId of the template a character
 // came from, so renaming a record orphans it in every existing save. Records 1-3 were
 // first published under the old "KenshiCoop-MultiplayerStart" mod name and keep that
-// suffix forever, even though the file now ships as KenshiCoop.mod. New records join
-// the same namespace rather than starting a new one.
+// suffix forever, even though the file shipped as KenshiCoop.mod up to v0.53 and as
+// TokelaCoop.mod since v0.54. New records join the same namespace rather than
+// starting a new one.
+//
+// v0.54 was NOT regenerated: its text changes were patched into the shipped file
+// with scripts/ModText.psm1 (no .NET 9 on the build PC). The strings below match
+// what it shipped, so a regenerate gives the same text. scripts/make_mod_kit.ps1
+// stamps the current version into the description ("TokelaCoop vX.YY").
 //
 // REGENERATE:
 //   Requires a .NET 9 SDK (OpenConstructionSet 4.1.0 targets net9.0). If `dotnet` is
@@ -39,7 +47,7 @@ using OpenConstructionSet.Mods;
 
 // ---- Identity constants -----------------------------------------------------
 // The file we ship. Deliberately NOT the record namespace below.
-const string OutModName = "KenshiCoop";
+const string OutModName = "TokelaCoop";
 // The record namespace, frozen at the name the records were first published under.
 const string RecordNamespace = "KenshiCoop-MultiplayerStart";
 
@@ -49,8 +57,8 @@ const string VanillaSquadId = "45550-gamedata.base";   // SquadTemplate "startof
 const string VanillaCharId = "1533662-rebirth.mod";    // Character "Wanderer"
 const string HubTownId = "18919-Newwworld.mod";        // Town "The Hub" (vanilla Wanderer spawn)
 
-// Money for the "Multiplayer+ (Wanderer x2)" start. Kenshi has ONE player faction
-// wallet and KenshiCoop replicates it as a single shared pool, so this is 500k for
+// Money for the "TokelaCoop+ (Wanderer x2)" start. Kenshi has ONE player faction
+// wallet and TokelaCoop replicates it as a single shared pool, so this is 500k for
 // the pair.
 const int PlusStartMoney = 500000;
 
@@ -155,27 +163,27 @@ Item MakeStart(int id, string name, string description, int squad2Id, int money)
 }
 
 // ---- 3) The records ----------------------------------------------------------
-// 1-3: the original "Multiplayer (Wanderer x2)" start. Reproduced byte-for-byte in
+// 1-3: the original "TokelaCoop (Wanderer x2)" start. Reproduced byte-for-byte in
 // intent - these ids are referenced by saves already in the wild.
 var wanderer2 = CloneWanderer(1, "Wanderer 2");
 var wandererSquad2 = CloneSquad(2, "startoff- Wanderer squad 2 (co-op)", 1);
-var wandererStart = MakeStart(3, "Multiplayer (Wanderer x2)",
+var wandererStart = MakeStart(3, "TokelaCoop (Wanderer x2)",
     "Two lone wanderers with nothing but a few coins, a pair of pants each and a couple of rusty " +
-    "swords, ready to venture out into the world together.  Designed for KenshiCoop: each wanderer " +
+    "swords, ready to venture out into the world together.  Designed for TokelaCoop: each wanderer " +
     "starts in their own squad, so the host controls squad 1 and the joining player controls squad 2.",
     squad2Id: 2, money: Convert.ToInt32(startValues["money"]));
 
-// 4-6: the "Multiplayer+ (Wanderer x2)" start. Record 4 is a SEPARATE Character from
+// 4-6: the "TokelaCoop+ (Wanderer x2)" start. Record 4 is a SEPARATE Character from
 // record 1 even though both spawn a PC called "Wanderer 2" - the StringId is what tells
 // the two starts apart, and record 4's is the MARKER the plugin matches on to apply the
 // stat floor. Keep it in sync with WPX2_MARKER_SID in src/plugin/Plugin.cpp.
 var plusWanderer = CloneWanderer(4, "Wanderer 2");
-var plusSquad2 = CloneSquad(5, "startoff- Multiplayer+ squad 2 (co-op)", 4);
-var plusStart = MakeStart(6, "Multiplayer+ (Wanderer x2)",
+var plusSquad2 = CloneSquad(5, "startoff- TokelaCoop+ squad 2 (co-op)", 4);
+var plusStart = MakeStart(6, "TokelaCoop+ (Wanderer x2)",
     "Two seasoned wanderers setting out together with a small fortune behind them.  The same start " +
-    "as Multiplayer (Wanderer x2) - each wanderer in their own squad, so the host controls squad 1 " +
+    "as TokelaCoop (Wanderer x2) - each wanderer in their own squad, so the host controls squad 1 " +
     "and the joining player controls squad 2 - but without the early grind.  The 500,000 cats are " +
-    "the shared faction wallet both players spend from, and the KenshiCoop plugin raises every stat " +
+    "the shared faction wallet both players spend from, and the TokelaCoop plugin raises every stat " +
     "on both characters to 50 on the first tick of a new game.",
     squad2Id: 5, money: PlusStartMoney);
 
@@ -183,18 +191,19 @@ Item[] items = [wanderer2, wandererSquad2, wandererStart, plusWanderer, plusSqua
 
 // ---- 4) Assemble and write ---------------------------------------------------
 var header = new Header(1, "",
-    "The data half of KenshiCoop: two co-op game starts. \"Multiplayer (Wanderer x2)\" is the " +
-    "vanilla Wanderer start with two wanderers, each already in their own squad, so the host plays " +
-    "squad 1 and the joining player takes squad 2. \"Multiplayer+ (Wanderer x2)\" is the same start " +
-    "with 500,000 cats in the shared wallet and both characters levelled to 50 in every stat by the " +
-    "plugin. Data-only mod; requires the KenshiCoop plugin for co-op.")
+    "TokelaCoop v0.54 (formerly KenshiCoop) - co-op for two players. This is the data half of the " +
+    "mod: two co-op game starts. \"TokelaCoop (Wanderer x2)\" is the vanilla Wanderer start with two " +
+    "wanderers, each already in their own squad, so the host plays squad 1 and the joining player " +
+    "takes squad 2. \"TokelaCoop+ (Wanderer x2)\" is the same start with 500,000 cats in the shared " +
+    "wallet and both characters levelled to 50 in every stat by the plugin. Data-only mod; requires " +
+    "the TokelaCoop plugin for co-op.")
 {
     Dependencies = ["gamedata.base", "Newwworld.mod", "rebirth.mod", "Dialogue.mod"],
 };
 var info = new ModInfoData
 {
     ModName = OutModName + ".mod",
-    Title = "KenshiCoop",
+    Title = "TokelaCoop",
     Tags = ["Gameplay"],
 };
 var modData = new ModFileData(DataFileType.Mod, header, items.Length, items, info);
@@ -221,6 +230,10 @@ if (verify.Items.Count != items.Length)
     errors.Add($"expected {items.Length} items, found {verify.Items.Count}");
 
 // Every StringId we have ever published must still be present and of the right type.
+// Pinned as a literal too: Sid() is built from RecordNamespace, so a rename of that
+// constant would otherwise pass its own check.
+if (Sid(1) != "1-KenshiCoop-MultiplayerStart.mod")
+    errors.Add($"RecordNamespace changed: {Sid(1)} (saves reference 1-KenshiCoop-MultiplayerStart.mod)");
 (string Sid, ItemType Type)[] expected =
 [
     (Sid(1), ItemType.Character), (Sid(2), ItemType.SquadTemplate), (Sid(3), ItemType.NewGameStartoff),
@@ -293,7 +306,7 @@ if (errors.Count > 0)
     return 1;
 }
 Console.WriteLine($"VERIFICATION OK: {items.Length} records, both starts wired to two squads, " +
-                  $"legacy StringIds intact, \"Multiplayer+ (Wanderer x2)\" money = {PlusStartMoney}.");
+                  $"legacy StringIds intact, \"TokelaCoop+ (Wanderer x2)\" money = {PlusStartMoney}.");
 return 0;
 
 // ---- Helpers -----------------------------------------------------------------
@@ -302,10 +315,10 @@ return 0;
 static string FindRepoRoot()
 {
     for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
-        if (Directory.Exists(Path.Combine(dir.FullName, "dist", "mods", "KenshiCoop")))
+        if (Directory.Exists(Path.Combine(dir.FullName, "dist", "mods", "TokelaCoop")))
             return dir.FullName;
     throw new DirectoryNotFoundException(
-        $"could not find the repo root (no dist/mods/KenshiCoop above {AppContext.BaseDirectory})");
+        $"could not find the repo root (no dist/mods/TokelaCoop above {AppContext.BaseDirectory})");
 }
 
 // The install holding gamedata.base. Same default the scripts/ drivers use.

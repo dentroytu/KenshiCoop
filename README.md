@@ -1,6 +1,11 @@
-# KenshiCoop
+# TokelaCoop
 
-Setup + Demo: [https://www.youtube.com/watch?v=OqwVRRZEYGM](https://www.youtube.com/watch?v=OqwVRRZEYGM)
+**Current version: v0.54.** Up to v0.53 this project was called **KenshiCoop**.
+TokelaCoop is a modified fork of [nhoral/KenshiCoop](https://github.com/nhoral/KenshiCoop).
+In game, the top-left banner and the F2 panel title show the name and the
+version ("TokelaCoop v0.54"): check that you and your friend see the same one.
+
+Setup + Demo (upstream KenshiCoop): [https://www.youtube.com/watch?v=OqwVRRZEYGM](https://www.youtube.com/watch?v=OqwVRRZEYGM)
 
 Experimental **co-op multiplayer for [Kenshi](https://lofigames.com/)**, built as an
 [RE_Kenshi](https://github.com/BFrizzleFoShizzle/RE_Kenshi) /
@@ -20,7 +25,7 @@ automatically.
 
 ## How it works
 
-- `KenshiCoop.dll` is loaded into the game by RE_Kenshi. It hooks the engine via
+- `TokelaCoop.dll` is loaded into the game by RE_Kenshi. It hooks the engine via
   KenshiLib and drives all game mutation on the main thread.
 - Networking is [ENet](https://github.com/lsalzman/enet) over UDP, with an
   optional Steam P2P tunnel (no port forwarding needed).
@@ -29,7 +34,7 @@ automatically.
   wire protocol.
 
 ```
-src/plugin/       The KenshiCoop plugin (net, sync/replication, engine facade, scenarios)
+src/plugin/       The TokelaCoop plugin (net, sync/replication, engine facade, scenarios)
 src/netproto/     Shared wire-protocol headers (plain C++03, compiled by everything)
 src/nettest/      Standalone ENet console app (transport de-risking)
 src/netsim/       Protocol simulator
@@ -54,14 +59,15 @@ panel, so there's no config file to edit and no launcher scripts to run. (A tiny
    setup: the connection is Steam P2P, so there's no port forwarding, no
    router configuration, and no IP addresses. (A direct-UDP mode is also
    available for LAN / port-forwarded games.)
-3. **The same KenshiCoop release** on both machines (the handshake rejects a
-   version mismatch).
+3. **The same TokelaCoop release** on both machines. The handshake rejects a
+   different network protocol, but two releases can share one, so compare the
+   "TokelaCoop vX.YY" both of you see on the banner or the F2 panel.
 
 ### 1. Install (one click)
 
-Grab `KenshiCoop-kit.zip` from the
-[latest release of this fork](https://github.com/dentroytu/KenshiCoop/releases/latest),
-extract it anywhere and double-click **`Instalar KenshiCoop.cmd`** (if Windows
+Grab `TokelaCoop-kit.zip` from the
+[latest release of this fork](https://github.com/dentroytu/TokelaCoop/releases/latest),
+extract it anywhere and double-click **`Instalar TokelaCoop.cmd`** (if Windows
 asks, choose *Run* / *More info > Run anyway*). The installer:
 
 - finds Kenshi in any Steam library or GOG (and asks for the folder if it
@@ -70,18 +76,25 @@ asks, choose *Run* / *More info > Run anyway*). The installer:
   it's missing. It downloads the pinned 0.3.5 release, checks its SHA-256 and
   opens RE_Kenshi's official installer with your Kenshi folder on the
   clipboard. Click *Install*: that installer is required on Kenshi 1.0.68;
-- copies the mod into `<Kenshi>\mods\KenshiCoop` (keeping your
-  `coop_config.json`) and enables it in `data\mods.cfg`.
+- copies the mod into `<Kenshi>\mods\TokelaCoop` (keeping your
+  `coop_config.json`) and enables it in `data\mods.cfg`;
+- **upgrading from KenshiCoop (v0.53 or older)**: carries your
+  `mods\KenshiCoop\coop_config.json` over, swaps `KenshiCoop.mod` for
+  `TokelaCoop.mod` in `data\mods.cfg` (same place in the load order) and removes
+  `mods\KenshiCoop`, so the old and new plugin never load together.
 
 Run it again to update. The installer is plain PowerShell
-(`installer\Install-KenshiCoop.ps1`), so you can read what it does. It is new
+(`installer\Install-TokelaCoop.ps1`), so you can read what it does. It is new
 in this fork and not yet tested on a real install.
 
 <details><summary>Manual install</summary>
 
-Install RE_Kenshi 0.3.5 with its own installer, copy the kit's `KenshiCoop`
-folder into `<Kenshi>\mods\`, then enable **KenshiCoop** in the launcher's
-Mods list.
+Install RE_Kenshi 0.3.5 with its own installer, copy the kit's `TokelaCoop`
+folder into `<Kenshi>\mods\`, then enable **TokelaCoop** in the launcher's
+Mods list. If you had **KenshiCoop** (v0.53 or older), move your
+`mods\KenshiCoop\coop_config.json` into `mods\TokelaCoop\`, then delete
+`mods\KenshiCoop` and untick KenshiCoop: with both loaded, TokelaCoop stays off
+and tells you why.
 </details>
 
 ### 2. Connect in-game (press F2)
@@ -104,7 +117,7 @@ copies an ID. If that doesn't work, use the manual steps below.
    you relaunch Kenshi.
 3. Leave **Transport** on **STEAM**.
 4. **Host:** load the save you want to play, or start a new game - pick
-   **Multiplayer (Wanderer x2)** from the start list for a ready-made two-squad
+   **TokelaCoop (Wanderer x2)** from the start list for a ready-made two-squad
    co-op start (see below). Then set **Role: HOST** and toggle **Connection** to
    **ONLINE**.
 5. **Join:** straight from the **main menu** - no save needed - set
@@ -118,7 +131,7 @@ copies an ID. If that doesn't work, use the manual steps below.
    **OFFLINE** to leave.
 
 **LAN / direct-UDP (advanced):** skip the Steam ID swap. Open
-`<Kenshi>\mods\KenshiCoop\coop_config.json`, set `"transport": "udp"`, and put
+`<Kenshi>\mods\TokelaCoop\coop_config.json`, set `"transport": "udp"`, and put
 the host's address in `"ip"` / `"port"`. Then in the panel set **Transport: UDP**
 and go ONLINE. The `ip`/`port` are re-read whenever you go ONLINE, so no restart
 is needed after an edit.
@@ -129,13 +142,13 @@ is needed after an edit.
   runs squad 1 and the joining player squad 2. Your friend's squad is visible
   and synced on your screen, but answers only to them. If your save has only
   one squad, move some units into a second squad tab in-game to give them a crew.
-- **Two-player starts included.** The KenshiCoop mod ships two game starts (New
+- **Two-player starts included.** The TokelaCoop mod ships two game starts (New
   Game -> pick one from the list), both the vanilla Wanderer start with two
   wanderers already split into separate squads, so the host gets squad 1 and the
   joining player squad 2 with no manual tab-splitting:
-  - **"Multiplayer (Wanderer x2)"** - the plain version, vanilla in every other
+  - **"TokelaCoop (Wanderer x2)"** - the plain version, vanilla in every other
     way. Authored by [zeroit789](https://github.com/zeroit789).
-  - **"Multiplayer+ (Wanderer x2)"** - the same start with **500,000 cats** and both
+  - **"TokelaCoop+ (Wanderer x2)"** - the same start with **500,000 cats** and both
     characters at **50 in every stat**, for skipping the early grind. Kenshi has
     a single player wallet and co-op shares it, so the 500,000 is the pair's
     combined purse, not 500,000 each. The stats are a floor applied when the
@@ -151,23 +164,31 @@ is needed after an edit.
 
 ### If something goes wrong
 
-- **"The co-op plugin has not started"** - RE_Kenshi didn't load it. Check
-  `<Kenshi>\RE_Kenshi_log.txt` for `KenshiCoop`; reinstalling
+- **"The co-op plugin has not started"** (no "TokelaCoop vX.YY" in the top-left
+  corner) - RE_Kenshi didn't load it. Check
+  `<Kenshi>\RE_Kenshi_log.txt` for `TokelaCoop`; reinstalling
   [RE_Kenshi](https://www.nexusmods.com/kenshi/mods/847) usually fixes it.
+- **"untick KenshiCoop" on the banner, or a warning box at start** - the old
+  KenshiCoop is still installed next to TokelaCoop. Run the installer again or
+  untick KenshiCoop in the launcher's Mods tab.
 - **No connection (Steam)** - both Steams must be online (not offline mode), and
   each side must have **Pasted** the *other* player's ID (the panel shows the
   captured ID - confirm it matches). If "Paste friend's Steam ID" reports the
   clipboard wasn't a Steam ID, have your friend re-copy theirs. Look for
-  `[steam] session ... active=1` in `<Kenshi>\KenshiCoop_*.log`.
+  `[steam] session ... active=1` in `<Kenshi>\TokelaCoop_*.log`.
 - **"Mods: DIFFERENT" on the F2 panel** (or "mods differ" on the banner) - you
   and your friend don't have the same mods, versions or load order. Missing
-  entities and items are the usual symptom. `<Kenshi>\KenshiCoop_mods_diff.txt`
+  entities and items are the usual symptom. `<Kenshi>\TokelaCoop_mods_diff.txt`
   lists every difference, and **"Copy friend's mod list"** copies their load
   order to paste into `data\mods.cfg` or match in the launcher. The check only
   warns, it never blocks the connection (new in this fork, not yet tested
   in-game).
-- **"protocol mismatch" in the log** - one of you has an older build; both
-  players should re-install from the same release.
+- **"your friend has another version" on the F2 panel** - one of you has a build
+  with a different network protocol; both players should re-install from the
+  same release.
+- **"Mods: DIFFERENT" showing only KenshiCoop.mod against TokelaCoop.mod** - your
+  friend still has the old KenshiCoop (v0.53 or older, same network protocol, so
+  it connects): they should run the new installer, not copy mod lists.
 
 The kit's `README.txt` has the full setup + troubleshooting list.
 
@@ -204,8 +225,11 @@ scenario, and produces a numeric PASS/FAIL verdict from the two logs.
 - [BFrizzleFoShizzle](https://github.com/BFrizzleFoShizzle) - RE_Kenshi and
   KenshiLib, which make plugins like this possible
 - [lsalzman/enet](https://github.com/lsalzman/enet) - UDP networking library
-- [zeroit789](https://github.com/zeroit789) - the "Multiplayer (Wanderer x2)"
-  co-op game start ([#15](https://github.com/nhoral/KenshiCoop/pull/15))
+- [Nhoral](https://github.com/nhoral) - [KenshiCoop](https://github.com/nhoral/KenshiCoop),
+  the original project this fork is built on
+- [zeroit789](https://github.com/zeroit789) - the original "Multiplayer (Wanderer x2)"
+  co-op game start, now "TokelaCoop (Wanderer x2)"
+  ([#15](https://github.com/nhoral/KenshiCoop/pull/15))
 - Lo-Fi Games - Kenshi
 
 ## License

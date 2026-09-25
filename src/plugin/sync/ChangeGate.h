@@ -25,8 +25,8 @@
 // TYPED baseline compare (money value == , door open/locked, faction |delta| >
 // EPS) stays at the call site - only the timing/seq decision lives here.
 
-#ifndef KENSHICOOP_CHANGE_GATE_H
-#define KENSHICOOP_CHANGE_GATE_H
+#ifndef TOKELACOOP_CHANGE_GATE_H
+#define TOKELACOOP_CHANGE_GATE_H
 
 namespace coop {
 namespace sync {
@@ -76,4 +76,4 @@ inline bool gateSeqAccept(unsigned int seqSeen, unsigned int incomingSeq) {
 } // namespace sync
 } // namespace coop
 
-#endif // KENSHICOOP_CHANGE_GATE_H
+#endif // TOKELACOOP_CHANGE_GATE_H

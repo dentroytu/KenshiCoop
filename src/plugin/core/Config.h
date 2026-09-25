@@ -1,10 +1,10 @@
-// Config - parse the KENSHICOOP_* environment variables once at load.
+// Config - parse the TOKELACOOP_* environment variables once at load.
 //
 // Mode/role and all runtime knobs are env-driven so host vs join is chosen
 // without a recompile (the test harness sets these before launching Kenshi).
 
-#ifndef KENSHICOOP_CONFIG_H
-#define KENSHICOOP_CONFIG_H
+#ifndef TOKELACOOP_CONFIG_H
+#define TOKELACOOP_CONFIG_H
 
 #include <string>
 #include <set>
@@ -12,24 +12,24 @@
 namespace coop {
 
 struct Config {
-    bool          isHost;          // KENSHICOOP_MODE != "join"
-    std::string   ip;              // KENSHICOOP_IP   (join target)
-    int           port;            // KENSHICOOP_PORT
-    std::string   save;            // KENSHICOOP_SAVE (auto-load; empty = manual)
-    int           testSeconds;     // KENSHICOOP_TEST_SECONDS (0 = no self-exit)
-    std::string   logPath;         // KENSHICOOP_LOG
-    std::string   scenario;        // KENSHICOOP_SCENARIO (empty = normal tick)
-    unsigned long autoLoadDelayMs; // KENSHICOOP_AUTOLOAD_DELAY_MS
-    std::string   setupScene;      // KENSHICOOP_SETUP ("" = off; "chair"/"npc"/"craft"/"down"/"downhold"/"duel"/"squad"/"inventory"/"bedcage")
+    bool          isHost;          // TOKELACOOP_MODE != "join"
+    std::string   ip;              // TOKELACOOP_IP   (join target)
+    int           port;            // TOKELACOOP_PORT
+    std::string   save;            // TOKELACOOP_SAVE (auto-load; empty = manual)
+    int           testSeconds;     // TOKELACOOP_TEST_SECONDS (0 = no self-exit)
+    std::string   logPath;         // TOKELACOOP_LOG
+    std::string   scenario;        // TOKELACOOP_SCENARIO (empty = normal tick)
+    unsigned long autoLoadDelayMs; // TOKELACOOP_AUTOLOAD_DELAY_MS
+    std::string   setupScene;      // TOKELACOOP_SETUP ("" = off; "chair"/"npc"/"craft"/"down"/"downhold"/"duel"/"squad"/"inventory"/"bedcage")
                                    // host-only one-shot world spawn to bake a
                                    // deterministic test scene into a save.
-    std::string   bakeSave;        // KENSHICOOP_BAKESAVE ("" = manual save): after
+    std::string   bakeSave;        // TOKELACOOP_BAKESAVE ("" = manual save): after
                                    // a setup scene spawns, auto-write the fixture
                                    // save under this name (SaveManager::save).
-    bool          probeRecruit;    // KENSHICOOP_PROBE_RECRUIT == "1" (join only):
+    bool          probeRecruit;    // TOKELACOOP_PROBE_RECRUIT == "1" (join only):
                                    // recruit diverged NPCs into the player squad
                                    // to validate the AI-gating "inhabit" lever.
-    bool          aiSuspend;      // KENSHICOOP_AI_SUSPEND != "0" (BOTH roles; DEFAULT ON):
+    bool          aiSuspend;      // TOKELACOOP_AI_SUSPEND != "0" (BOTH roles; DEFAULT ON):
                                    // detour Character::periodicUpdate to suspend the
                                    // AI decision layer for any peer-DRIVEN body (keeps
                                    // animation; stops self-tasking) - faction-safe.
@@ -38,34 +38,34 @@ struct Config {
                                    // Promoted from probe to the default quieting layer
                                    // (2026-07-05 review: pose_state 0.972 vs 0.962 with
                                    // it on). "0" is the escape hatch; the legacy
-                                   // KENSHICOOP_PROBE_AISUSPEND=1 still forces it on.
+                                   // TOKELACOOP_PROBE_AISUSPEND=1 still forces it on.
 
     // Debug WAN simulation: artificially delay (and optionally drop) inbound entity
     // batches so the same loopback harness exercises the latency path - render
     // interpolation, dead reckoning, stale-state enforcement - that a real internet
     // link would impose. All zero (default) = no simulation, immediate delivery.
-    unsigned int  netSimDelayMs;   // KENSHICOOP_NETSIM_DELAY_MS  (base one-way delay)
-    unsigned int  netSimJitterMs;  // KENSHICOOP_NETSIM_JITTER_MS (+/- uniform variance)
-    unsigned int  netSimLossPct;   // KENSHICOOP_NETSIM_LOSS_PCT  (0-100 drop chance)
+    unsigned int  netSimDelayMs;   // TOKELACOOP_NETSIM_DELAY_MS  (base one-way delay)
+    unsigned int  netSimJitterMs;  // TOKELACOOP_NETSIM_JITTER_MS (+/- uniform variance)
+    unsigned int  netSimLossPct;   // TOKELACOOP_NETSIM_LOSS_PCT  (0-100 drop chance)
 
     // Protocol 36 movement-smoothness live tuning (defaults = the historical
     // constants; 0/absent = default). The interp knobs feed InterpConfig, the
     // drive knobs feed the walk-drive's hard-snap / catch-up gains - all for
     // WAN A/B runs without a rebuild.
-    bool         sendStamp;         // KENSHICOOP_SEND_STAMP != "0": index interp
+    bool         sendStamp;         // TOKELACOOP_SEND_STAMP != "0": index interp
                                     // rings on the sender's capture stamp (wire
                                     // v35); "0" = legacy arrival-time indexing
                                     // (receiver-local A/B, no wire change)
-    unsigned int interpMinDelayMs;  // KENSHICOOP_INTERP_MIN_DELAY_MS  (50)
-    unsigned int interpMaxDelayMs;  // KENSHICOOP_INTERP_MAX_DELAY_MS  (200)
-    unsigned int interpMaxExtrapMs; // KENSHICOOP_INTERP_MAX_EXTRAP_MS (250)
-    float        interpCadenceK;    // KENSHICOOP_INTERP_CADENCE_K     (2.0)
-    unsigned int interpMaxCadenceDelayMs; // KENSHICOOP_INTERP_MAX_CADENCE_DELAY_MS (1200)
-    unsigned int interpStaleMs;     // KENSHICOOP_INTERP_STALE_MS      (2000)
-    float        interpSnapDist;    // KENSHICOOP_INTERP_SNAP_DIST     (50 u)
-    float        catchupK;          // KENSHICOOP_CATCHUP_K            (2.0)
-    float        snapDist;          // KENSHICOOP_SNAP_DIST            (8 u)
-    float        snapSeconds;       // KENSHICOOP_SNAP_SECONDS         (0.75 s)
+    unsigned int interpMinDelayMs;  // TOKELACOOP_INTERP_MIN_DELAY_MS  (50)
+    unsigned int interpMaxDelayMs;  // TOKELACOOP_INTERP_MAX_DELAY_MS  (200)
+    unsigned int interpMaxExtrapMs; // TOKELACOOP_INTERP_MAX_EXTRAP_MS (250)
+    float        interpCadenceK;    // TOKELACOOP_INTERP_CADENCE_K     (2.0)
+    unsigned int interpMaxCadenceDelayMs; // TOKELACOOP_INTERP_MAX_CADENCE_DELAY_MS (1200)
+    unsigned int interpStaleMs;     // TOKELACOOP_INTERP_STALE_MS      (2000)
+    float        interpSnapDist;    // TOKELACOOP_INTERP_SNAP_DIST     (50 u)
+    float        catchupK;          // TOKELACOOP_CATCHUP_K            (2.0)
+    float        snapDist;          // TOKELACOOP_SNAP_DIST            (8 u)
+    float        snapSeconds;       // TOKELACOOP_SNAP_SECONDS         (0.75 s)
                                     // velocity-aware hard-snap gate: teleport a
                                     // driven body only when it trails the newest
                                     // sample by more than this much travel time
@@ -73,31 +73,31 @@ struct Config {
     // Combat-drive convergence bands (2026-07-16 smoothness pass). All default to
     // the ReplicatorUtil constants when the env is unset/0 (the drive keeps its own
     // constant-initialized member unless the value is > 0), so ONE build sweeps them.
-    float        combatSoftDist;    // KENSHICOOP_COMBAT_SOFT_DIST     (6 u)
-    float        combatSnapDist;    // KENSHICOOP_COMBAT_SNAP_DIST     (20 u churn ceiling)
-    float        combatBigSnapDist; // KENSHICOOP_COMBAT_BIG_SNAP_DIST (60 u true-leave)
-    float        combatSlideMax;    // KENSHICOOP_COMBAT_SLIDE_MAX     (60 u/s slide cap floor)
-    unsigned int combatConvergeMs;  // KENSHICOOP_COMBAT_CONVERGE_MS   (400 ms hysteresis)
+    float        combatSoftDist;    // TOKELACOOP_COMBAT_SOFT_DIST     (6 u)
+    float        combatSnapDist;    // TOKELACOOP_COMBAT_SNAP_DIST     (20 u churn ceiling)
+    float        combatBigSnapDist; // TOKELACOOP_COMBAT_BIG_SNAP_DIST (60 u true-leave)
+    float        combatSlideMax;    // TOKELACOOP_COMBAT_SLIDE_MAX     (60 u/s slide cap floor)
+    unsigned int combatConvergeMs;  // TOKELACOOP_COMBAT_CONVERGE_MS   (400 ms hysteresis)
 
     // Protocol 36 NPC existence census: wide-radius ghost-culling reach in
     // world units. The host broadcasts the hand list of every world NPC within
     // this radius at 1 Hz; the join suppresses local NPCs absent from it.
     // 0 disables the census channel entirely (stream-bubble culling only).
-    float        censusRadius;      // KENSHICOOP_CENSUS_RADIUS        (2000 u)
+    float        censusRadius;      // TOKELACOOP_CENSUS_RADIUS        (2000 u)
 
     // Census-mint reach (2026-07-11): how far from the join's own squad a
     // census-missing host NPC may be proxy-minted, so host runtime spawns
     // (raids) appear at render range and walk in instead of materializing at
     // the ~200 u stream bubble. 0 disables (legacy stream-bubble minting).
-    float        spawnMintRadius;   // KENSHICOOP_SPAWN_MINT_RADIUS    (600 u)
+    float        spawnMintRadius;   // TOKELACOOP_SPAWN_MINT_RADIUS    (600 u)
 
     // v38 census position parking (pack-hidden fix, 2026-07-11): how far a
     // census-PRESENT local NPC copy may drift from the host's census position
     // before the join parks it back onto the host's spot (wide pass only,
     // per-key cooldown). The census carries positions per row; existence
     // culling is untouched. 0 disables parking.
-    float        censusParkDist;    // KENSHICOOP_CENSUS_PARK          (120 u)
-    float        censusWalkDist;    // KENSHICOOP_CENSUS_WALK          (400 u)
+    float        censusParkDist;    // TOKELACOOP_CENSUS_PARK          (120 u)
+    float        censusWalkDist;    // TOKELACOOP_CENSUS_WALK          (400 u)
 
     // Census ADOPTION reach (zone-load population parity, 2026-08-06): how far
     // from a census row's position the join looks for one of its OWN bodies of
@@ -111,7 +111,7 @@ struct Config {
     // (median 16 u, 86% inside 150 u) rather than off spawn accuracy - see the
     // Config.cpp note for the distribution and for what the tail costs.
     // 0 disables adoption (defer-only duplicate guard, i.e. the old behaviour).
-    float        adoptRadius;       // KENSHICOOP_ADOPT_RADIUS         (250 u)
+    float        adoptRadius;       // TOKELACOOP_ADOPT_RADIUS         (250 u)
 
     // Attention gate (attention-gated reconciliation): how close an interest
     // anchor - either client's tab leaders, either client's camera - must be
@@ -125,7 +125,7 @@ struct Config {
     // gate actually bites on the outer census band. 0 disables the gate -
     // every body is treated as observed, i.e. exactly the pre-gate behaviour
     // (fail-open A/B hatch).
-    float        attentionRadius;   // KENSHICOOP_ATTENTION_RADIUS     (1000 u)
+    float        attentionRadius;   // TOKELACOOP_ATTENTION_RADIUS     (1000 u)
 
     // Presence authority (protocol 49): each side claims the zone cells its own
     // squad tabs stand in and authors NPC existence there, instead of the host
@@ -134,9 +134,9 @@ struct Config {
     // the previous isHost branch, and the build behaves exactly as v0.46 did -
     // which is the shape the scenario tier still runs in, since the harness pins
     // the flag clear for every scenario that does not ask for it.
-    bool         cellAuth;          // KENSHICOOP_CELL_AUTH            (on)
+    bool         cellAuth;          // TOKELACOOP_CELL_AUTH            (on)
 
-    // Co-location collapse (KENSHICOOP_CELL_COLLAPSE, DEFAULT ON): while the two
+    // Co-location collapse (TOKELACOOP_CELL_COLLAPSE, DEFAULT ON): while the two
     // squads stand in the SAME zone cell, resolve every claimed cell to the
     // host, so being in one camp together behaves as v0.46 did while
     // walking apart still gets per-cell authorship. Measured 2026-08-09 over 4
@@ -145,72 +145,72 @@ struct Config {
     // A/B on split_far2 had the join keep a steady 11 NPCs at its own town under
     // cell authority against 5/5/23 without it. Hence a rule that switches on
     // separation rather than a global winner. A/B escape hatch.
-    bool         cellCollapse;      // KENSHICOOP_CELL_COLLAPSE        (on)
+    bool         cellCollapse;      // TOKELACOOP_CELL_COLLAPSE        (on)
 
-    // Census-band AI freeze (KENSHICOOP_CENSUS_FREEZE_AI, DEFAULT ON): the join
+    // Census-band AI freeze (TOKELACOOP_CENSUS_FREEZE_AI, DEFAULT ON): the join
     // suspends the local AI of a census-band body (census-present, unstreamed)
     // that diverges past censusParkDist_, so a captive/working slave can't flee
     // and aggro the join's guards while the host has it working. Divergence-
     // gated; well-tracking census NPCs keep their local AI. A/B escape hatch.
-    bool         censusFreezeAi;     // KENSHICOOP_CENSUS_FREEZE_AI     (on)
+    bool         censusFreezeAi;     // TOKELACOOP_CENSUS_FREEZE_AI     (on)
 
-    // Camera-anchored interest (KENSHICOOP_CAM_INTEREST, DEFAULT ON,
+    // Camera-anchored interest (TOKELACOOP_CAM_INTEREST, DEFAULT ON,
     // protocol 43): interestCenters grows from the two squad-tab-leader
     // spheres to up to FOUR anchors - + the local camera center + the peer's
     // ~1 Hz camera hint (PKT_CAM_HINT), deduped within ~100 u. NPCs where a
     // player is LOOKING (but no PC stands) stay streamed/listed. A/B hatch.
-    bool         camInterest;        // KENSHICOOP_CAM_INTEREST         (on)
+    bool         camInterest;        // TOKELACOOP_CAM_INTEREST         (on)
 
     // Task-selection observation spike: passively hook CharBody::setCurrentAction
     // (the AI/order selection->execution seam) and log the chosen task tuple per
     // body. Off by default; a diagnostic for the "stream selection, not motion"
     // design direction. Changes no behavior.
-    bool         taskSelectSpike;    // KENSHICOOP_TASK_SPIKE           (off)
+    bool         taskSelectSpike;    // TOKELACOOP_TASK_SPIKE           (off)
 
     // Jail put-to-work desync spike: emit correlated [jail] STATE traces for
     // captive bodies (owned PC in publishOwned, driven copy in applyTargets) so
     // the twitch (brief cage-exit then re-cage) can be pinned. Read-only.
-    bool         jailProbe;          // KENSHICOOP_JAIL_PROBE           (off)
+    bool         jailProbe;          // TOKELACOOP_JAIL_PROBE           (off)
 
     // Jail put-to-work observation spike (Phase A): host stops driving/
     // suspending/self-healing a peer-owned captive so its local sim runs
     // unopposed and its trajectory ([jail] OBSERVE) reveals the guard's intent
     // (relocate to a work spot vs walk a job round). Read-only diagnostic.
-    bool         jailObserve;        // KENSHICOOP_JAIL_OBSERVE         (off)
+    bool         jailObserve;        // TOKELACOOP_JAIL_OBSERVE         (off)
 
     // Starved-replica guard hold: how long (ms) a driven body whose stream
     // went stale keeps its AI-suspend + damage-guard before releasing to
     // local simulation - a WAN stall must not become an authority transfer.
     // 0 = legacy release-on-stale.
-    unsigned int starveHoldMs;      // KENSHICOOP_STARVE_HOLD_MS       (10000)
+    unsigned int starveHoldMs;      // TOKELACOOP_STARVE_HOLD_MS       (10000)
 
-    // Injected fake wall-clock skew (KENSHICOOP_FAKE_CLOCK_SKEW_MS, may be
+    // Injected fake wall-clock skew (TOKELACOOP_FAKE_CLOCK_SKEW_MS, may be
     // negative; join only in practice). Shifts coop::wallClockMs() - i.e. BOTH
     // the log-line timestamps AND the wire time-sync - so a loopback run can
     // validate that CLOCKSYNC offset estimation + oracle clock alignment recover
     // a genuine two-machine clock disagreement. 0 = real clock.
     long          fakeClockSkewMs;
 
-    // Harness only (KENSHICOOP_FAKE_PROTOCOL_HOST / _JOIN): the protocol version
+    // Harness only (TOKELACOOP_FAKE_PROTOCOL_HOST / _JOIN): the protocol version
     // this game claims in HELLO/WELCOME while hosting / joining, so the version
     // refusal can be tested with two Kenshi instances on one PC. 0 = the real
     // one. Parsed only in Harness/Debug builds: a Release DLL never fakes it.
     unsigned int  fakeProtoHost;
     unsigned int  fakeProtoJoin;
 
-    // Step-2 pruning experiment (KENSHICOOP_NO_DETACH == "1", join only): skip the
+    // Step-2 pruning experiment (TOKELACOOP_NO_DETACH == "1", join only): skip the
     // sitter detachFromTownAI in applyRest, betting that default AI-suspend alone
     // stops town-AI re-tasking. Off by default; for manual A/B runs only.
     bool          noDetach;
 
-    // Divergence-gated authority (KENSHICOOP_GATE_AUTHORITY != "0", join only,
+    // Divergence-gated authority (TOKELACOOP_GATE_AUTHORITY != "0", join only,
     // DEFAULT ON - promoted 2026-07-05 after the step-4 A/B): world NPCs whose
     // local AI sustainedly agrees with the host's raw task are TRUSTED (not
     // suspended, not driven) until they diverge or drift; divergence re-engages
     // the drive the same tick. Doctrine 18 in INTENT_REPLICATION.md.
     bool          gateAuthority;
 
-    // Damage guard, BOTH sides (KENSHICOOP_DAMAGE_GUARD != "0"; DEFAULT ON):
+    // Damage guard, BOTH sides (TOKELACOOP_DAMAGE_GUARD != "0"; DEFAULT ON):
     // detour Character::hitByMeleeAttack so locally-simulated (cosmetic) fights
     // apply no damage to DRIVEN bodies - Kenshi's medical model is local-only,
     // so cosmetic damage would diverge forever. The guard set is "every body
@@ -220,12 +220,12 @@ struct Config {
     // stayed 0). Outcomes stay owner-authoritative (KO/death/revive events).
     // "0" is the escape hatch.
     bool          damageGuard;
-    // Own-characters-only control (KENSHICOOP_OWN_GUARD, default ON): while a
+    // Own-characters-only control (TOKELACOOP_OWN_GUARD, default ON): while a
     // friend is connected, the friend's characters cannot stay selected here, so
     // they cannot be ordered or have their inventory opened from the selection.
     bool          ownGuard;
 
-    // Peer-ready scenario arming (KENSHICOOP_ARM_TIMEOUT_MS). A scenario's clock
+    // Peer-ready scenario arming (TOKELACOOP_ARM_TIMEOUT_MS). A scenario's clock
     // (onStart + elapsedMs) does not begin at gameplay start; it begins when this
     // client first RECEIVES a peer's owned-entity batch (Inbound::sawRemoteEntity
     // - on the host that is exactly "the join is loaded + streaming"), so no
@@ -235,21 +235,21 @@ struct Config {
     // gameplay start (the legacy behaviour; spike runs use this).
     unsigned long scenarioArmTimeoutMs;
 
-    // Bidirectional ownership partition (KENSHICOOP_OWN_SQUAD, CSV of unsigned ints;
-    // KENSHICOOP_OWN_RANK accepted as an alias). Both clients load the SAME save and
+    // Bidirectional ownership partition (TOKELACOOP_OWN_SQUAD, CSV of unsigned ints;
+    // TOKELACOOP_OWN_RANK accepted as an alias). Both clients load the SAME save and
     // thus the SAME player squad; each client OWNS a disjoint set of SQUAD TABS chosen
     // by save-stable tab rank (distinct hand-containers, sorted; 0 = first tab). Every
     // member of an owned tab is controlled locally + streamed; the peer's tabs are
     // driven from its stream. Default: host owns {0}, join owns {1} - one squad tab
     // each. On a single-tab save the join owns nothing (one-directional, as before).
     std::set<unsigned int> ownRanks;
-    // True only when ownRanks came from KENSHICOOP_OWN_SQUAD/OWN_RANK. When false
+    // True only when ownRanks came from TOKELACOOP_OWN_SQUAD/OWN_RANK. When false
     // the ranks are the role default and must follow a mid-session role switch
     // (F2 panel Host<->Join), so the client owns {1} and does not claim the
     // host's rank-0 player squad (which would freeze that unit locally).
     bool          ownRanksFromEnv;
 
-    // Phase 4a inventory sync (KENSHICOOP_INV_SYNC: "1" force on, "0" force off,
+    // Phase 4a inventory sync (TOKELACOOP_INV_SYNC: "1" force on, "0" force off,
     // unset = ON for real sessions [scenario == ""] and the inventory scenarios).
     // When on, both clients stream the contents of every squad member they OWN
     // (equipped slots included) plus the host's registered storage container; the
@@ -258,7 +258,7 @@ struct Config {
     // Scripted test scenarios outside the auto-on list keep it off.
     bool          invSync;
 
-    // Protocol 37 cross-owner transfer intents (KENSHICOOP_XFER_SYNC: "1" force on,
+    // Protocol 37 cross-owner transfer intents (TOKELACOOP_XFER_SYNC: "1" force on,
     // "0" force off, unset = ON whenever invSync is on). When on, BOTH clients run
     // the completed-drag detector over every tracked container (own + received) and
     // author reliable PKT_INV_XFER intents for moves that cross the single-writer
@@ -272,7 +272,7 @@ struct Config {
     // at the engine (nothing to replicate), so xferSync is forced OFF.
     bool          xferSync;
 
-    // Cross-owner trade veto (KENSHICOOP_BLOCK_XFER: "1" force on, "0" force off,
+    // Cross-owner trade veto (TOKELACOOP_BLOCK_XFER: "1" force on, "0" force off,
     // unset = OFF for real sessions - Protocol 37 replicate-the-trade is the
     // real-session default - and auto-ON ONLY for the xfer_block scenario, which
     // exists to keep the veto code exercised).
@@ -287,7 +287,7 @@ struct Config {
     // Protocol 37 replicate-the-trade behaviour).
     bool          blockXfer;
 
-    // Phase W1/W2 world-item sync (KENSHICOOP_WORLD_SYNC: "1" force on, "0" force
+    // Phase W1/W2 world-item sync (TOKELACOOP_WORLD_SYNC: "1" force on, "0" force
     // off, unset = ON for real sessions [scenario == ""] and the world_item_* /
     // drop / limb_loss scenarios). When on, the HOST streams free GROUND items in
     // the interest sphere (host-authoritative, netId-keyed proxies on the join)
@@ -296,7 +296,7 @@ struct Config {
     // dropped gear was invisible cross-client with it off.
     bool          worldSync;
 
-    // Phase-2 medical sync (KENSHICOOP_MED_SYNC != "0"; DEFAULT ON): owner-
+    // Phase-2 medical sync (TOKELACOOP_MED_SYNC != "0"; DEFAULT ON): owner-
     // authoritative vitals stream for player-squad members (blood, bleed,
     // per-limb flesh + bandaging onto the peer's driven copies, change-gated
     // reliable) + treatment forwarding (first aid administered on a driven copy
@@ -304,7 +304,7 @@ struct Config {
     // stay on the events-only model. "0" is the A/B escape hatch.
     bool          medSync;
 
-    // Consensus game-speed sync (KENSHICOOP_SPEED_SYNC != "0"; DEFAULT ON):
+    // Consensus game-speed sync (TOKELACOOP_SPEED_SYNC != "0"; DEFAULT ON):
     // each client's UI speed (pause/1x/2x/3x) is a REQUEST; the host arbitrates
     // effective = min(requests), capped at 1x while either player squad is in
     // combat, and broadcasts the result both engines apply. Divergent speeds
@@ -313,7 +313,7 @@ struct Config {
     bool          speedSync;
 
     // The combat leg of that arbitration, separately defeatable
-    // (KENSHICOOP_SPEED_COMBAT_CAP != "0"; DEFAULT ON = capped, i.e. the shipped
+    // (TOKELACOOP_SPEED_COMBAT_CAP != "0"; DEFAULT ON = capped, i.e. the shipped
     // behaviour). Pinning the sim to 1x during a fight is right for players -
     // nobody wants a battle resolved at 5x - but it is wrong for a scenario whose
     // subject is DISTANCE. run_apart crosses ~121 k u of bandit country, and every
@@ -323,13 +323,13 @@ struct Config {
     // lets a fight resolve at a watchable rate.
     bool          speedCombatCap;
 
-    // KENSHICOOP_TRACK_MOVE=1 (DEFAULT OFF): log-only 1 Hz position track, one
+    // TOKELACOOP_TRACK_MOVE=1 (DEFAULT OFF): log-only 1 Hz position track, one
     // line per player squad tab. Gates nothing. Used to RECORD a walked route at
     // usable resolution - cell claims fire once per 4608 u cell, which proved far
     // too sparse to reconstruct a path (see Plugin::trackMove).
     bool          trackMove;
 
-    // Character stats sync (KENSHICOOP_STATS_SYNC != "0"; DEFAULT ON;
+    // Character stats sync (TOKELACOOP_STATS_SYNC != "0"; DEFAULT ON;
     // protocol 17): owner-authoritative CharStats stream for player-squad
     // members (attributes/skills/xp onto the peer's driven copies, change-
     // gated reliable). Without it, driven copies keep save-load stats all
@@ -337,20 +337,20 @@ struct Config {
     // numbers. "0" is the A/B escape hatch.
     bool          statsSync;
 
-    // Carried-body sync (KENSHICOOP_CARRY_SYNC != "0"; DEFAULT ON;
+    // Carried-body sync (TOKELACOOP_CARRY_SYNC != "0"; DEFAULT ON;
     // protocol 18): reliable pickup/drop edges + self-healing carried state
     // for player-squad members, executed engine-native on each machine's
     // local pair. Without it the peer sees the KO'd body dragged/teleported
     // along the ground behind its carrier. "0" is the A/B escape hatch.
     bool          carrySync;
 
-    // KENSHICOOP_FURN_SYNC (default ON): furniture-occupancy sync (protocol 19)
+    // TOKELACOOP_FURN_SYNC (default ON): furniture-occupancy sync (protocol 19)
     // - reliable bed/cage enter/exit edges + self-healing occupancy state,
     // executed engine-native (setBedMode/setPrisonMode) between each machine's
     // local pair. "0" is the A/B escape hatch.
     bool          furnSync;
 
-    // KENSHICOOP_CHAIN_SYNC (default ON): chained/pole prisoner sync
+    // TOKELACOOP_CHAIN_SYNC (default ON): chained/pole prisoner sync
     // (protocol 41) - a captive shackled to a prisoner POLE is chained
     // (Character::isChained + setChainedMode), a different engine system from a
     // cage (inSomething==IN_PRISON). Rides the furniture pipeline as kind=3.
@@ -359,14 +359,14 @@ struct Config {
     // working) if it ever freezes a walking slave.
     bool          chainSync;
 
-    // KENSHICOOP_STEALTH_SYNC (default ON): stealth sync (protocol 20) -
+    // TOKELACOOP_STEALTH_SYNC (default ON): stealth sync (protocol 20) -
     // continuous BODY_SNEAK posture apply on driven copies (engine-native
     // setStealthMode) + the host-authored detection-indicator feedback stream
     // (PKT_STEALTH -> the sneaker's owner replays notifyICanSeeYouSneaking).
     // "0" is the A/B escape hatch.
     bool          stealthSync;
 
-    // KENSHICOOP_PRONE_SYNC (default ON): prone-posture sync (protocol 53) -
+    // TOKELACOOP_PRONE_SYNC (default ON): prone-posture sync (protocol 53) -
     // the owner's exact ProneState rides bodyState bits 9-11 and driven copies
     // are posed with Character::setProneState, so a crippled crawler is not
     // driven as an upright walker. The MedicalSystem::crippled half (the cause
@@ -374,7 +374,7 @@ struct Config {
     // escape hatch.
     bool          proneSync;
 
-    // KENSHICOOP_MONEY_SYNC (default ON): the shared money pool (protocol 52).
+    // TOKELACOOP_MONEY_SYNC (default ON): the shared money pool (protocol 52).
     // Kenshi keeps ONE player wallet per save, so both players spend from one
     // purse with the HOST as authority: the join reports each local change as a
     // signed delta, the host folds it in and publishes the total. Without it
@@ -383,7 +383,7 @@ struct Config {
     // that persists). "0" is the A/B escape hatch.
     bool          moneySync;
 
-    // KENSHICOOP_SPAWN_SYNC (default ON): runtime-spawn proxy replication
+    // TOKELACOOP_SPAWN_SYNC (default ON): runtime-spawn proxy replication
     // (protocol 21) - the join requests a description (PKT_SPAWN_REQ) for any
     // streamed hand it cannot resolve (a host RUNTIME spawn: roaming squad,
     // dialog ambush) and mints a local proxy body from the host's reply
@@ -392,7 +392,7 @@ struct Config {
     // modes). "0" is the A/B escape hatch.
     bool          spawnSync;
 
-    // KENSHICOOP_RECRUIT_SYNC (default ON): recruitment sync (protocol 23) -
+    // TOKELACOOP_RECRUIT_SYNC (default ON): recruitment sync (protocol 23) -
     // a detour on PlayerInterface::recruit authors a reliable EVT_RECRUIT
     // (old hand -> new hand) for every successful local recruit; the peer
     // RE-KEYS its existing local copy of the recruited body to the new
@@ -403,7 +403,7 @@ struct Config {
     // "0" is the A/B escape hatch.
     bool          recruitSync;
 
-    // KENSHICOOP_FACTION_SYNC (default ON): faction-relation sync (protocol
+    // TOKELACOOP_FACTION_SYNC (default ON): faction-relation sync (protocol
     // 24) - the host streams the player-faction relation table (keyed by
     // faction GameData stringID, change-gated reliable) and the join applies
     // it via FactionRelations::setRelation; join-side relation mutations
@@ -413,7 +413,7 @@ struct Config {
     // relations). "0" is the A/B escape hatch.
     bool          factionSync;
 
-    // KENSHICOOP_TIME_SYNC (default ON): game-clock sync (protocol 25) - the
+    // TOKELACOOP_TIME_SYNC (default ON): game-clock sync (protocol 25) - the
     // host broadcasts its absolute in-game clock (PKT_TIME, ~1 Hz reliable);
     // the join measures the offset and corrects it (step if a writable clock
     // base exists, otherwise slew by scaling its local sim speed QUIETLY on
@@ -424,7 +424,7 @@ struct Config {
     // "0" is the A/B escape hatch.
     bool          timeSync;
 
-    // KENSHICOOP_TIME_BRAKE (default ON): the HOST half of that correction.
+    // TOKELACOOP_TIME_BRAKE (default ON): the HOST half of that correction.
     // Catching up only works while there is room above the consensus speed,
     // and the slew clamps at 5x - so at a travelling session's 5x the join
     // saturates and the offset simply stands (run 20260806_153111: slew pinned
@@ -434,7 +434,7 @@ struct Config {
     // headroom. "0" restores join-catches-up-or-nothing.
     bool          timeBrake;
 
-    // KENSHICOOP_DOOR_SYNC (default ON): door/gate state sync (protocol 26) -
+    // TOKELACOOP_DOOR_SYNC (default ON): door/gate state sync (protocol 26) -
     // a symmetric change-gated channel: both clients sample nearby baked
     // doors ~1 Hz and stream rows whose (open, locked) moved vs a per-hand
     // baseline; received rows apply through the engine's own door actions.
@@ -443,7 +443,7 @@ struct Config {
     // the A/B escape hatch.
     bool          doorSync;
 
-    // KENSHICOOP_BUILD_SYNC (default ON): placed-building sync (protocol 27)
+    // TOKELACOOP_BUILD_SYNC (default ON): placed-building sync (protocol 27)
     // - a placer-authoritative describe/mint channel: a local placement
     // (UI commit detour or programmatic) streams its template sid +
     // transform keyed by the PLACER's hand; the peer mints a local proxy
@@ -453,7 +453,7 @@ struct Config {
     // unsynced baseline). "0" is the A/B escape hatch.
     bool          buildSync;
 
-    // KENSHICOOP_BDOOR_SYNC (default ON): placed-building door + dismantle
+    // TOKELACOOP_BDOOR_SYNC (default ON): placed-building door + dismantle
     // sync (protocol 28) - door rows on session-placed buildings translated
     // through the protocol-27 build maps (keyed by the placer's building
     // hand + door index), and placer-authoritative building removal
@@ -463,7 +463,7 @@ struct Config {
     // escape hatch.
     bool          bdoorSync;
 
-    // KENSHICOOP_HUNGER_SYNC (default ON): hunger sync (protocol 29) - the
+    // TOKELACOOP_HUNGER_SYNC (default ON): hunger sync (protocol 29) - the
     // owner-authoritative hunger/fed scalars ride the PKT_MEDICAL snapshot
     // (a sub-gate of medSync: OFF sends/applies the fields as -1 = not
     // carried while the rest of the medical stream is untouched). Without it
@@ -473,7 +473,7 @@ struct Config {
     // "0" is the A/B escape hatch.
     bool          hungerSync;
 
-    // KENSHICOOP_SAVE_SYNC (default ON): coordinated save + session resume
+    // TOKELACOOP_SAVE_SYNC (default ON): coordinated save + session resume
     // (protocol 31) - every local save on the HOST (menu, quicksave,
     // autosave, programmatic) triggers the host-authoritative flow: wait for
     // the save folder to quiesce, then stream the whole folder to the join
@@ -486,7 +486,7 @@ struct Config {
     // hatch.
     bool          saveSync;
 
-    // KENSHICOOP_LOAD_SYNC (default ON): coordinated load (protocol 32) -
+    // TOKELACOOP_LOAD_SYNC (default ON): coordinated load (protocol 32) -
     // a mid-session load on the HOST (menu or programmatic - the
     // SaveManager::load detour catches them all) broadcasts PKT_LOAD_GO
     // (name + folder fingerprint); the join fingerprint-verifies its local
@@ -499,7 +499,7 @@ struct Config {
     // alone). "0" is the A/B escape hatch.
     bool          loadSync;
 
-    // KENSHICOOP_PROD_SYNC (default ON): production machine sync (protocol
+    // TOKELACOOP_PROD_SYNC (default ON): production machine sync (protocol
     // 33) - the HOST samples machine-class buildings (production / crafting /
     // furnace / farm / research) in the interest spheres ~1 Hz and streams
     // power state, production state, output/input buffer amounts and farm
@@ -512,7 +512,7 @@ struct Config {
     // escape hatch.
     bool          prodSync;
 
-    // KENSHICOOP_RESEARCH_SYNC (default ON): research tech-tree sync
+    // TOKELACOOP_RESEARCH_SYNC (default ON): research tech-tree sync
     // (protocol 38) - the HOST samples its Research store's known set ~1 Hz
     // (Research::isKnown over the shared RESEARCH GameData enumeration) and
     // streams one reliable PKT_RESEARCH row per known stringID (first sight
@@ -524,7 +524,7 @@ struct Config {
     // escape hatch.
     bool          researchSync;
 
-    // KENSHICOOP_DEED_SYNC (default ON): property-deed sync (protocol 54) -
+    // TOKELACOOP_DEED_SYNC (default ON): property-deed sync (protocol 54) -
     // BOTH clients sample the player faction's owned-building set ~1 Hz and
     // stream one reliable PKT_DEED row per owned hand (first sight is the
     // session baseline, then a safety resend that doubles as the retry for a
@@ -536,7 +536,7 @@ struct Config {
     // hatch.
     bool          deedSync;
 
-    // KENSHICOOP_FIXTURE_SYNC (default ON): runtime-fixture identity (protocol
+    // TOKELACOOP_FIXTURE_SYNC (default ON): runtime-fixture identity (protocol
     // 55) - BOTH clients announce the container/machine-class fixtures near
     // their interest centers (hand + position + template) and pair each
     // announcement with their own copy. It carries no gameplay state; it exists
@@ -547,7 +547,7 @@ struct Config {
     // hatch back to raw hands.
     bool          fixtureSync;
 
-    // KENSHICOOP_STORE_SYNC (default ON): storage/machine container sync
+    // TOKELACOOP_STORE_SYNC (default ON): storage/machine container sync
     // (protocol 34) - the HOST censuses container-bearing buildings (storage
     // chests + the machine classes) in the interest spheres ~1 Hz and
     // registers each with the container-inventory channel, replacing the
@@ -561,7 +561,7 @@ struct Config {
     // the A/B escape hatch.
     bool          storeSync;
 
-    // KENSHICOOP_SQUAD_SYNC (default ON): squad management sync (protocol 35)
+    // TOKELACOOP_SQUAD_SYNC (default ON): squad management sync (protocol 35)
     // - a squad-tab MOVE re-containers the body (its hand changes) exactly
     // like a recruit, but no engine function owns the UI path, so the roster
     // is POLLED ~1 Hz (pointer -> hand diff; the Character* survives the
@@ -573,7 +573,7 @@ struct Config {
     // the A/B escape hatch.
     bool          squadSync;
 
-    // KENSHICOOP_LATEJOIN_SYNC (default ON): late-join/reconnect resync
+    // TOKELACOOP_LATEJOIN_SYNC (default ON): late-join/reconnect resync
     // (protocol 30, no wire change) - on the peer-connect edge the
     // Replicator re-announces every live placed-building PLACE (+ REMOVE
     // for removed ones) and forces an immediate full resend across all
@@ -584,7 +584,7 @@ struct Config {
     // "0" is the A/B escape hatch.
     bool          latejoinSync;
 
-    // Transport selection (KENSHICOOP_TRANSPORT): "udp" (default) or "steam".
+    // Transport selection (TOKELACOOP_TRANSPORT): "udp" (default) or "steam".
     // "steam" tunnels the unchanged ENet protocol over Steam P2P (legacy
     // ISteamNetworking in the game's own steam_api64.dll): connections are
     // made BY STEAMID with automatic NAT punching and Valve-relay fallback -
@@ -592,12 +592,12 @@ struct Config {
     // steamPeer below; falls back to UDP (loudly) when Steam is unavailable.
     std::string   transport;
 
-    // The co-op partner's steamid64 (KENSHICOOP_STEAM_PEER). Two-code
+    // The co-op partner's steamid64 (TOKELACOOP_STEAM_PEER). Two-code
     // exchange: EACH side is configured with the OTHER's SteamID (sending to
     // a SteamID implicitly accepts its session - no Steam callback plumbing).
     unsigned long long steamPeer;
 
-    // Steam reachability spike (KENSHICOOP_STEAM_PING=<steamid64>): ping/echo
+    // Steam reachability spike (TOKELACOOP_STEAM_PING=<steamid64>): ping/echo
     // that peer on P2P channel 1 every 2 s and log RTT + punch-vs-relay,
     // independent of the transport in use. 0 = off.
     unsigned long long steamPing;
@@ -606,14 +606,14 @@ struct Config {
     // by the F2 panel instead of the env launchers, networking is DEFERRED at
     // load: the session (host listen / client connect) only starts when the
     // player hits Connect in the panel, using the role/transport/peer chosen
-    // there. autoConnect (KENSHICOOP_AUTOCONNECT=1) restores the legacy behaviour
+    // there. autoConnect (TOKELACOOP_AUTOCONNECT=1) restores the legacy behaviour
     // - start the session immediately from the env/config role+transport+peer.
-    // A test scenario or KENSHICOOP_TEST_SECONDS ALWAYS auto-starts regardless
+    // A test scenario or TOKELACOOP_TEST_SECONDS ALWAYS auto-starts regardless
     // (the unattended harness never touches the panel); see Plugin.cpp.
     bool               autoConnect;
 };
 
-// Read every KENSHICOOP_* var into 'out', applying host/join defaults. Values in
+// Read every TOKELACOOP_* var into 'out', applying host/join defaults. Values in
 // coop_config.json (next to the DLL) are used as the defaults, so precedence is
 // env var > config file > hard-coded default.
 void loadConfig(Config& out);
@@ -631,4 +631,4 @@ std::string describeConfig(const Config& c);
 
 } // namespace coop
 
-#endif // KENSHICOOP_CONFIG_H
+#endif // TOKELACOOP_CONFIG_H

@@ -17,8 +17,8 @@
 // statics with no locking. Pure throttle logic (faultShouldLog) lives inline so
 // the unit layer (prototest) can lock it without linking the game logger.
 
-#ifndef KENSHICOOP_ENGINE_FAULTS_H
-#define KENSHICOOP_ENGINE_FAULTS_H
+#ifndef TOKELACOOP_ENGINE_FAULTS_H
+#define TOKELACOOP_ENGINE_FAULTS_H
 
 namespace coop {
 namespace engine {
@@ -62,4 +62,4 @@ unsigned int faultCount(FaultOp op);
 } // namespace engine
 } // namespace coop
 
-#endif // KENSHICOOP_ENGINE_FAULTS_H
+#endif // TOKELACOOP_ENGINE_FAULTS_H

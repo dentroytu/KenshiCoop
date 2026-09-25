@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  The friend-side runner for a KenshiCoop remote test session. Ships INSIDE the
+  The friend-side runner for a TokelaCoop remote test session. Ships INSIDE the
   remote kit (scripts\make_remote_kit.ps1); runs from the unzipped kit folder.
 
 .DESCRIPTION
@@ -16,7 +16,7 @@
   the JOIN client pointed at the host, lets the agreed scenario run to its own
   self-exit (remote profile: generous timeouts), captures screenshots at the
   scenario anchor, and bundles log + screenshots + a small system report into
-  KenshiCoop-results-<stamp>.zip for sending back.
+  TokelaCoop-results-<stamp>.zip for sending back.
 
   RESUMING a previous session (-Resume): after the first session, every save
   the HOST makes is streamed to you in-band (coordinated save, protocol 31)
@@ -114,10 +114,11 @@ Write-Host "Kenshi install: $KenshiDir"
 Test-CoopPrereqs -KenshiDir $KenshiDir -UseSteam $useSteam
 
 # ---- Install mod + save ------------------------------------------------------------
-$modDst = Join-Path $KenshiDir "mods\KenshiCoop"
+$modDst = Join-Path $KenshiDir "mods\TokelaCoop"
 New-Item -ItemType Directory -Force -Path $modDst | Out-Null
 Copy-Item -Force (Join-Path $kitDir "mod\*") $modDst
 Write-Host "Mod installed -> $modDst"
+Switch-ToTokelaCoop -KenshiDir $KenshiDir
 
 $saveRoot = Join-Path $env:LOCALAPPDATA "kenshi\save"
 New-Item -ItemType Directory -Force -Path $saveRoot | Out-Null
@@ -155,27 +156,27 @@ New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 $joinLog = Join-Path $outDir "join.log"
 
 # ---- Env + launch --------------------------------------------------------------------
-$env:KENSHICOOP_MODE         = "join"
-$env:KENSHICOOP_IP           = $HostIp
-$env:KENSHICOOP_PORT         = "$Port"
-$env:KENSHICOOP_SAVE         = $save
-$env:KENSHICOOP_LOG          = $joinLog
-$env:KENSHICOOP_SCENARIO     = $Scenario
-$env:KENSHICOOP_SETUP        = ""
-$env:KENSHICOOP_TEST_SECONDS = if ($Scenario -ne "") { "600" }   # hard backstop
+$env:TOKELACOOP_MODE         = "join"
+$env:TOKELACOOP_IP           = $HostIp
+$env:TOKELACOOP_PORT         = "$Port"
+$env:TOKELACOOP_SAVE         = $save
+$env:TOKELACOOP_LOG          = $joinLog
+$env:TOKELACOOP_SCENARIO     = $Scenario
+$env:TOKELACOOP_SETUP        = ""
+$env:TOKELACOOP_TEST_SECONDS = if ($Scenario -ne "") { "600" }   # hard backstop
                                elseif ($FreePlayMinutes -gt 0) { "$($FreePlayMinutes * 60)" }
                                else { "0" }
-$env:KENSHICOOP_FAKE_CLOCK_SKEW_MS = "0"
+$env:TOKELACOOP_FAKE_CLOCK_SKEW_MS = "0"
 # Peer-ready arming: the scenario clock starts when the host's stream arrives;
 # generous fallback for a slow internet connect.
-$env:KENSHICOOP_ARM_TIMEOUT_MS = "240000"
+$env:TOKELACOOP_ARM_TIMEOUT_MS = "240000"
 if ($useSteam) {
     $hostId64 = ConvertTo-SteamId64 $HostSteamId
-    $env:KENSHICOOP_TRANSPORT  = "steam"
-    $env:KENSHICOOP_STEAM_PEER = "$hostId64"
+    $env:TOKELACOOP_TRANSPORT  = "steam"
+    $env:TOKELACOOP_STEAM_PEER = "$hostId64"
 } else {
-    $env:KENSHICOOP_TRANSPORT  = "udp"
-    $env:KENSHICOOP_STEAM_PEER = "0"
+    $env:TOKELACOOP_TRANSPORT  = "udp"
+    $env:TOKELACOOP_STEAM_PEER = "0"
 }
 
 $target = if ($useSteam) { "steam:$(ConvertTo-SteamId64 $HostSteamId)" } else { "${HostIp}:$Port" }
@@ -258,7 +259,7 @@ utc offset:    $((Get-TimeZone).BaseUtcOffset)
 run stamp:     $stamp
 "@ | Set-Content (Join-Path $outDir "session_info.txt") -Encoding UTF8
 
-$zip = Join-Path $kitDir "KenshiCoop-results-$stamp.zip"
+$zip = Join-Path $kitDir "TokelaCoop-results-$stamp.zip"
 Compress-Archive -Path "$outDir\*" -DestinationPath $zip -Force
 Write-Host ""
 Write-Host "==================================================================="

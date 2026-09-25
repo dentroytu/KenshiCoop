@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Install the local VC++2010 (v100) x64 toolchain needed to build KenshiCoop.dll:
+  Install the local VC++2010 (v100) x64 toolchain needed to build TokelaCoop.dll:
   Windows SDK 7.1 + VC2010 SP1 compiler update (KB2519277) + the VS7 registry key
   MSBuild needs to find the v100 platform toolset.
 

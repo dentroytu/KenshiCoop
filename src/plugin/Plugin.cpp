@@ -28,6 +28,7 @@
 #include <deque>
 
 #include "CoopLog.h"
+#include "../netproto/Version.h"   // TOKELACOOP_TITLE / TOKELACOOP_VERSION
 #include "core/Config.h"
 #include "core/CrashDump.h"
 #include "core/OwnRanks.h"
@@ -43,7 +44,7 @@
 #include "game/EngineScenario.h" // Phase 5a: auto-bake scene builders
 #include "sync/Replicator.h"
 #include "sync/SaveXfer.h"
-#ifdef KENSHICOOP_HARNESS
+#ifdef TOKELACOOP_HARNESS
 #include "test/Scenario.h" // scenario runner: Harness/Debug builds only (Phase 1)
 #endif
 
@@ -185,8 +186,8 @@ coop::u32&   g_loadCommitBase  = g_session.loadCommitBase;
 DWORD&       g_loadPumpArmTick  = g_session.loadPumpArmTick;
 
 // Scenario harness state. Harness/Debug builds only - the shipped Release DLL
-// excludes test/Scenario*.cpp and does not define KENSHICOOP_HARNESS (Phase 1).
-#ifdef KENSHICOOP_HARNESS
+// excludes test/Scenario*.cpp and does not define TOKELACOOP_HARNESS (Phase 1).
+#ifdef TOKELACOOP_HARNESS
 coop::Scenario* g_scenario        = 0;
 bool            g_scenarioStarted = false;
 DWORD           g_scenarioStartTick = 0;
@@ -195,7 +196,7 @@ DWORD           g_scenarioDoneTick = 0; // !=0 once RESULT logged; begins captur
 const DWORD     SCENARIO_HOLD_MS  = 4000; // hold synced state on screen for capture
 #endif
 
-// "Multiplayer+ (Wanderer x2)" start (dist/mods/KenshiCoop/KenshiCoop.mod). The FCS record
+// "TokelaCoop+ (Wanderer x2)" start (dist/mods/TokelaCoop/TokelaCoop.mod). The FCS record
 // sets the 500k shared wallet, but a Kenshi Character record only carries the
 // GROUPED stat fields ("combat stats", "ranged stats", "stealth stats", "strength",
 // "unarmed stats") and randomises them - there is no way to say "50 in everything"
@@ -207,6 +208,7 @@ const float       WPX2_STAT_LEVEL = 50.0f;
 
 // Test-scene setup (host-only): one-shot world spawn the user then saves.
 bool            g_setupDone     = false;
+bool            g_otherCopy     = false; // another co-op plugin is loaded: co-op stays off (otherCopyLoaded)
 const DWORD     SETUP_DELAY_MS  = 4000; // let the world settle before spawning
 DWORD           g_lastCraftRearmTick = 0; // throttle host craft re-arm
 DWORD           g_bakeSaveTick  = 0;     // != 0: auto-bake save armed at this tick
@@ -320,7 +322,7 @@ void armConnectPush() {
 // ---- Active-mod list check (protocol 56) -------------------------------------
 // Each side sends its active mods (load order) on the connect edge; the other
 // diffs them against its own. Advisory: a mismatch never disconnects, it warns
-// on the F2 panel, in the status banner and in KenshiCoop_mods_diff.txt, and
+// on the F2 panel, in the status banner and in TokelaCoop_mods_diff.txt, and
 // the panel can copy the friend's list in mods.cfg form.
 
 bool readOwnModList(coop::ModListPacket& p) {
@@ -356,9 +358,9 @@ void sendModList() {
 void writeModDiffFile(const std::vector<coop::ModEntry>& mine,
                       const std::vector<coop::ModEntry>& theirs,
                       const coop::ModDiff& d) {
-    FILE* f = fopen("KenshiCoop_mods_diff.txt", "w");
+    FILE* f = fopen("TokelaCoop_mods_diff.txt", "w");
     if (!f) return;
-    fprintf(f, "KenshiCoop - your mods vs your friend's (%s)\n\n",
+    fprintf(f, "TokelaCoop - your mods vs your friend's (%s)\n\n",
             g_cfg.isHost ? "you host" : "you join");
     for (size_t i = 0; i < d.missing.size(); ++i)
         fprintf(f, "MISSING (friend has it, you don't): %s\n", d.missing[i].c_str());
@@ -432,7 +434,7 @@ void checkModLists() {
         g_modsLine = g_modsWarn
             ? std::string(coop::L("Mods DISTINTOS: ", "Mods DIFFERENT: ")) +
                   coop::summarizeModDiff(d, coop::uiSpanish()) +
-                  coop::L(" (detalle en KenshiCoop_mods_diff.txt)", " (see KenshiCoop_mods_diff.txt)")
+                  coop::L(" (detalle en TokelaCoop_mods_diff.txt)", " (see TokelaCoop_mods_diff.txt)")
             : std::string(coop::L("Mods: los mismos que tu amigo", "Mods: same as your friend"));
         _snprintf(b, sizeof(b) - 1, "[mods] %s mine=%08x theirs=%08x: %s",
                   g_modsWarn ? "MISMATCH" : "MATCH", mine.hash, theirs.hash, sum.c_str());
@@ -835,14 +837,14 @@ void driveLoadSync(GameWorld* gw) {
         if (!g_cfg.saveSync && coop::savexfer::sending())
             coop::savexfer::tickSend(g_net, g_net.localId());
     } else {
-        // Test-only (KENSHICOOP_FORCE_STREAM=1, join): force the missing/diverged
+        // Test-only (TOKELACOOP_FORCE_STREAM=1, join): force the missing/diverged
         // NACK branch even when our on-disk fingerprint MATCHES the host's, so a
         // single-machine run (where both installs share %LOCALAPPDATA%\kenshi\save
         // and would otherwise MATCH + load from disk) still exercises the REAL
         // folder-transfer + post-transfer load path. Default OFF; read once.
         static int s_forceStream = -1;
         if (s_forceStream < 0) {
-            const char* e = getenv("KENSHICOOP_FORCE_STREAM");
+            const char* e = getenv("TOKELACOOP_FORCE_STREAM");
             s_forceStream = (e && e[0] == '1') ? 1 : 0;
             if (s_forceStream)
                 coopLog("[load] FORCE-STREAM armed (test): join NACKs matching "
@@ -940,7 +942,38 @@ void driveLoadSync(GameWorld* gw) {
 // the title-screen titleUpdate_hook so a join can go ONLINE (and copy/paste
 // Steam IDs) straight from the main menu, and so the banner reports status there
 // too.
+// "Co-op: conectado con tu amigo" -> "TokelaCoop v0.54: conectado con tu amigo".
+// Every banner text is written with the generic "Co-op: " lead; the product name
+// and version replace it here, in one place.
+static std::string brandBanner(const std::string& text) {
+    static const char kLead[] = "Co-op: ";
+    const size_t n = sizeof(kLead) - 1;
+    const std::string body = (text.compare(0, n, kLead) == 0) ? text.substr(n) : text;
+    if (body.empty()) return TOKELACOOP_TITLE;
+    return std::string(TOKELACOOP_TITLE ": ") + body;
+}
+
 void coopPanelDrive(bool atTitle) {
+    // The old KenshiCoop loaded AFTER us (RE_Kenshi loads plugins in mod order),
+    // so startPlugin could not see it: both are hooked in now. Keep our co-op off
+    // for the whole run and say so on the banner; the old copy's own panel is its
+    // business. Checked on the first frame only.
+    static bool s_lateCheck = false;
+    if (!s_lateCheck) {
+        s_lateCheck = true;
+        if (!g_otherCopy && GetModuleHandleA("KenshiCoop.dll")) {
+            g_otherCopy = true;
+            if (g_net.isRunning()) g_net.stop();
+            coopErr(TOKELACOOP_TITLE ": KenshiCoop (the old version) loaded after us; co-op stays OFF");
+        }
+    }
+    if (g_otherCopy) {
+        coop::engine::coopOverlayTick(
+            coop::L(TOKELACOOP_TITLE ": desmarca KenshiCoop (versi\xC3\xB3n antigua) en el launcher",
+                    TOKELACOOP_TITLE ": untick KenshiCoop (the old version) in the launcher"),
+            0, true);
+        return;
+    }
     if (!(g_cfg.scenario.empty() && g_cfg.testSeconds == 0)) return;
     coop::engine::CoopPanelState ps;
     ps.selfSteamId  = (unsigned long long)coop::steamp2p::selfId();
@@ -1096,7 +1129,12 @@ void coopPanelDrive(bool atTitle) {
                                 &coop::steaminvite::beginInvite,
                                 &coop::steaminvite::inviteFriend);
     if (g_peerPresent && g_modsWarn) detail += coop::L(" - mods distintos (F2)", " - mods differ (F2)");
-    coop::engine::coopOverlayTick(detail.c_str(), ostate, g_net.isRunning());
+    // The banner always leads with the product name and version, and stays up
+    // (just the name) while co-op is off, so a player can always see which
+    // build is loaded: "TokelaCoop v0.54: conectado con tu amigo".
+    const bool running = g_net.isRunning();
+    const std::string banner = running ? brandBanner(detail) : std::string(TOKELACOOP_TITLE "  (F2)");
+    coop::engine::coopOverlayTick(banner.c_str(), running ? ostate : 0, true);
 }
 
 // Main-thread tick hook: the one safe point where we touch game state.
@@ -1195,9 +1233,9 @@ void tickSetupScene(GameWorld* gw) {
             // yielded sep=9839 with popMover=0 on both sides.
             // This target held 17 NPCs on BOTH clients for a full window
             // (run 20260802_105738, hop 2), so the crowd is in the save.
-            // Override with KENSHICOOP_SPLITFAR_AT="x,y,z".
+            // Override with TOKELACOOP_SPLITFAR_AT="x,y,z".
             float sx = -50446.0f, sy = 841.0f, sz = -2652.0f;
-            const char* at = getenv("KENSHICOOP_SPLITFAR_AT");
+            const char* at = getenv("TOKELACOOP_SPLITFAR_AT");
             if (at && *at) sscanf(at, "%f,%f,%f", &sx, &sy, &sz);
             unsigned int nm = coop::engine::setupSplitFarScene(gw, sx, sy, sz);
             char sb[176];
@@ -1212,7 +1250,7 @@ void tickSetupScene(GameWorld* gw) {
         } else if (g_cfg.setupScene == "bedcage") {
             // Bed+cage occupancy (protocol 19) BAKE: spawn a bed and a prison
             // cage near the leader so both clients load save-stable furniture
-            // hands. With KENSHICOOP_BAKESAVE set the save is written
+            // hands. With TOKELACOOP_BAKESAVE set the save is written
             // automatically a few seconds later (no manual menu round-trip).
             bool ok = coop::engine::setupBedCageScene(gw);
             coopLog(ok ? "SETUP(bedcage): bed + cage spawned - SAVE 'bedcage1' now"
@@ -1224,7 +1262,7 @@ void tickSetupScene(GameWorld* gw) {
             // standing prisoner POLE in front of the leader so both clients load
             // a save-stable pole hand. The pole_put controlled test then KOs a PC
             // and setPrisonMode's it onto the pole (visibly a body ON A POLE, not
-            // in a cage). With KENSHICOOP_BAKESAVE the save writes automatically.
+            // in a cage). With TOKELACOOP_BAKESAVE the save writes automatically.
             bool ok = coop::engine::setupPoleScene(gw);
             coopLog(ok ? "SETUP(pole): prisoner pole spawned - SAVE 'pole1' now"
                        : "SETUP(pole): spawn FAILED (no pole template? see candidates)");
@@ -1233,7 +1271,7 @@ void tickSetupScene(GameWorld* gw) {
         } else if (g_cfg.setupScene == "buffpc") {
             // Stat buff BAKE (single client): raise EVERY player-squad PC to 120 in
             // all stats, then leave the game running so the user can SAVE manually
-            // (or auto-bake if KENSHICOOP_BAKESAVE is set). No coop peer required.
+            // (or auto-bake if TOKELACOOP_BAKESAVE is set). No coop peer required.
             unsigned int nb = coop::engine::buffAllPlayerStats(gw, 120.0f);
             char b[128];
             _snprintf(b, sizeof(b) - 1,
@@ -1274,7 +1312,7 @@ void tickSetupScene(GameWorld* gw) {
 }
 
 // Deferred auto-bake: write the fixture save once the armed settle window
-// elapses. One-shot; the self-exit timer (KENSHICOOP_TEST_SECONDS) then ends
+// elapses. One-shot; the self-exit timer (TOKELACOOP_TEST_SECONDS) then ends
 // the bake run.
 void tickAutoBake() {
     if (g_bakeSaveTick != 0 && GetTickCount() >= g_bakeSaveTick) {
@@ -1337,7 +1375,7 @@ void tickHostRearm(GameWorld* gw) {
 // Scenario completion hold (harness): once a verdict is logged, keep driving the
 // synced bodies on screen for the capture window, then self-exit cleanly.
 void tickScenarioHold() {
-#ifdef KENSHICOOP_HARNESS
+#ifdef TOKELACOOP_HARNESS
     if (g_scenario && g_scenarioDoneTick != 0) {
         if (GetTickCount() - g_scenarioDoneTick >= SCENARIO_HOLD_MS) {
             coop::logClose();
@@ -1414,7 +1452,7 @@ void tickReplicatePublish(GameWorld* gw, bool worldLive) {
         // so there is nothing to detect/replicate - Config forces xferSync off when
         // blockXfer is on, making this (and applyTransfers below) a no-op. The
         // xferLatch_/xferDefer_ reconcile-race machinery then stays dormant (never
-        // populated). KENSHICOOP_BLOCK_XFER=0 restores this replicate-the-trade path.
+        // populated). TOKELACOOP_BLOCK_XFER=0 restores this replicate-the-trade path.
         if (g_cfg.xferSync)
             g_repl.detectAndPublishTransfers(gw, g_net, g_net.localId());
         // Phase W1 (bidirectional): BOTH clients stream the free ground items they
@@ -1540,7 +1578,7 @@ void tickReplicatePublish(GameWorld* gw, bool worldLive) {
         if (g_cfg.speedSync)
             g_repl.syncSpeed(gw, g_inbound, g_net, g_net.localId(), g_cfg.isHost);
         // Phase 6 (6a evidence spike): env-gated ([shackledbg]) per-character
-        // shackle/lock trace. No-op unless KENSHICOOP_DEBUG_SHACKLE=1, so it is
+        // shackle/lock trace. No-op unless TOKELACOOP_DEBUG_SHACKLE=1, so it is
         // free to leave in the tick for manual-session characterization.
         coop::engine::shackleDbgTick(gw, g_cfg.isHost);
         // Game-clock sync (protocol 25): the host broadcasts its absolute
@@ -1593,7 +1631,7 @@ void tickCoordinatedSaveLoad(GameWorld* gw) {
 // after scenarioArmTimeoutMs of gameplay (peer never connected / host-only
 // diagnostics); 0 = arm immediately (spike runs).
 void tickScenarioStart(GameWorld* gw) {
-#ifdef KENSHICOOP_HARNESS
+#ifdef TOKELACOOP_HARNESS
     if (g_scenario && g_gameStarted && gw && !g_scenarioStarted) {
         bool  peerReady = g_inbound.sawRemoteEntity();
         DWORD waitedMs  = GetTickCount() - g_gameStartTick;
@@ -1629,7 +1667,7 @@ void tickScenarioStart(GameWorld* gw) {
             g_scenario->onStart(ctx);
         }
     }
-#endif // KENSHICOOP_HARNESS
+#endif // TOKELACOOP_HARNESS
 }
 
 // Replication apply (post-engine) so our transform is the last word the renderer
@@ -1638,7 +1676,7 @@ void tickScenarioStart(GameWorld* gw) {
 // live: the engine tick may have STARTED a swap (gameplay just went non-live), in
 // which case the caches are now stale - skip apply this tick too (the reset runs
 // next tick's top on the reload edge).
-void trackMove(GameWorld* gw);   // KENSHICOOP_TRACK_MOVE route recorder (below)
+void trackMove(GameWorld* gw);   // TOKELACOOP_TRACK_MOVE route recorder (below)
 
 void tickReplicateApply(GameWorld* gw, bool worldLive) {
     if (worldLive && coop::engine::gameplayLive(gw)) {
@@ -1707,7 +1745,7 @@ void tickReplicateApply(GameWorld* gw, bool worldLive) {
     }
 }
 
-// KENSHICOOP_TRACK_MOVE=1: log one line per player squad TAB per second - where
+// TOKELACOOP_TRACK_MOVE=1: log one line per player squad TAB per second - where
 // its first member is and whether it is moving. Log-only; gates nothing.
 //
 // It exists because the cell claims are far too sparse to reconstruct a walked
@@ -1797,7 +1835,7 @@ void tickLoadPumpBackstop(GameWorld* gw) {
 // applied pos; on completion it emits the smoothness summary + verdict and begins
 // the capture hold.
 void tickScenarioTick(GameWorld* gw) {
-#ifdef KENSHICOOP_HARNESS
+#ifdef TOKELACOOP_HARNESS
     if (g_scenario && g_gameStarted && gw && g_scenarioStarted && g_scenarioDoneTick == 0) {
         coop::ScenarioContext ctx;
         ctx.gw = gw; ctx.isHost = g_cfg.isHost; ctx.localId = g_net.localId();
@@ -1827,22 +1865,22 @@ void tickScenarioTick(GameWorld* gw) {
             g_scenarioDoneTick = GetTickCount(); // begin the capture hold
         }
     }
-#endif // KENSHICOOP_HARNESS
+#endif // TOKELACOOP_HARNESS
 }
 
 void mainLoop_hook(GameWorld* gw, float dt) {
     ++g_tick;
     g_lastGw = gw; // cache for the argument-less F2 UI callbacks
 
-#ifdef KENSHICOOP_HARNESS
-    // TEST-ONLY (KENSHICOOP_TEST_CRASH=<seconds>): fault on purpose, to prove the
+#ifdef TOKELACOOP_HARNESS
+    // TEST-ONLY (TOKELACOOP_TEST_CRASH=<seconds>): fault on purpose, to prove the
     // crash-dump filter actually produces a dump with our frames in it. A crash
     // handler nobody has ever seen fire is a coin flip, and the run it would waste
     // is a human reproducing a rare bug. Deliberately NOT wrapped in SEH.
     {
         static int crashAfter = -1;
         if (crashAfter < 0) {
-            const char* e = getenv("KENSHICOOP_TEST_CRASH");
+            const char* e = getenv("TOKELACOOP_TEST_CRASH");
             crashAfter = e ? atoi(e) : 0;
         }
         if (crashAfter > 0 && g_gameStarted &&
@@ -1864,7 +1902,7 @@ void mainLoop_hook(GameWorld* gw, float dt) {
     if (!g_gameStarted && coop::engine::gameplayLive(gw)) {
         g_gameStarted   = true;
         g_gameStartTick = GetTickCount();
-        coopLog("KenshiCoop: gameplay started");
+        coopLog("TokelaCoop: gameplay started");
         // Coordinated load (protocol 32): the title-screen auto-load fired the
         // load detour BEFORE gameplay - discard its queued edge here, or the
         // first driveLoadSync tick (g_gameStarted now true) would mistake it
@@ -1888,7 +1926,7 @@ void mainLoop_hook(GameWorld* gw, float dt) {
             coopLog("[speed] intent hooks installed (setGameSpeed/userPause/togglePause)");
         else
             coopLog("[speed] FAILED to install intent hooks (vote capture degraded)");
-        // "Multiplayer+ (Wanderer x2)" start: give both wanderers the stat line the start
+        // "TokelaCoop+ (Wanderer x2)" start: give both wanderers the stat line the start
         // promises. Raise-only, so it is a FLOOR at 50 - it re-runs on every load
         // of such a world and is a no-op once the characters have trained past it.
         //
@@ -1902,7 +1940,7 @@ void mainLoop_hook(GameWorld* gw, float dt) {
             unsigned int nb = coop::engine::buffAllPlayerStats(gw, WPX2_STAT_LEVEL);
             char b[128];
             _snprintf(b, sizeof(b) - 1,
-                      "[start] Multiplayer+ (Wanderer x2): raised %u PC(s) to %d in every stat",
+                      "[start] TokelaCoop+ (Wanderer x2): raised %u PC(s) to %d in every stat",
                       nb, (int)WPX2_STAT_LEVEL);
             b[sizeof(b) - 1] = '\0'; coopLog(b);
         }
@@ -1914,7 +1952,7 @@ void mainLoop_hook(GameWorld* gw, float dt) {
             armConnectPush();
     }
 
-    // Manual-validation helper (host only): KENSHICOOP_AUTORECRUIT=N seconds -
+    // Manual-validation helper (host only): TOKELACOOP_AUTORECRUIT=N seconds -
     // ONCE, N s after gameplay settles, programmatically recruit the nearest
     // non-player world NPC. probeRecruit -> recruitNpc -> g_recruitFn is the
     // SAME PlayerInterface::recruit the dialog "join me" outcome hits, so
@@ -1925,7 +1963,7 @@ void mainLoop_hook(GameWorld* gw, float dt) {
         static int  autoRecruitS    = -1;
         static bool autoRecruitDone = false;
         if (autoRecruitS < 0) {
-            const char* e = std::getenv("KENSHICOOP_AUTORECRUIT");
+            const char* e = std::getenv("TOKELACOOP_AUTORECRUIT");
             autoRecruitS = e ? std::atoi(e) : 0;
         }
         if (autoRecruitS > 0 && !autoRecruitDone &&
@@ -1950,7 +1988,7 @@ void mainLoop_hook(GameWorld* gw, float dt) {
     // backstop for a scenario that never reports completion.
     if (g_cfg.testSeconds > 0 && g_gameStarted &&
         (GetTickCount() - g_gameStartTick) >= (DWORD)g_cfg.testSeconds * 1000u) {
-        coopLog("KenshiCoop: test duration elapsed; exiting");
+        coopLog("TokelaCoop: test duration elapsed; exiting");
         coop::logClose();
         // TerminateProcess (not ExitProcess): we're inside the live game loop
         // with GPU/audio/net threads running; orderly teardown deadlocks on the
@@ -2113,7 +2151,7 @@ void titleUpdate_hook(TitleScreen* self) {
         g_autoLoadDone = true;
         char m[128];
         _snprintf(m, sizeof(m) - 1,
-                  "KenshiCoop: auto-load issued for save '%s' (after %lu ms settle)",
+                  "TokelaCoop: auto-load issued for save '%s' (after %lu ms settle)",
                   g_cfg.save.c_str(), (unsigned long)(now - g_titleFirstTick));
         m[sizeof(m) - 1] = '\0';
         coopLog(m);
@@ -2121,6 +2159,10 @@ void titleUpdate_hook(TitleScreen* self) {
 }
 
 void startNetworking() {
+    if (g_otherCopy) {   // another co-op plugin is loaded (see otherCopyLoaded)
+        coopErr(TOKELACOOP_TITLE ": networking not started - another co-op plugin is loaded");
+        return;
+    }
     // Debug WAN simulation: when configured, hold/drop inbound entity batches so the
     // loopback harness exercises the real-latency path (interp + local enforcement)
     // instead of the ~0 ms same-frame delivery we'd otherwise validate against.
@@ -2128,7 +2170,7 @@ void startNetworking() {
         g_net.setNetSim(g_cfg.netSimDelayMs, g_cfg.netSimJitterMs, g_cfg.netSimLossPct);
         char b[128];
         _snprintf(b, sizeof(b) - 1,
-                  "KenshiCoop: NET SIM on - delay=%ums jitter=+/-%ums loss=%u%%",
+                  "TokelaCoop: NET SIM on - delay=%ums jitter=+/-%ums loss=%u%%",
                   g_cfg.netSimDelayMs, g_cfg.netSimJitterMs, g_cfg.netSimLossPct);
         b[sizeof(b) - 1] = '\0';
         coopLog(b);
@@ -2138,7 +2180,7 @@ void startNetworking() {
     // UDP session can still prove Steam P2P punch-vs-relay against a peer.
     if (g_cfg.steamPing != 0) {
         if (coop::steamp2p::init()) coop::steamp2p::setPingPeer(g_cfg.steamPing);
-        else coopErr("[steam] KENSHICOOP_STEAM_PING set but Steam init failed");
+        else coopErr("[steam] TOKELACOOP_STEAM_PING set but Steam init failed");
     }
 
     // Steam P2P transport: connect by SteamID (NAT punch + Valve relay) with the
@@ -2150,7 +2192,7 @@ void startNetworking() {
     g_net.setSteamTransport(0);
     if (g_cfg.transport == "steam") {
         if (g_cfg.steamPeer == 0) {
-            coopErr("[steam] KENSHICOOP_TRANSPORT=steam requires KENSHICOOP_STEAM_PEER=<partner steamid64>; falling back to UDP");
+            coopErr("[steam] TOKELACOOP_TRANSPORT=steam requires TOKELACOOP_STEAM_PEER=<partner steamid64>; falling back to UDP");
         } else if (!coop::steamp2p::init()) {
             coopErr("[steam] init failed (Steam not running / offline?); falling back to UDP");
         } else {
@@ -2160,13 +2202,13 @@ void startNetworking() {
         }
     }
 
-    // Harness test: claim another protocol version (KENSHICOOP_FAKE_PROTOCOL_*,
+    // Harness test: claim another protocol version (TOKELACOOP_FAKE_PROTOCOL_*,
     // always 0 in Release). Set on every start, since the role can change.
     const unsigned int fakeProto = g_cfg.isHost ? g_cfg.fakeProtoHost : g_cfg.fakeProtoJoin;
     g_net.setWireVersion((coop::u16)fakeProto);
     if (fakeProto) {
         char b[96];
-        _snprintf(b, sizeof(b) - 1, "KenshiCoop: FAKE protocol v%u for this %s (harness test; real v%u)",
+        _snprintf(b, sizeof(b) - 1, "TokelaCoop: FAKE protocol v%u for this %s (harness test; real v%u)",
                   fakeProto, g_cfg.isHost ? "host" : "join", (unsigned)coop::PROTOCOL_VERSION);
         b[sizeof(b) - 1] = '\0';
         coopLog(b);
@@ -2174,13 +2216,13 @@ void startNetworking() {
 
     bool ok;
     if (g_cfg.isHost) {
-        coopLog("KenshiCoop: starting as HOST");
+        coopLog("TokelaCoop: starting as HOST");
         ok = g_net.startHost(g_cfg.port, &g_inbound);
     } else {
-        coopLog("KenshiCoop: starting as CLIENT");
+        coopLog("TokelaCoop: starting as CLIENT");
         ok = g_net.startClient(g_cfg.ip, g_cfg.port, &g_inbound);
     }
-    if (!ok) coopErr("KenshiCoop: networking failed to start");
+    if (!ok) coopErr("TokelaCoop: networking failed to start");
 }
 
 // In-game panel handlers. coopUiConnect tears down any live session, re-arms the
@@ -2208,7 +2250,7 @@ void coopUiConnect(bool isHost, bool useSteam, unsigned long long peerId) {
     // each for the cells it claims.
     g_repl.setStreamNpcs(isHost || g_cfg.cellAuth);
     // Ownership ranks must follow the role chosen in the panel. Only an explicit
-    // KENSHICOOP_OWN_SQUAD override is preserved; otherwise recompute the default
+    // TOKELACOOP_OWN_SQUAD override is preserved; otherwise recompute the default
     // (host owns {0}, join owns {1}). Without this, a session launched as HOST
     // that switches to JOIN keeps rank {0} and wrongly claims the host's player
     // squad, so that unit never moves on the client (unowned NPCs still sync).
@@ -2231,6 +2273,52 @@ void coopUiConnect(bool isHost, bool useSteam, unsigned long long peerId) {
     b[sizeof(b) - 1] = '\0';
     coopLog(b);
     startNetworking();
+}
+
+// One co-op plugin per game. Up to v0.53 this mod was KenshiCoop
+// (mods\KenshiCoop\KenshiCoop.dll). A player who upgrades by hand and leaves it
+// ticked in the launcher loads both, and two copies hook the same engine
+// functions, draw two F2 panels and fight over the same port. The installer and
+// deploy.cmd remove the old copy; this catches the rest (a manual copy, a
+// Workshop copy, an old kit run again). Returns which copy is also loaded, or 0.
+const char* otherCopyLoaded() {
+    // The OLD name, on purpose: that is the file an un-migrated install loads.
+    if (GetModuleHandleA("KenshiCoop.dll")) return "KenshiCoop";
+    // Two copies of this plugin (say a Workshop one plus mods\TokelaCoop): the
+    // second one to load finds the first one's per-process mutex.
+    static HANDLE s_mutex = 0;
+    if (!s_mutex) {
+        char name[64];
+        _snprintf(name, sizeof(name) - 1, "Local\\TokelaCoop.plugin.%lu",
+                  (unsigned long)GetCurrentProcessId());
+        name[sizeof(name) - 1] = '\0';
+        s_mutex = CreateMutexA(0, FALSE, name);
+        if (s_mutex && GetLastError() == ERROR_ALREADY_EXISTS) return TOKELACOOP_NAME;
+    }
+    return 0;
+}
+
+// Tell the player, once, while the game is still starting (no fullscreen yet).
+void warnOtherCopy(const char* other) {
+    char b[160];
+    _snprintf(b, sizeof(b) - 1,
+              "%s: another co-op plugin is loaded (%s); this copy stays OFF", TOKELACOOP_TITLE, other);
+    b[sizeof(b) - 1] = '\0';
+    coopErr(b);
+    const bool legacy = strcmp(other, "KenshiCoop") == 0;
+    const wchar_t* text = legacy
+        // UTF-16 escapes, never raw accents: VS2010 reads a BOM-less source as ANSI.
+        ? L"Tambi\x00E9n tienes instalado KenshiCoop, la versi\x00F3n antigua de este mod.\n\n"
+          L"Cierra Kenshi, desmarca KenshiCoop en la pesta\x00F1" L"a Mods del launcher (o borra la "
+          L"carpeta mods\\KenshiCoop) y vuelve a abrirlo. Hasta entonces el co-op no se activar\x00E1.\n\n"
+          L"KenshiCoop, the old version of this mod, is also installed. Close Kenshi, untick "
+          L"KenshiCoop in the launcher's Mods tab (or delete mods\\KenshiCoop) and start it again. "
+          L"Co-op stays off until then."
+        : L"Hay dos copias de TokelaCoop instaladas (por ejemplo, una de Workshop y otra en "
+          L"mods\\TokelaCoop). Deja solo una y vuelve a abrir Kenshi.\n\n"
+          L"Two copies of TokelaCoop are installed (for example one from the Workshop and one in "
+          L"mods\\TokelaCoop). Keep only one and start Kenshi again.";
+    MessageBoxW(0, text, L"TokelaCoop", MB_OK | MB_ICONWARNING | MB_TOPMOST | MB_SETFOREGROUND);
 }
 
 void coopUiDisconnect() {
@@ -2256,26 +2344,52 @@ void coopUiDisconnect() {
 // Startup log roster: load banner, fake-skew notice, build stamp, role line,
 // and the effective (resolved) config summary. Answerable from the log alone.
 void logStartupBanner() {
-    coopLog("KenshiCoop loaded! (clean rebuild)");
+    {
+        char b[96];
+        _snprintf(b, sizeof(b) - 1, TOKELACOOP_TITLE " loaded! (protocol v%u)",
+                  (unsigned)coop::PROTOCOL_VERSION);
+        b[sizeof(b) - 1] = '\0';
+        coopLog(b);
+    }
     if (g_cfg.fakeClockSkewMs != 0) {
         char b[96];
-        _snprintf(b, sizeof(b) - 1, "KenshiCoop: FAKE clock skew injected: %+ld ms",
+        _snprintf(b, sizeof(b) - 1, "TokelaCoop: FAKE clock skew injected: %+ld ms",
                   g_cfg.fakeClockSkewMs);
         b[sizeof(b) - 1] = '\0';
         coopLog(b);
+    }
+    // Settings still set under the pre-v0.54 prefix (a script or shell from the
+    // KenshiCoop days) are ignored, and silently falling back to the defaults is
+    // exactly how a test measures the wrong thing - so name them.
+    {
+        // Wide API: this project builds with UNICODE, where SDK 7.1 maps the plain
+        // name to the W function and has no ...A one.
+        static const wchar_t kOldPrefix[] = L"KENSHI" L"COOP_";   // split: not a live name
+        const size_t n = sizeof(kOldPrefix) / sizeof(kOldPrefix[0]) - 1;
+        LPWCH env = GetEnvironmentStringsW();
+        if (env) {
+            for (const wchar_t* e = env; *e; e += wcslen(e) + 1) {
+                if (wcsncmp(e, kOldPrefix, n) != 0) continue;
+                std::string name;   // these names are plain ASCII
+                for (const wchar_t* p = e; *p && *p != L'=' && name.size() < 64; ++p) name += (char)*p;
+                std::string m = "[config] WARNING: " + name + " is ignored - since v0.54 the prefix is TOKELACOOP_";
+                coopErr(m.c_str());
+            }
+            FreeEnvironmentStringsW(env);
+        }
     }
     // Build stamp: changes every compile, so the test runner can confirm a fresh
     // DLL is actually deployed (anti-stale guard) rather than an old cached copy.
     {
         char b[96];
-        _snprintf(b, sizeof(b) - 1, "KenshiCoop: build %s %s", __DATE__, __TIME__);
+        _snprintf(b, sizeof(b) - 1, "TokelaCoop: build %s %s", __DATE__, __TIME__);
         b[sizeof(b) - 1] = '\0';
         coopLog(b);
     }
     {
         char b[128];
         _snprintf(b, sizeof(b) - 1,
-                  "KenshiCoop: role=%s proto=v%u port=%d save='%s'",
+                  "TokelaCoop: role=%s proto=v%u port=%d save='%s'",
                   g_cfg.isHost ? "HOST" : "JOIN", (unsigned)coop::PROTOCOL_VERSION,
                   g_cfg.port, g_cfg.save.c_str());
         b[sizeof(b) - 1] = '\0';
@@ -2294,7 +2408,7 @@ bool installMainLoopHook() {
         KenshiLib::AddHook(
             KenshiLib::GetRealAddress(&GameWorld::_NV_mainLoop_GPUSensitiveStuff),
             &mainLoop_hook, &g_mainLoop_orig)) {
-        coopErr("KenshiCoop: could not install main-loop hook!");
+        coopErr("TokelaCoop: could not install main-loop hook!");
         return false;
     }
     return true;
@@ -2323,11 +2437,11 @@ void configureReplicator() {
             if (!ranks.empty()) ranks += ",";
             ranks += num;
         }
-        std::string m = "KenshiCoop: ownership ranks = {" + ranks + "} (bidirectional presence)";
+        std::string m = "TokelaCoop: ownership ranks = {" + ranks + "} (bidirectional presence)";
         coopLog(m.c_str());
     }
 
-    // Protocol 36 movement-smoothness knobs (KENSHICOOP_INTERP_* / _CATCHUP_K /
+    // Protocol 36 movement-smoothness knobs (TOKELACOOP_INTERP_* / _CATCHUP_K /
     // _SNAP_DIST): live-tune the interp window and the walk-drive gains for WAN
     // A/B runs. Defaults reproduce the historical constants exactly.
     {
@@ -2381,7 +2495,7 @@ void configureReplicator() {
                             g_cfg.jailProbe);  // manual -JailProbe: no scenario name
         char b[260];
         _snprintf(b, sizeof(b) - 1,
-                  "KenshiCoop: interp delay=%u-%ums extrap=%ums stale=%ums snap=%.0fu "
+                  "TokelaCoop: interp delay=%u-%ums extrap=%ums stale=%ums snap=%.0fu "
                   "drive catchupK=%.2f snapDist=%.1fu snapSec=%.2f sendStamp=%d "
                   "census=%.0fu mint=%.0fu park=%.0fu walk=%.0fu starveHold=%ums",
                   g_cfg.interpMinDelayMs, g_cfg.interpMaxDelayMs,
@@ -2395,11 +2509,11 @@ void configureReplicator() {
     }
 
     // Carried-body sync (protocol 18, default ON): reliable pickup/drop edges +
-    // self-healing carried state. KENSHICOOP_CARRY_SYNC=0 is the A/B escape hatch.
+    // self-healing carried state. TOKELACOOP_CARRY_SYNC=0 is the A/B escape hatch.
     g_repl.setCarrySync(g_cfg.carrySync);
 
     // Furniture occupancy sync (protocol 19, default ON): reliable bed/cage
-    // enter/exit edges + self-healing occupancy state. KENSHICOOP_FURN_SYNC=0
+    // enter/exit edges + self-healing occupancy state. TOKELACOOP_FURN_SYNC=0
     // is the A/B escape hatch.
     g_repl.setFurnSync(g_cfg.furnSync);
     g_repl.setChainSync(g_cfg.chainSync);
@@ -2407,17 +2521,17 @@ void configureReplicator() {
 
     // Prone posture sync (protocol 53, default ON): driven copies are posed with
     // the owner's exact ProneState so an injured crawler is not walk-driven
-    // upright. KENSHICOOP_PRONE_SYNC=0 is the A/B escape hatch.
+    // upright. TOKELACOOP_PRONE_SYNC=0 is the A/B escape hatch.
     g_repl.setProneSync(g_cfg.proneSync);
 
     // Shared money pool (protocol 52, default ON): one host-authoritative purse
-    // both players spend from. KENSHICOOP_MONEY_SYNC=0 is the A/B escape hatch
+    // both players spend from. TOKELACOOP_MONEY_SYNC=0 is the A/B escape hatch
     // (and the shop_probe baseline).
     g_repl.setMoneySync(g_cfg.moneySync);
 
     // Runtime-spawn proxy replication (protocol 21, default ON): the join mints
     // local proxy bodies for host runtime spawns it cannot resolve by hand.
-    // KENSHICOOP_SPAWN_SYNC=0 is the A/B escape hatch (spawn_probe forces off).
+    // TOKELACOOP_SPAWN_SYNC=0 is the A/B escape hatch (spawn_probe forces off).
     g_repl.setSpawnSync(g_cfg.spawnSync);
 
     // AI-gating probe (join side): recruit diverged NPCs to test the inhabit lever.
@@ -2433,7 +2547,7 @@ void installEngineDetours() {
     // layer off) while still animating. Faction is untouched - we hold the body's
     // current action instead of letting the AI re-decide and wander/thrash. This
     // is the universal QUIETING layer (doctrine 15 amendment); per-class APPLY
-    // levers sit on top. KENSHICOOP_AI_SUSPEND=0 disables (A/B escape hatch).
+    // levers sit on top. TOKELACOOP_AI_SUSPEND=0 disables (A/B escape hatch).
     //
     // Phase 1b: enabled on the HOST too (was join-only). The host drives nothing
     // in the classic host-authoritative single-direction case (it owns every
@@ -2451,14 +2565,14 @@ void installEngineDetours() {
             coopLog("[ai] FAILED to install periodicUpdate detour; AI-suspend disabled");
         }
     }
-    // Task-selection observation spike (KENSHICOOP_TASK_SPIKE, off by default):
+    // Task-selection observation spike (TOKELACOOP_TASK_SPIKE, off by default):
     // passive detour on CharBody::setCurrentAction to prove the selection seam is
     // hookable in isolation and log the chosen task tuple per body. No behavior
     // change - a diagnostic for the "stream selection, not motion" direction.
     if (g_cfg.taskSelectSpike) {
         if (coop::engine::installTaskSelectSpikeHook()) {
             coop::engine::setTaskSelectSpike(true);
-            coopLog("[spike] setCurrentAction detour installed; task-select observation ON (KENSHICOOP_TASK_SPIKE)");
+            coopLog("[spike] setCurrentAction detour installed; task-select observation ON (TOKELACOOP_TASK_SPIKE)");
         } else {
             coopLog("[spike] FAILED to install setCurrentAction detour (seam unresolved)");
         }
@@ -2466,24 +2580,24 @@ void installEngineDetours() {
     // Jail put-to-work desync spike: correlated [jail] STATE traces (read-only).
     g_repl.setJailProbe(g_cfg.jailProbe);
     if (g_cfg.jailProbe)
-        coopLog("[jail] KENSHICOOP_JAIL_PROBE=1: captive-state [jail] STATE tracing ON");
+        coopLog("[jail] TOKELACOOP_JAIL_PROBE=1: captive-state [jail] STATE tracing ON");
     // Jail put-to-work observation spike (Phase A): host runs the captive
     // unopposed and logs its trajectory ([jail] OBSERVE) to classify intent.
     g_repl.setJailObserve(g_cfg.jailObserve);
     if (g_cfg.jailObserve)
-        coopLog("[jail] KENSHICOOP_JAIL_OBSERVE=1: captive drive/suspend/self-heal OFF; [jail] OBSERVE tracing ON");
+        coopLog("[jail] TOKELACOOP_JAIL_OBSERVE=1: captive drive/suspend/self-heal OFF; [jail] OBSERVE tracing ON");
     // Step-2 experiment: sitter no-detach A/B (manual runs only; off by default).
     if (!g_cfg.isHost && g_cfg.noDetach) {
         g_repl.setNoDetach(true);
-        coopLog("[quiet] KENSHICOOP_NO_DETACH=1: sitter detachFromTownAI SKIPPED (experiment)");
+        coopLog("[quiet] TOKELACOOP_NO_DETACH=1: sitter detachFromTownAI SKIPPED (experiment)");
     }
 
     // Divergence-gated authority (join side, DEFAULT ON since the step-4 A/B):
     // trust world NPCs whose local AI sustainedly agrees with the host; drive
-    // only divergence. KENSHICOOP_GATE_AUTHORITY=0 disables (A/B escape hatch).
+    // only divergence. TOKELACOOP_GATE_AUTHORITY=0 disables (A/B escape hatch).
     if (!g_cfg.isHost && g_cfg.gateAuthority) {
         g_repl.setGateAuthority(true);
-        coopLog("[trust] divergence-gated authority ON (default; KENSHICOOP_GATE_AUTHORITY=0 disables)");
+        coopLog("[trust] divergence-gated authority ON (default; TOKELACOOP_GATE_AUTHORITY=0 disables)");
     }
 
     // Damage guard (BOTH sides, DEFAULT ON): locally-simulated melee hits on
@@ -2492,7 +2606,7 @@ void installEngineDetours() {
     // drives": the peer's world-NPC copies on the join, the peer's SQUAD-member
     // copies on the host (host-side extension 2026-07-06 - phase-1 player_combat
     // measured the host's copy of a join victim bleeding 40+ blood while the
-    // join's guarded copies stayed at 0). KENSHICOOP_DAMAGE_GUARD=0 disables.
+    // join's guarded copies stayed at 0). TOKELACOOP_DAMAGE_GUARD=0 disables.
     if (g_cfg.damageGuard) {
         if (coop::engine::installDamageGuardHook()) {
             g_repl.setDamageGuard(true);
@@ -2520,7 +2634,7 @@ void installEngineDetours() {
             coopLog("[shop] FAILED to install buyItem detour; purchase logging off");
     }
 
-    // Cross-owner trade veto (KENSHICOOP_BLOCK_XFER, default ON in real sessions):
+    // Cross-owner trade veto (TOKELACOOP_BLOCK_XFER, default ON in real sessions):
     // refuse a UI inventory drag whose source + destination squad characters are
     // owned by different clients (item stays in the source bag) so ground drops
     // are the only cross-client transfer path. Retires Protocol 37 (Config forces
@@ -2562,13 +2676,13 @@ void installEngineDetours() {
     // Recruitment sync (protocol 23, default ON): detour PlayerInterface::
     // recruit so every successful local recruit (dialog or programmatic)
     // authors a reliable EVT_RECRUIT; the peer re-keys its local copy of the
-    // recruited body to the new stream key. KENSHICOOP_RECRUIT_SYNC=0 is the
+    // recruited body to the new stream key. TOKELACOOP_RECRUIT_SYNC=0 is the
     // A/B escape hatch (recruit_probe forces it off to keep the unsynced
     // baseline measurable).
     g_repl.setRecruitSync(g_cfg.recruitSync);
     // Squad management sync (protocol 35, default ON): pointer-diff move
     // edges -> EVT_SQUAD_MOVE re-keys + the container-rank latch (mid-session
-    // tabs append instead of reshuffling ownership). KENSHICOOP_SQUAD_SYNC=0
+    // tabs append instead of reshuffling ownership). TOKELACOOP_SQUAD_SYNC=0
     // is the A/B escape hatch (squad_probe forces it off to keep the unsynced
     // baseline measurable).
     g_repl.setSquadSync(g_cfg.squadSync);
@@ -2679,12 +2793,12 @@ void installTitleHook() {
             KenshiLib::AddHook(
                 KenshiLib::GetRealAddress(&TitleScreen::_NV_update),
                 &titleUpdate_hook, &g_titleUpdate_orig)) {
-            coopErr("KenshiCoop: could not install title-screen hook (F2 panel + bootstrap + auto-load disabled)");
+            coopErr("TokelaCoop: could not install title-screen hook (F2 panel + bootstrap + auto-load disabled)");
         } else if (!g_cfg.save.empty()) {
-            std::string m = "KenshiCoop: title hook armed (auto-load save '" + g_cfg.save + "')";
+            std::string m = "TokelaCoop: title hook armed (auto-load save '" + g_cfg.save + "')";
             coopLog(m.c_str());
         } else {
-            coopLog("KenshiCoop: title hook armed (F2 panel + push-on-connect at menu; no auto-load save)");
+            coopLog("TokelaCoop: title hook armed (F2 panel + push-on-connect at menu; no auto-load save)");
         }
     }
 }
@@ -2753,14 +2867,19 @@ void installExitHook() {
     if (!target ||
         KenshiLib::AddHook(target, (void*)&crtExit_hook,
                            (void**)&g_crtExit_orig) != KenshiLib::SUCCESS) {
-        coopErr("KenshiCoop: could not install exit hook (quitting with the F2 panel open may crash)");
+        coopErr("TokelaCoop: could not install exit hook (quitting with the F2 panel open may crash)");
         return;
     }
-    coopLog("KenshiCoop: exit hook armed (co-op UI torn down before the engine GUI)");
+    coopLog("TokelaCoop: exit hook armed (co-op UI torn down before the engine GUI)");
 }
 
 __declspec(dllexport) void startPlugin() {
+    // Another co-op plugin already loaded (the old KenshiCoop, or a second copy of
+    // this one)? Asked before anything opens a file: a second copy of THIS plugin
+    // shares the running copy's log name and would truncate that log.
+    const char* other = otherCopyLoaded();
     coop::loadConfig(g_cfg);
+    if (other && strcmp(other, TOKELACOOP_NAME) == 0) g_cfg.logPath += ".second-copy.log";
     // The fake clock skew must be armed BEFORE the first log line so every
     // timestamp in this run (and every time-sync packet) shares the skewed clock.
     coop::logSetFakeSkewMs(g_cfg.fakeClockSkewMs);
@@ -2770,7 +2889,8 @@ __declspec(dllexport) void startPlugin() {
     // own dump is written from a late filter and carries no usable frames, which is
     // where the 2026-08-03 crash investigation dead-ended; ours chains to RE_Kenshi's
     // filter afterwards, so its emergency save is unaffected. See core/CrashDump.h.
-    {
+    // (Not for a copy that stays out: the running one has its own.)
+    if (!other) {
         std::string dir = g_cfg.logPath;
         size_t cut = dir.find_last_of("\\/");
         dir = (cut == std::string::npos) ? std::string(".") : dir.substr(0, cut);
@@ -2778,6 +2898,13 @@ __declspec(dllexport) void startPlugin() {
     }
 
     logStartupBanner();
+
+    // ...then stay completely out - no hooks at all - and say why.
+    if (other) {
+        g_otherCopy = true;
+        warnOtherCopy(other);
+        return;
+    }
 
     // Hook the main-thread tick FIRST (early-return on failure), then wire the
     // replicator, engine detours and UI hooks as named install phases.
@@ -2795,7 +2922,7 @@ __declspec(dllexport) void startPlugin() {
     if (g_cfg.testSeconds > 0) {
         char b[96];
         _snprintf(b, sizeof(b) - 1,
-                  "KenshiCoop: test mode - self-exit %d s after gameplay starts",
+                  "TokelaCoop: test mode - self-exit %d s after gameplay starts",
                   g_cfg.testSeconds);
         b[sizeof(b) - 1] = '\0';
         coopLog(b);
@@ -2804,14 +2931,14 @@ __declspec(dllexport) void startPlugin() {
     // Scenario harness: build the selected scenario (both host & join run it; it
     // branches on host/join internally). Unknown names are logged and ignored.
     // Harness/Debug only - the shipped Release DLL has no scenario runner.
-#ifdef KENSHICOOP_HARNESS
+#ifdef TOKELACOOP_HARNESS
     if (!g_cfg.scenario.empty()) {
         g_scenario = coop::makeScenario(g_cfg.scenario);
         if (g_scenario) {
-            std::string m = "KenshiCoop: scenario armed '" + g_cfg.scenario + "'";
+            std::string m = "TokelaCoop: scenario armed '" + g_cfg.scenario + "'";
             coopLog(m.c_str());
         } else {
-            std::string m = "KenshiCoop: unknown scenario '" + g_cfg.scenario + "'";
+            std::string m = "TokelaCoop: unknown scenario '" + g_cfg.scenario + "'";
             coopErr(m.c_str());
         }
     }
@@ -2820,7 +2947,7 @@ __declspec(dllexport) void startPlugin() {
     // Session start policy (in-game panel, 2026-07-14): the unattended harness
     // (a scenario or a self-exit timer) ALWAYS auto-starts - it never touches the
     // F2 panel. An interactive install DEFERS the session to the panel's Connect
-    // unless KENSHICOOP_AUTOCONNECT=1 restores load-time auto-start from the
+    // unless TOKELACOOP_AUTOCONNECT=1 restores load-time auto-start from the
     // env/config role+transport+peer (the legacy launcher behaviour).
     bool autoStart = g_cfg.autoConnect || !g_cfg.scenario.empty() || g_cfg.testSeconds > 0;
 
@@ -2838,7 +2965,7 @@ __declspec(dllexport) void startPlugin() {
     if (autoStart) {
         startNetworking();
     } else {
-        coopLog("KenshiCoop: session DEFERRED - press F2 in-game to pick role/transport, "
+        coopLog("TokelaCoop: session DEFERRED - press F2 in-game to pick role/transport, "
                 "enter the friend's Steam ID, and check CONNECTED");
     }
 }

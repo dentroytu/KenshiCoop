@@ -1,31 +1,42 @@
-﻿KenshiCoop - co-op mod
-======================
+﻿TokelaCoop - co-op mod (antes KenshiCoop / formerly KenshiCoop)
+===============================================================
+  La versión está en PROVENANCE.json y en el juego: arriba a la izquierda y en
+  el título del panel F2 sale "TokelaCoop vX.YY". Los dos, la misma.
+  The version is in PROVENANCE.json and in game: "TokelaCoop vX.YY" in the
+  top-left corner and on the F2 panel title. Both players: the same one.
 
 INSTALAR (los dos jugadores) - en español
 -----------------------------------------
   1. Descomprime el zip entero en cualquier carpeta.
-  2. Doble clic en "Instalar KenshiCoop.cmd". Si Windows pregunta, pulsa
+  2. Doble clic en "Instalar TokelaCoop.cmd". Si Windows pregunta, pulsa
      "Ejecutar" / "Más información > Ejecutar de todas formas".
   3. El instalador busca Kenshi, instala RE_Kenshi si falta (abre su instalador
      oficial: pulsa Install), copia el mod y lo activa. Al acabar dice "Listo".
+     Si tenías KenshiCoop (el nombre antiguo, hasta la v0.53), lo cambia por
+     TokelaCoop y conserva tu coop_config.json.
   Para actualizar, descarga el zip nuevo y repite. Para jugar: mira PLAY abajo
   (el anfitrión pulsa F2 > "Invite a Steam friend").
 
 INSTALL (both players)
 ----------------------
   1. Extract the whole zip anywhere.
-  2. Double-click "Instalar KenshiCoop.cmd" (if Windows asks, choose "Run" /
+  2. Double-click "Instalar TokelaCoop.cmd" (if Windows asks, choose "Run" /
      "More info > Run anyway").
   3. It finds Kenshi (any Steam library or GOG; it asks if it can't), installs
      RE_Kenshi if missing (it downloads the pinned release from GitHub, checks
      its SHA-256 and opens RE_Kenshi's official installer - click Install),
-     copies the mod into <Kenshi>\mods\KenshiCoop and enables it in the mod
-     list. It ends with "Done". Run it again to update.
+     copies the mod into <Kenshi>\mods\TokelaCoop and enables it in the mod
+     list. It ends with "Done". Run it again to update. If you had KenshiCoop
+     (the old name, up to v0.53) it switches it to TokelaCoop and keeps your
+     coop_config.json.
 
   Manual install instead: install RE_Kenshi 0.3.5
   (https://github.com/BFrizzleFoShizzle/RE_Kenshi/releases), copy the
-  "KenshiCoop" folder into <Kenshi>\mods\ and enable "KenshiCoop" in the
-  launcher's Mods list.
+  "TokelaCoop" folder into <Kenshi>\mods\ and enable "TokelaCoop" in the
+  launcher's Mods list. Upgrading from KenshiCoop by hand: move
+  mods\KenshiCoop\coop_config.json into mods\TokelaCoop\, delete
+  mods\KenshiCoop and untick KenshiCoop - with both loaded, TokelaCoop stays
+  off and says why.
 
 PREREQUISITES (both players)
 ----------------------------
@@ -33,8 +44,9 @@ PREREQUISITES (both players)
   2. RE_Kenshi 0.3.4 or 0.3.5 - the installer takes care of it.
   3. For the Steam transport (recommended): Steam RUNNING and ONLINE on both
      machines. No port forwarding, no IPs, no config editing.
-  4. The SAME KenshiCoop version on both machines (the handshake rejects a
-     mismatch) - download the same zip.
+  4. The SAME TokelaCoop version on both machines - download the same zip. The
+     connection only refuses a different network protocol, and two releases can
+     share one, so compare the "TokelaCoop vX.YY" you both see in game.
 
 PLAY (Steam - recommended)
 --------------------------
@@ -65,7 +77,7 @@ PLAY (Steam - recommended)
 
 PLAY (LAN / direct UDP - advanced)
 ----------------------------------
-  Skip the Steam ID swap. Open <Kenshi>\mods\KenshiCoop\coop_config.json in
+  Skip the Steam ID swap. Open <Kenshi>\mods\TokelaCoop\coop_config.json in
   Notepad, set "transport": "udp", and put the host's address in "ip" (and
   "port" if you changed it). In the panel set Transport: UDP, pick Host/Join,
   and go ONLINE. ip/port are re-read whenever you go ONLINE, so no restart is
@@ -73,23 +85,30 @@ PLAY (LAN / direct UDP - advanced)
 
 UNINSTALL
 ---------
-  Delete <Kenshi>\mods\KenshiCoop and remove the "KenshiCoop.mod" line from
+  Delete <Kenshi>\mods\TokelaCoop and remove the "TokelaCoop.mod" line from
   <Kenshi>\data\mods.cfg (or untick it in the launcher). To remove RE_Kenshi,
   run its installer and choose Uninstall.
 
 TROUBLESHOOTING
 ---------------
   * "The co-op plugin has not started": RE_Kenshi didn't load it. Check
-    <Kenshi>\RE_Kenshi_log.txt for 'KenshiCoop'; reinstalling RE_Kenshi
+    <Kenshi>\RE_Kenshi_log.txt for 'TokelaCoop'; reinstalling RE_Kenshi
     usually fixes it.
   * No connection (Steam): both Steams must be RUNNING and ONLINE, and each side
     must have Pasted the OTHER player's ID (the panel shows the captured ID -
     confirm it matches). If "Paste friend's Steam ID" says the clipboard wasn't
     a Steam ID, have your friend re-copy theirs with "Copy my Steam ID". Look for
-    '[steam] session ... active=1' in <Kenshi>\KenshiCoop_*.log.
+    '[steam] session ... active=1' in <Kenshi>\TokelaCoop_*.log.
   * "Mods: DIFFERENT" on the F2 panel: you and your friend don't have the same
-    mods, versions or load order. <Kenshi>\KenshiCoop_mods_diff.txt lists every
+    mods, versions or load order. <Kenshi>\TokelaCoop_mods_diff.txt lists every
     difference; "Copy friend's mod list" copies their load order. The check
     only warns, it never blocks the connection (new, not yet tested in-game).
-  * "protocol mismatch": one player has an older/newer build; both should use
-    the same release.
+    If the only difference is KenshiCoop.mod against TokelaCoop.mod, your
+    friend still has the old KenshiCoop (v0.53 or older): they should run this
+    installer, not copy mod lists.
+  * "your friend has another version" on the F2 panel: one player has an
+    older/newer build with a different network protocol; both should use the
+    same release.
+  * A warning box at start, or "untick KenshiCoop" on the banner: the old
+    KenshiCoop is still installed next to TokelaCoop. Run the installer again,
+    or untick KenshiCoop in the launcher's Mods tab.
