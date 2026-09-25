@@ -328,7 +328,7 @@ void Replicator::syncSpawns(GameWorld* gw, Inbound& in, NetLink& net, u32 ownerI
         // so it is invisible in the world; the cost is per-body state (a name, a
         // wound, an inventory) landing on the wrong twin. Against a doubled town
         // that is worth it, and nearest-first pairing keeps it rare.
-        // KENSHICOOP_ADOPT_RADIUS=0 restores defer-only.
+        // TOKELACOOP_ADOPT_RADIUS=0 restores defer-only.
         //
         // PLACED ABOVE the far / near-unloaded / budget gates deliberately: every
         // one of those exists to protect the act of CREATING a body (mint into an

@@ -3,7 +3,7 @@
 // diagWeaponCreate diagnostic) and EngineInternal.cpp (spike-402 native-snapshot
 // round-trip) so the shipping Release DLL no longer carries the mkspy detour
 // trampolines or the probe entry points. This TU is HARNESS-ONLY: it is excluded
-// from the Release build in KenshiCoop.vcxproj (like the Scenario*.cpp TUs) - its
+// from the Release build in TokelaCoop.vcxproj (like the Scenario*.cpp TUs) - its
 // only callers are the probe scenarios (ScenarioProbes.cpp / ScenarioWorldItems.cpp),
 // which are themselves Release-excluded.
 //
@@ -459,9 +459,9 @@ int probeNativeSnapshot(GameWorld* gw) {
     // writes state GameData records into `output`'s source container; nothing
     // is inserted into GameWorld::savedata or the live platoon container.
     GameDataContainer output;
-    output.setName("KenshiCoop r402 native snapshot");
-    const std::string sid("kenshicoop-r402-instances");
-    const std::string displayName("KenshiCoop r402 instances");
+    output.setName("TokelaCoop r402 native snapshot");
+    const std::string sid("tokelacoop-r402-instances");
+    const std::string displayName("TokelaCoop r402 instances");
     GameData* instances =
         output.createNewData(INSTANCE_COLLECTION, sid, displayName);
     if (!instances) {
@@ -484,7 +484,7 @@ int probeNativeSnapshot(GameWorld* gw) {
     }
     char filename[MAX_PATH];
     _snprintf(filename, sizeof(filename) - 1,
-              "%sKenshiCoop-r402-%lu.mod", tempDir,
+              "%sTokelaCoop-r402-%lu.mod", tempDir,
               (unsigned long)GetCurrentProcessId());
     filename[sizeof(filename) - 1] = '\0';
 
@@ -500,7 +500,7 @@ int probeNativeSnapshot(GameWorld* gw) {
         : 0;
 
     GameDataContainer loaded;
-    const std::string modName("KenshiCoop-r402");
+    const std::string modName("TokelaCoop-r402");
     const bool loadedOk = saved &&
         loaded.load(file, modName, 0, 0, true);
     GameData* loadedInstances =

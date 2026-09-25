@@ -494,7 +494,7 @@ function Test-ConnectBootstrap {
 # connect_stream (protocol 31/32, stream_test.ps1): the STRICT missing-save
 # bootstrap proof. Unlike connect_bootstrap (which also passes on a direct MATCH
 # load), this REQUIRES the real folder transfer, so it is the gate for a run that
-# FORCED the stream (KENSHICOOP_FORCE_STREAM=1) - a run that quietly fell back to
+# FORCED the stream (TOKELACOOP_FORCE_STREAM=1) - a run that quietly fell back to
 # a MATCH load FAILS here. The pushed save name is dynamic (the host's current
 # game), so every edge matches the name generically. Gated on:
 #   1. host: connect-push armed   ([boot] baking save '<name>');
@@ -505,7 +505,7 @@ function Test-ConnectBootstrap {
 #   6. join: staged + committed    ([save] XFER-COMMIT badCrc=0, files/bytes == sent);
 #   7. host: ACK closed the loop   ([save] XFER-ACK ok=1);
 #   8. join: loaded the transfer   ([load] transfer committed -> loading);
-#   9. join: entered the world     (KenshiCoop: gameplay started).
+#   9. join: entered the world     (TokelaCoop: gameplay started; KenshiCoop: before v0.54).
 function Test-ConnectStream {
     param([string]$HostFile, [string]$JoinFile)
     $why = @()
@@ -565,7 +565,7 @@ function Test-ConnectStream {
     if ($null -eq $xferLoad) { $why += "join never loaded the streamed save ([load] transfer committed -> loading)" }
 
     # 9. join actually entered the world.
-    $live = Select-String -Path $JoinFile -Pattern "KenshiCoop: gameplay started" -ErrorAction SilentlyContinue | Select-Object -Last 1
+    $live = Select-String -Path $JoinFile -Pattern "(TokelaCoop|KenshiCoop): gameplay started" -ErrorAction SilentlyContinue | Select-Object -Last 1
     if ($null -eq $live) { $why += "join never reached gameplay after the transfer" }
 
     $v = if ($why.Count -eq 0) { "PASS" } else { "FAIL" }

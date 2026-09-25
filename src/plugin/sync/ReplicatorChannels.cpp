@@ -2242,7 +2242,7 @@ void Replicator::syncSpeed(GameWorld* gw, Inbound& in, NetLink& net, u32 ownerId
         speedMyCombat_ = held;
     }
     // Phase 5 spike: expose the combat-cap state so the speed-setter
-    // diagnostics (KENSHICOOP_DEBUG_SPEED) can distinguish an engine-forced
+    // diagnostics (TOKELACOOP_DEBUG_SPEED) can distinguish an engine-forced
     // combat cap from a user click by context.
     engine::setSpeedCombatHint(speedMyCombat_ || speedPeerCombat_);
 

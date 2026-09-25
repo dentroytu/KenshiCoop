@@ -4,7 +4,7 @@
 
 #include "SaveXfer.h"
 #include "../CoopLog.h"
-#ifndef KENSHICOOP_PROTOTEST
+#ifndef TOKELACOOP_PROTOTEST
 #include "../game/Engine.h" // engine::saveInfo (runtime save-path resolution)
 #include "../net/NetLink.h"
 #endif
@@ -156,7 +156,7 @@ bool relPathSafe(const char* p, unsigned int len) {
 }
 
 // ---- Sender state (host, main thread only) ------------------------------------
-#ifndef KENSHICOOP_PROTOTEST
+#ifndef TOKELACOOP_PROTOTEST
 
 bool                  g_sendActive = false;
 u32                   g_sendXferId = 0;      // monotonic per-host
@@ -190,7 +190,7 @@ void sendAbort(const char* why) {
     g_sendCrcs.clear();
 }
 
-#endif // !KENSHICOOP_PROTOTEST (sender state)
+#endif // !TOKELACOOP_PROTOTEST (sender state)
 
 // ---- Receiver state (join, main thread only) -----------------------------------
 
@@ -236,7 +236,7 @@ unsigned __int64 g_watchCurBytes = 0;
 
 } // namespace
 
-#ifdef KENSHICOOP_PROTOTEST
+#ifdef TOKELACOOP_PROTOTEST
 // Prototest seam: redirect the staging/commit root to a caller-owned temp dir
 // so the receiver round-trip test never touches the user's real save folder.
 static std::string g_testSaveRoot;
@@ -245,7 +245,7 @@ void setSaveRootForTest(const std::string& root) { g_testSaveRoot = root; }
 
 std::string saveFolderFor(const std::string& name) {
     std::string root;
-#ifdef KENSHICOOP_PROTOTEST
+#ifdef TOKELACOOP_PROTOTEST
     if (!g_testSaveRoot.empty()) {
         root = g_testSaveRoot;
     } else {
@@ -397,7 +397,7 @@ int tickWatch(unsigned int* outFiles, unsigned __int64* outBytes,
 }
 
 // ---- Sender (host) -------------------------------------------------------------
-#ifndef KENSHICOOP_PROTOTEST
+#ifndef TOKELACOOP_PROTOTEST
 
 bool beginSend(NetLink& net, u32 localId, const std::string& name) {
     sendCloseFile();
@@ -534,7 +534,7 @@ bool tickSend(NetLink& net, u32 localId) {
     return false;
 }
 
-#endif // !KENSHICOOP_PROTOTEST (sender)
+#endif // !TOKELACOOP_PROTOTEST (sender)
 
 u32 lastSentXferId()  { return g_lastSentXferId; }
 int lastCommitResult() { return g_lastCommitResult; }
@@ -553,7 +553,7 @@ void noteAck(u32 xferId, int ok) { g_lastAckXferId = xferId; g_lastAckOk = ok; }
 u32  lastAckXferId() { return g_lastAckXferId; }
 int  lastAckOk()     { return g_lastAckOk; }
 
-#ifndef KENSHICOOP_PROTOTEST
+#ifndef TOKELACOOP_PROTOTEST
 void abortAll() {
     if (g_watchArmed) {
         g_watchArmed = false;

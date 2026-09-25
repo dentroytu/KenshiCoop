@@ -12,7 +12,7 @@ namespace crashdump {
 //
 // It is a first-chance FAULT tracer: one log line naming the faulting module +
 // offset, what address was read or written (or what C++ type was thrown), and the
-// call chain. With KenshiCoop.map those offsets resolve to function names, which is
+// call chain. With TokelaCoop.map those offsets resolve to function names, which is
 // the question a crash report has to answer. It always returns CONTINUE_SEARCH, so
 // Kenshi's crash dialog and RE_Kenshi's emergency save behave exactly as before.
 //
@@ -129,7 +129,7 @@ CaptureStackFn g_capture = 0;
 
 // Name the module a fault address lands in, as module+RVA. A bare absolute address
 // is worthless in a later triage session because ASLR moves every module, so the
-// log has to carry the offset - that is what KenshiCoop.map resolves to a function.
+// log has to carry the offset - that is what TokelaCoop.map resolves to a function.
 void attribute(const void* addr, char* out, size_t cap) {
     HMODULE m = 0;
     if (!GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
@@ -268,8 +268,8 @@ void report(EXCEPTION_POINTERS* ep, const char* origin) {
     // naming a fault and explaining it: the faulting address alone identified
     // CharBody::_patrol on 2026-08-03, but not who asked it to patrol, so the
     // cause stayed guesswork. Engine frames resolve against the "RVA = 0x..."
-    // comments in the vendored KenshiLib headers, ours against KenshiCoop.map -
-    // and a chain that passes through KenshiCoop.dll at all is the answer to the
+    // comments in the vendored KenshiLib headers, ours against TokelaCoop.map -
+    // and a chain that passes through TokelaCoop.dll at all is the answer to the
     // only question that really matters, which is whether the crash is ours.
     // A VEH runs ON the faulting thread's stack, so our own handler frames sit
     // directly on top of the frames that faulted.

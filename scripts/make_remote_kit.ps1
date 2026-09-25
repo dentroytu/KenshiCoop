@@ -6,10 +6,10 @@
   results zip to send back for analyze_run.ps1).
 
 .DESCRIPTION
-  Kit contents (dist\remote-kit\, zipped to dist\KenshiCoop-remote-kit-<stamp>.zip):
-    mod\KenshiCoop.dll        - the CURRENT build (protocol-version-matched to yours;
+  Kit contents (dist\remote-kit\, zipped to dist\TokelaCoop-remote-kit-<stamp>.zip):
+    mod\TokelaCoop.dll        - the CURRENT build (protocol-version-matched to yours;
     mod\RE_Kenshi.json          a mismatch is rejected at handshake by design)
-    mod\KenshiCoop.mod        - mod-list placeholder (copied from your install)
+    mod\TokelaCoop.mod        - mod-list placeholder (copied from your install)
     save\<name>\...           - the fixture save (both clients MUST load the identical
                                 save: entity identity is resolve-by-hand)
     friend_join.ps1           - the friend's one-command runner
@@ -69,8 +69,8 @@ if (-not $SkipBuild) {
     if ($LASTEXITCODE -ne 0) { throw "build failed ($LASTEXITCODE)" }
 }
 
-$dll  = Join-Path $repoRoot "src\plugin\x64\Harness\KenshiCoop.dll"
-$json = Join-Path $repoRoot "dist\mods\KenshiCoop\RE_Kenshi.json"
+$dll  = Join-Path $repoRoot "src\plugin\x64\Harness\TokelaCoop.dll"
+$json = Join-Path $repoRoot "dist\mods\TokelaCoop\RE_Kenshi.json"
 if (-not (Test-Path $dll))  { throw "DLL not built: $dll" }
 if (-not (Test-Path $json)) { throw "RE_Kenshi.json missing: $json" }
 
@@ -82,11 +82,12 @@ if (Test-Path $kitDir) { Remove-Item -Recurse -Force $kitDir }
 New-Item -ItemType Directory -Force -Path "$kitDir\mod" | Out-Null
 
 Write-Host "=== assembling kit ==="
-Copy-Item $dll  "$kitDir\mod\KenshiCoop.dll"
+Copy-Item $dll  "$kitDir\mod\TokelaCoop.dll"
 Copy-Item $json "$kitDir\mod\RE_Kenshi.json"
-$modFile = Join-Path $HostDir "mods\KenshiCoop\KenshiCoop.mod"
-if (Test-Path $modFile) { Copy-Item $modFile "$kitDir\mod\KenshiCoop.mod" }
-else { Write-Warning "No KenshiCoop.mod in the host install; the friend must create one via FCS." }
+# The repo owns the data mod (the two co-op starts), not the local install.
+$modFile = Join-Path $repoRoot "dist\mods\TokelaCoop\TokelaCoop.mod"
+if (-not (Test-Path $modFile)) { throw "dist\mods\TokelaCoop\TokelaCoop.mod not found in the repo" }
+Copy-Item $modFile "$kitDir\mod\TokelaCoop.mod"
 
 New-Item -ItemType Directory -Force -Path "$kitDir\save" | Out-Null
 Copy-Item -Recurse $saveSrc "$kitDir\save\$Save"
@@ -141,7 +142,7 @@ $psCmd = if ($Role -eq "host") {
 }
 
 @"
-KenshiCoop co-op kit  (your role: $($Role.ToUpper()))
+TokelaCoop co-op kit  (your role: $($Role.ToUpper()))
 =====================================
 
 QUICK START
@@ -237,7 +238,7 @@ UNINSTALL
 ---------
 
 Nothing else on your machine is touched. To remove: delete
-<Kenshi>\mods\KenshiCoop and the test save folder.
+<Kenshi>\mods\TokelaCoop and the test save folder.
 
 TROUBLESHOOTING
 ---------------
@@ -248,7 +249,7 @@ TROUBLESHOOTING
   * "RE_Kenshi not found": install RE_Kenshi into your Kenshi folder
     (https://www.nexusmods.com/kenshi/mods/847) and run the launcher again.
   * "The co-op plugin has not started": the game launched but RE_Kenshi did
-    not load the plugin. Check <Kenshi>\RE_Kenshi_log.txt for 'KenshiCoop';
+    not load the plugin. Check <Kenshi>\RE_Kenshi_log.txt for 'TokelaCoop';
     reinstalling RE_Kenshi usually fixes it.
 $(if ($steamKit) {
 "  * No connection: both Steams must be RUNNING and ONLINE (not offline
@@ -269,7 +270,7 @@ $(if ($steamKit) {
 "@ | Set-Content "$kitDir\README.txt" -Encoding UTF8
 
 $stamp = Get-Date -Format "yyyyMMdd_HHmmss"
-$zip = Join-Path $repoRoot "dist\KenshiCoop-remote-kit-$stamp.zip"
+$zip = Join-Path $repoRoot "dist\TokelaCoop-remote-kit-$stamp.zip"
 if (Test-Path $zip) { Remove-Item $zip }
 Compress-Archive -Path "$kitDir\*" -DestinationPath $zip
 Write-Host ""

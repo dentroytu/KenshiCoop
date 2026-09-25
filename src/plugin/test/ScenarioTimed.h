@@ -14,8 +14,8 @@
 // pass logic. This lives only in the Harness build (the whole test\ tree is
 // ExcludedFromBuild in Release).
 
-#ifndef KENSHICOOP_SCENARIO_TIMED_H
-#define KENSHICOOP_SCENARIO_TIMED_H
+#ifndef TOKELACOOP_SCENARIO_TIMED_H
+#define TOKELACOOP_SCENARIO_TIMED_H
 
 #include "Scenario.h"
 
@@ -54,4 +54,4 @@ protected:
 
 } // namespace coop
 
-#endif // KENSHICOOP_SCENARIO_TIMED_H
+#endif // TOKELACOOP_SCENARIO_TIMED_H

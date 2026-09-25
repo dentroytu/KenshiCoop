@@ -1,7 +1,7 @@
-// kcprobe - a fake KenshiCoop peer for testing the handshake on one PC, with
+// kcprobe - a fake TokelaCoop peer for testing the handshake on one PC, with
 // no second Kenshi and no second Steam account. Test-only; never shipped.
 //
-//   kcprobe client [options]   connect to a running KenshiCoop host (UDP),
+//   kcprobe client [options]   connect to a running TokelaCoop host (UDP),
 //                              send HELLO with any protocol version, and report
 //                              exactly how the host answered.
 //
@@ -23,7 +23,7 @@
 //   0 WELCOME, 2 refused VERSION, 3 refused FULL, 4 other refusal,
 //   5 disconnected without a reason code, 6 no answer, 1 usage/setup error.
 //
-//   kcprobe host [options]     listen like a KenshiCoop host (UDP) and answer
+//   kcprobe host [options]     listen like a TokelaCoop host (UDP) and answer
 //                              every HELLO the way --mode says, to test how a
 //                              real client (Kenshi) reacts.
 //

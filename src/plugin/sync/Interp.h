@@ -12,8 +12,8 @@
 // queue and samples here on the main tick), so no locking is needed. Plain
 // C++03 for the VS2010 (v100) toolchain.
 
-#ifndef KENSHICOOP_INTERP_H
-#define KENSHICOOP_INTERP_H
+#ifndef TOKELACOOP_INTERP_H
+#define TOKELACOOP_INTERP_H
 
 #include "../../netproto/Wire.h"
 
@@ -131,4 +131,4 @@ private:
 
 } // namespace coop
 
-#endif // KENSHICOOP_INTERP_H
+#endif // TOKELACOOP_INTERP_H

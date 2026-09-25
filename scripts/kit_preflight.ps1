@@ -16,6 +16,41 @@ function Invoke-KitUnblock {
     } catch {}
 }
 
+function Switch-ToTokelaCoop {
+    # Up to v0.53 the mod was KenshiCoop. RE_Kenshi loads the plugin of every
+    # ACTIVE mod, so a PC that ran an older kit would keep loading the old DLL
+    # (or both). Same steps as the player installer: carry the old config over,
+    # swap the mods.cfg line in place (or add TokelaCoop.mod), remove the folder.
+    param([string]$KenshiDir)
+    $newDir = Join-Path $KenshiDir "mods\TokelaCoop"
+    $oldDir = Join-Path $KenshiDir "mods\KenshiCoop"
+    $newCfg = Join-Path $newDir "coop_config.json"
+    if ((Test-Path (Join-Path $oldDir "coop_config.json")) -and -not (Test-Path $newCfg)) {
+        Copy-Item (Join-Path $oldDir "coop_config.json") $newCfg
+    }
+    $cfg = Join-Path $KenshiDir "data\mods.cfg"
+    $lines = @()
+    $nl = "`r`n"
+    if (Test-Path $cfg) {
+        $raw = [System.IO.File]::ReadAllText($cfg)
+        if ($raw -notmatch "`r`n" -and $raw -match "`n") { $nl = "`n" }
+        $lines = @($raw -split "`r?`n" | Where-Object { $_ -ne '' })
+    }
+    $out = @(); $have = $false
+    foreach ($l in $lines) {
+        $t = $l.Trim()
+        if ($t -ieq "TokelaCoop.mod") { if (-not $have) { $out += $l; $have = $true }; continue }
+        if ($t -ieq "KenshiCoop.mod") { if (-not $have) { $out += "TokelaCoop.mod"; $have = $true }; continue }
+        $out += $l
+    }
+    if (-not $have) { $out += "TokelaCoop.mod" }
+    [System.IO.File]::WriteAllText($cfg, (($out -join $nl) + $nl), (New-Object System.Text.UTF8Encoding($false)))
+    if (Test-Path $oldDir) {
+        try { Remove-Item -Recurse -Force $oldDir; Write-Host "Removed the old mods\KenshiCoop." }
+        catch { Write-Warning "Could not delete mods\KenshiCoop (it is disabled now): $($_.Exception.Message)" }
+    }
+}
+
 function Test-CoopPrereqs {
     # Throws (stopping the script) only for problems that guarantee a dead
     # session; anything survivable is a warning.
@@ -130,7 +165,7 @@ function Wait-PluginLoaded {
     }
     Write-Warning "The co-op plugin has not started (no log after $TimeoutSec s)."
     Write-Warning "The game may be running WITHOUT co-op. Check that RE_Kenshi is working:"
-    Write-Warning "  $KenshiDir\RE_Kenshi_log.txt should mention 'KenshiCoop'."
+    Write-Warning "  $KenshiDir\RE_Kenshi_log.txt should mention 'TokelaCoop'."
     Write-Warning "If RE_Kenshi is missing, install it: https://www.nexusmods.com/kenshi/mods/847"
     return $false
 }

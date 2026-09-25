@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  UPnP (IGD) port-mapping helpers for KenshiCoop host sessions. Dot-source
+  UPnP (IGD) port-mapping helpers for TokelaCoop host sessions. Dot-source
   this file, then call Add-UpnpMapping / Remove-UpnpMapping / Test-UpnpHairpin.
 
 .DESCRIPTION
@@ -136,7 +136,7 @@ function Add-UpnpMapping {
     # host is likely behind a second NAT (CGNAT) and the mapping won't help.
     param(
         [Parameter(Mandatory = $true)][int]$Port,
-        [string]$Description = "KenshiCoop"
+        [string]$Description = "TokelaCoop"
     )
     $result = [pscustomobject]@{ Ok = $false; ExternalIp = $null; LanIp = $null; Error = "" }
     $lanIp = Get-LanIPv4
@@ -243,7 +243,7 @@ function Test-UpnpHairpin {
     $listener = $null
     $sender = $null
     try {
-        $token = "KenshiCoopHairpin_" + [Guid]::NewGuid().ToString("N")
+        $token = "TokelaCoopHairpin_" + [Guid]::NewGuid().ToString("N")
         $payload = [System.Text.Encoding]::ASCII.GetBytes($token)
         $listener = New-Object System.Net.Sockets.UdpClient($Port)
         $listener.Client.ReceiveTimeout = 2500

@@ -2,12 +2,12 @@
 .SYNOPSIS
   Run ONE investigative spike end to end: (optionally) build + deploy the plugin,
   launch host+join via run_test.ps1 with the generic "spike" scenario selected by
-  KENSHICOOP_SPIKE=<id>, then collect the per-client logs + screenshots into
+  TOKELACOOP_SPIKE=<id>, then collect the per-client logs + screenshots into
   resources/spikes/<id>/raw/ for the findings doc.
 
 .DESCRIPTION
   The "spike" scenario (src/plugin/test/Scenario.cpp -> SpikeScenario) dispatches
-  on the KENSHICOOP_SPIKE env var, which run_test.ps1 does NOT touch, so we set it
+  on the TOKELACOOP_SPIKE env var, which run_test.ps1 does NOT touch, so we set it
   in this parent shell and it is inherited by the launched game processes.
 
   Diagnostic by nature: the deliverable is the EVIDENCE in the collected logs
@@ -30,7 +30,7 @@ param(
     [switch]$HostOnly,        # diagnostic probes that need no peer (faster)
     [int]$Port = 27800,
     [string]$Setup = "",
-    # Free-form per-spike argument forwarded to the plugin via KENSHICOOP_SPIKE_ARG
+    # Free-form per-spike argument forwarded to the plugin via TOKELACOOP_SPIKE_ARG
     # (e.g. spike 9 "bake5" = host-only bake of a 10-body battle save).
     [string]$SpikeArg = "",
     [int]$NetSimDelayMs = 0,
@@ -66,10 +66,10 @@ if (-not $SkipBuild) {
 }
 
 # ---- 2. run the spike --------------------------------------------------------
-# KENSHICOOP_SPIKE rides through to the launched processes (run_test.ps1's
+# TOKELACOOP_SPIKE rides through to the launched processes (run_test.ps1's
 # Set-CoopEnv never overwrites it).
-$env:KENSHICOOP_SPIKE = $Id
-$env:KENSHICOOP_SPIKE_ARG = $SpikeArg
+$env:TOKELACOOP_SPIKE = $Id
+$env:TOKELACOOP_SPIKE_ARG = $SpikeArg
 
 $outDir = ""
 $runArgs = @(
@@ -87,8 +87,8 @@ $out | ForEach-Object {
     Write-Host $_
     if ("$_" -match "out dir:\s+(.+)$") { $outDir = $Matches[1].Trim() }
 }
-$env:KENSHICOOP_SPIKE = ""
-$env:KENSHICOOP_SPIKE_ARG = ""
+$env:TOKELACOOP_SPIKE = ""
+$env:TOKELACOOP_SPIKE_ARG = ""
 
 # ---- 3. collect evidence -----------------------------------------------------
 if ($outDir -ne "" -and (Test-Path $outDir)) {

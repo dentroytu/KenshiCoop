@@ -13,7 +13,7 @@ dist/*.zip
 dist/*.dll
 dist/mod-kit/
 dist/remote-kit/
-dist/KenshiCoop-remote-kit-*.zip
+dist/TokelaCoop-remote-kit-*.zip
 
 # Manual co-op session captures (logs + screenshots)
 tools/manual-sessions/

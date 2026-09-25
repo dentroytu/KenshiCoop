@@ -8,8 +8,8 @@
 // Stage 0 surface is intentionally tiny: detect "gameplay is live" and drive the
 // save auto-load. Later stages extend this module with entity resolve/apply.
 
-#ifndef KENSHICOOP_ENGINE_H
-#define KENSHICOOP_ENGINE_H
+#ifndef TOKELACOOP_ENGINE_H
+#define TOKELACOOP_ENGINE_H
 
 #include <string>
 #include "../../netproto/Wire.h"
@@ -215,7 +215,7 @@ void setPeerCamHint(bool valid, float x, float y, float z);
 // where THEY are looking rather than about the merged anchor set. False when no
 // fresh hint has arrived.
 bool peerCamAnchor(float out[3]);
-// KENSHICOOP_CAM_INTEREST master enable: when off, interestCenters ignores
+// TOKELACOOP_CAM_INTEREST master enable: when off, interestCenters ignores
 // the camera anchors (squad-tab leaders only - the pre-43 behavior).
 void setCamInterest(bool on);
 
@@ -310,7 +310,7 @@ unsigned int countNpcsNear(GameWorld* gw, float x, float y, float z,
 // logs need a human-readable identity to classify pop-out reports.
 void charName(Character* c, char* out, unsigned int cap);
 
-// Debug marker HUD labels (KENSHICOOP_DEBUG_MARKERS, spike-47 substrate): mint
+// Debug marker HUD labels (TOKELACOOP_DEBUG_MARKERS, spike-47 substrate): mint
 // a colored text label pinned to a character; the engine's own projection
 // tracks the body every frame. colorId: 0 = green (host-driven), 1 = red
 // (hidden/suppressed), 2 = yellow (local-only ghost). Returns an opaque
@@ -701,7 +701,7 @@ int readGearGradeBySid(GameWorld* gw, const unsigned int cHand[5], const char* s
 // add it to the container at cHand - the fabricate path for a transfer whose local
 // source copy is missing (desync). Weapons need the manufacturer (and optionally the
 // material) sid - the spike-451 recipe inside createItemAndAdd consumes them; other
-// types ignore both. KENSHICOOP_WEAPON_FAB=0 disables the weapon branch entirely.
+// types ignore both. TOKELACOOP_WEAPON_FAB=0 disables the weapon branch entirely.
 // `level` is the wire's craft GRADE (protocol 51); GRADE_NA means the author had none to
 // report, so the rebuilt item keeps the factory default.
 // Returns the number added.
@@ -754,12 +754,12 @@ int removeItemsFromContainerBySid(GameWorld* gw, const unsigned int cHand[5],
 typedef int (*InvOwnerClassFn)(const unsigned int ownerHand[5]);
 void setInvOwnerClassifier(InvOwnerClassFn fn);
 
-// Enable/disable the cross-owner drag veto (KENSHICOOP_BLOCK_XFER). Off by
+// Enable/disable the cross-owner drag veto (TOKELACOOP_BLOCK_XFER). Off by
 // default until set; the veto only fires when a classifier is also registered.
 void setBlockXfer(bool on);
 
 // Detour Inventory::tryAddItem + removeItemDontDestroy_returnsItem for the veto
-// (and for diagnostic drag-sequence logging under KENSHICOOP_INV_DUMP=1).
+// (and for diagnostic drag-sequence logging under TOKELACOOP_INV_DUMP=1).
 // Returns true if both detours installed.
 bool installXferBlockHook();
 
@@ -959,7 +959,7 @@ int relocateWeaponToGround(GameWorld* gw, const unsigned int ownerHand[5],
 // material all ride WorldDropPacket) into the owner's bag and drop THAT. Heals the case
 // where the peer's copy was already destroyed - e.g. a bag snapshot that overtook the
 // intent. The caller must first confirm the owner hand resolves locally; weapon
-// fabrication still honours KENSHICOOP_WEAPON_FAB. Returns the number relocated.
+// fabrication still honours TOKELACOOP_WEAPON_FAB. Returns the number relocated.
 int fabricateWeaponToGround(GameWorld* gw, const unsigned int ownerHand[5],
                             const char* sid, unsigned int typeCat, int qualityBucket,
                             const char* manufacturer, const char* material,
@@ -1245,7 +1245,7 @@ void         clearAiSuspend();
 void         addAiSuspend(Character* c);
 unsigned int aiSuspendCount();
 
-// Task-selection observation spike (KENSHICOOP_TASK_SPIKE, OFF by default):
+// Task-selection observation spike (TOKELACOOP_TASK_SPIKE, OFF by default):
 // passively detours CharBody::setCurrentAction - the single seam every task
 // SELECTION result (AI scorer or player order) flows through before the body
 // executes it, separate from the periodicUpdate brain tick. Proves the seam is
@@ -1409,7 +1409,7 @@ unsigned int buffAllPlayerStats(GameWorld* gw, float value);
 // SEH-guarded: is any player-squad member (all tabs) an instance of the GameData
 // template `sid`? The template stringID comes from the game start and a rename
 // cannot change it, so it identifies WHICH start this world came from. Used to
-// recognise the "Multiplayer+ (Wanderer x2)" start (see WPX2_MARKER_SID in Plugin.cpp).
+// recognise the "TokelaCoop+ (Wanderer x2)" start (see WPX2_MARKER_SID in Plugin.cpp).
 bool playerSquadHasTemplate(GameWorld* gw, const char* sid);
 
 // ---- Protocol 18: carried-body sync --------------------------------------
@@ -1472,11 +1472,11 @@ struct ShackleRead {
     float lockpickChance;
 };
 bool readShackle(Character* c, ShackleRead* out);
-// Jail-probe read lever (KENSHICOOP_JAIL_PROBE): Character::isSlave() as int
+// Jail-probe read lever (TOKELACOOP_JAIL_PROBE): Character::isSlave() as int
 // (0 NOT_SLAVE / 1 IS_SLAVE / 2 ESCAPING_SLAVE / 3 EX_SLAVE), -1 if unresolved
 // or faulted. Read-only; answers whether the join marks its own PC a prisoner.
 int readSlaveState(Character* c);
-// Phase 6 (6a spike): env-gated ([shackledbg], KENSHICOOP_DEBUG_SHACKLE)
+// Phase 6 (6a spike): env-gated ([shackledbg], TOKELACOOP_DEBUG_SHACKLE)
 // per-character shackle/lock trace, throttled ~1 Hz. Enumerates nearby world
 // NPCs (prisoners are not in the player squad) and logs every body that is
 // chained or carries a shackle item, on BOTH clients, so a manual session
@@ -2227,7 +2227,7 @@ bool consumeSpeedIntent(GameWorld* gw, float* mult, bool* paused);
 // is live. Returns false when any target fails to resolve or hook.
 bool installSpeedIntentHooks(GameWorld* gw);
 
-// Spike probe (KENSHICOOP_SPEED_PROBE=1): read the MainBar speed-button
+// Spike probe (TOKELACOOP_SPEED_PROBE=1): read the MainBar speed-button
 // selected states into out (one char per button, '0'/'1', NUL-terminated;
 // cap n-1 buttons). Returns the button count read, -1 when the GUI isn't up.
 int readSpeedButtons(char* out, int n);
@@ -2245,4 +2245,4 @@ void reconcileVoteButtons();
 } // namespace engine
 } // namespace coop
 
-#endif // KENSHICOOP_ENGINE_H
+#endif // TOKELACOOP_ENGINE_H

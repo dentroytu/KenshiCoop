@@ -11,13 +11,17 @@
       folder without kenshi_x64.exe
     * Get-REKenshiState: missing / present-but-disabled / enabled, known build
       recognized by KenshiLib.dll hash, unknown otherwise
-    * Install-KenshiCoopFiles: copies the mod, keeps an existing
+    * Install-TokelaCoopFiles: copies the mod, keeps an existing
       coop_config.json, updates the DLL
-    * Enable-KenshiCoopMod: creates mods.cfg, appends once (idempotent,
+    * Enable-TokelaCoopMod: creates mods.cfg, appends once (idempotent,
       case-insensitive), keeps LF files LF
-    * Find-WorkshopKenshiCoop: flags a Workshop copy that would load twice
+    * upgrade from KenshiCoop (the name up to v0.53): the old mods.cfg line is
+      replaced in place, the old coop_config.json is carried over, the old
+      mods\KenshiCoop folder is removed
+    * Find-WorkshopTokelaCoop: flags a Workshop copy (either name) that would
+      load twice
     * the pinned RE_Kenshi download refuses a file with the wrong SHA-256
-  Also parses Install-KenshiCoop.ps1 so a syntax error fails CI.
+  Also parses Install-TokelaCoop.ps1 so a syntax error fails CI.
 
   Exit code = number of failed assertions (0 = PASS), like Contract.Tests.ps1.
 #>
@@ -28,7 +32,7 @@ $ErrorActionPreference = 'Stop'
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path   # scripts\tests
 $repoRoot  = Split-Path -Parent (Split-Path -Parent $scriptDir)
 $instDir   = Join-Path $repoRoot 'kit\installer'
-Import-Module (Join-Path $instDir 'KenshiCoopInstaller.psm1') -Force -DisableNameChecking
+Import-Module (Join-Path $instDir 'TokelaCoopInstaller.psm1') -Force -DisableNameChecking
 
 $script:Pass = 0
 $script:Fail = 0
@@ -51,9 +55,9 @@ try {
     Write-Host '== installer script parses =='
     $errs = $null
     [void][System.Management.Automation.Language.Parser]::ParseFile(
-        (Join-Path $instDir 'Install-KenshiCoop.ps1'), [ref]$null, [ref]$errs)
-    Check 'Install-KenshiCoop.ps1 has no parse errors' ($errs.Count -eq 0)
-    Check 'kit launcher exists' (Test-Path -LiteralPath (Join-Path $repoRoot 'kit\Instalar KenshiCoop.cmd'))
+        (Join-Path $instDir 'Install-TokelaCoop.ps1'), [ref]$null, [ref]$errs)
+    Check 'Install-TokelaCoop.ps1 has no parse errors' ($errs.Count -eq 0)
+    Check 'kit launcher exists' (Test-Path -LiteralPath (Join-Path $repoRoot 'kit\Instalar TokelaCoop.cmd'))
 
     Write-Host '== libraryfolders.vdf =='
     $modern = @'
@@ -114,40 +118,95 @@ try {
     $s = Get-REKenshiState $k
     Check 'enabled, unknown build' ($s.Installed -and $s.Enabled -and $s.Version -eq 'unknown')
 
-    Write-Host '== Install-KenshiCoopFiles =='
-    $kitMod = Join-Path $tmp 'kit\KenshiCoop'
+    Write-Host '== Install-TokelaCoopFiles =='
+    $kitMod = Join-Path $tmp 'kit\TokelaCoop'
     New-Item -ItemType Directory -Force -Path $kitMod | Out-Null
-    foreach ($n in 'KenshiCoop.dll', 'KenshiCoop.mod', 'RE_Kenshi.json') {
+    foreach ($n in 'TokelaCoop.dll', 'TokelaCoop.mod', 'RE_Kenshi.json') {
         Set-Content -LiteralPath (Join-Path $kitMod $n) -Value "v1 $n"
     }
     Set-Content -LiteralPath (Join-Path $kitMod 'coop_config.json') -Value '{ "transport": "steam" }'
-    $dst = Install-KenshiCoopFiles $kitMod $k
-    Check 'copied into mods\KenshiCoop' (Test-Path -LiteralPath (Join-Path $k 'mods\KenshiCoop\KenshiCoop.dll'))
+    $dst = Install-TokelaCoopFiles $kitMod $k
+    Check 'copied into mods\TokelaCoop' (Test-Path -LiteralPath (Join-Path $k 'mods\TokelaCoop\TokelaCoop.dll'))
     Check 'fresh install gets the default config' (Test-Path -LiteralPath (Join-Path $dst 'coop_config.json'))
     Set-Content -LiteralPath (Join-Path $dst 'coop_config.json') -Value '{ "transport": "udp", "ip": "10.0.0.2" }'
-    Set-Content -LiteralPath (Join-Path $kitMod 'KenshiCoop.dll') -Value 'v2 dll'
-    [void](Install-KenshiCoopFiles $kitMod $k)
-    Check 'update replaces the DLL' ((Get-Content -LiteralPath (Join-Path $dst 'KenshiCoop.dll') -Raw).Trim() -eq 'v2 dll')
+    Set-Content -LiteralPath (Join-Path $kitMod 'TokelaCoop.dll') -Value 'v2 dll'
+    [void](Install-TokelaCoopFiles $kitMod $k)
+    Check 'update replaces the DLL' ((Get-Content -LiteralPath (Join-Path $dst 'TokelaCoop.dll') -Raw).Trim() -eq 'v2 dll')
     Check 'update keeps the player''s coop_config.json' ((Get-Content -LiteralPath (Join-Path $dst 'coop_config.json') -Raw) -match '10\.0\.0\.2')
 
-    Write-Host '== Enable-KenshiCoopMod =='
+    Write-Host '== Enable-TokelaCoopMod =='
     $cfg = Join-Path $k 'data\mods.cfg'
-    Check 'creates mods.cfg when missing' ((Enable-KenshiCoopMod $k) -and (Test-Path -LiteralPath $cfg))
-    Check 'second run is a no-op' (-not (Enable-KenshiCoopMod $k))
-    [System.IO.File]::WriteAllText($cfg, "Dark UI.mod`nkenshicoop.MOD`n")
-    Check 'case-insensitive match is a no-op' (-not (Enable-KenshiCoopMod $k))
+    Check 'creates mods.cfg when missing' ((Enable-TokelaCoopMod $k) -and (Test-Path -LiteralPath $cfg))
+    Check 'second run is a no-op' (-not (Enable-TokelaCoopMod $k))
+    [System.IO.File]::WriteAllText($cfg, "Dark UI.mod`ntokelacoop.MOD`n")
+    Check 'case-insensitive match is a no-op' (-not (Enable-TokelaCoopMod $k))
     [System.IO.File]::WriteAllText($cfg, "Dark UI.mod`nNice Map.mod`n")
-    Check 'appends when absent' (Enable-KenshiCoopMod $k)
+    Check 'appends when absent' (Enable-TokelaCoopMod $k)
     $txt = [System.IO.File]::ReadAllText($cfg)
-    Check 'keeps order, appends last' ($txt -eq "Dark UI.mod`nNice Map.mod`nKenshiCoop.mod`n")
+    Check 'keeps order, appends last' ($txt -eq "Dark UI.mod`nNice Map.mod`nTokelaCoop.mod`n")
     Check 'keeps LF line endings' ($txt -notmatch "`r")
 
-    Write-Host '== Find-WorkshopKenshiCoop =='
-    Check 'no Workshop copy' (@(Find-WorkshopKenshiCoop $k).Count -eq 0)
+    Write-Host '== upgrade from KenshiCoop (the name up to v0.53) =='
+    # mods.cfg: the old line is replaced IN PLACE (load order kept), never both.
+    [System.IO.File]::WriteAllText($cfg, "Dark UI.mod`r`nkenshicoop.MOD`r`nNice Map.mod`r`n")
+    Check 'old KenshiCoop.mod line is a change' (Enable-TokelaCoopMod $k)
+    $txt = [System.IO.File]::ReadAllText($cfg)
+    Check 'old line replaced in the same place' ($txt -eq "Dark UI.mod`r`nTokelaCoop.mod`r`nNice Map.mod`r`n")
+    Check 'second run after the swap is a no-op' (-not (Enable-TokelaCoopMod $k))
+    [System.IO.File]::WriteAllText($cfg, "TokelaCoop.mod`nDark UI.mod`nKenshiCoop.mod`nTokelaCoop.mod`n")
+    [void](Enable-TokelaCoopMod $k)
+    Check 'both names listed -> only TokelaCoop, once, first place' `
+        ([System.IO.File]::ReadAllText($cfg) -eq "TokelaCoop.mod`nDark UI.mod`n")
+
+    # Files: the player's old config is carried over, then the old folder goes.
+    $k2 = New-FakeKenshi (Join-Path $tmp 'Upgrade\Kenshi')
+    $oldDir = Join-Path $k2 'mods\KenshiCoop'
+    New-Item -ItemType Directory -Force -Path $oldDir | Out-Null
+    foreach ($n in 'KenshiCoop.dll', 'KenshiCoop.mod', 'RE_Kenshi.json') {
+        Set-Content -LiteralPath (Join-Path $oldDir $n) -Value "old $n"
+    }
+    Set-Content -LiteralPath (Join-Path $oldDir 'coop_config.json') -Value '{ "transport": "udp", "ip": "192.168.1.50" }'
+    $dst2 = Install-TokelaCoopFiles $kitMod $k2
+    Check 'old coop_config.json carried into mods\TokelaCoop' `
+        ((Get-Content -LiteralPath (Join-Path $dst2 'coop_config.json') -Raw) -match '192\.168\.1\.50')
+    Set-Content -LiteralPath (Join-Path $dst2 'coop_config.json') -Value '{ "transport": "udp", "ip": "10.9.9.9" }'
+    [void](Install-TokelaCoopFiles $kitMod $k2)
+    Check 'an existing TokelaCoop config beats the old one' `
+        ((Get-Content -LiteralPath (Join-Path $dst2 'coop_config.json') -Raw) -match '10\.9\.9\.9')
+    Check 'old folder removed' ((Remove-LegacyKenshiCoop $k2) -ne '' -and -not (Test-Path -LiteralPath $oldDir))
+    Check 'nothing to remove the second time' ((Remove-LegacyKenshiCoop $k2) -eq '')
+    Check 'the new install is untouched' (Test-Path -LiteralPath (Join-Path $dst2 'TokelaCoop.dll'))
+
+    Write-Host '== Find-WorkshopTokelaCoop =='
+    Check 'no Workshop copy' (@(Find-WorkshopTokelaCoop $k).Count -eq 0)
     $wsItem = Join-Path $lib2 'steamapps\workshop\content\233860\999'
     New-Item -ItemType Directory -Force -Path $wsItem | Out-Null
-    Set-Content -LiteralPath (Join-Path $wsItem 'KenshiCoop.dll') -Value 'x'
-    Check 'flags a Workshop copy' (@(Find-WorkshopKenshiCoop $k).Count -eq 1)
+    Set-Content -LiteralPath (Join-Path $wsItem 'TokelaCoop.dll') -Value 'x'
+    Check 'flags a Workshop copy' (@(Find-WorkshopTokelaCoop $k).Count -eq 1)
+    $wsOld = Join-Path $lib2 'steamapps\workshop\content\233860\998'
+    New-Item -ItemType Directory -Force -Path $wsOld | Out-Null
+    Set-Content -LiteralPath (Join-Path $wsOld 'KenshiCoop.dll') -Value 'x'
+    Check 'flags an old KenshiCoop Workshop copy too' (@(Find-WorkshopTokelaCoop $k).Count -eq 2)
+
+    Write-Host '== shipped TokelaCoop.mod =='
+    Import-Module (Join-Path $repoRoot 'scripts\ModText.psm1') -Force
+    $shipped = Join-Path $repoRoot 'dist\mods\TokelaCoop\TokelaCoop.mod'
+    $info = Get-ModInfo $shipped
+    # Save identifiers: frozen under the name the records were first published with.
+    $ids = @($info.Records | ForEach-Object { $_.StringId })
+    $want = @(1..6 | ForEach-Object { "$_-KenshiCoop-MultiplayerStart.mod" })
+    Check 'the 6 record StringIds are the frozen ones' (($ids -join '|') -eq ($want -join '|'))
+    $names = @($info.Records | ForEach-Object { $_.Name })
+    Check 'the two starts are named TokelaCoop' ($names -contains 'TokelaCoop (Wanderer x2)' -and $names -contains 'TokelaCoop+ (Wanderer x2)')
+    $verLine = Select-String -Path (Join-Path $repoRoot 'src\netproto\Version.h') -Pattern '#define\s+TOKELACOOP_VERSION\s+"([0-9.]+)"'
+    $ver = $verLine.Matches[0].Groups[1].Value
+    Check "the description names TokelaCoop v$ver" ($info.Description -match [regex]::Escape("TokelaCoop v$ver"))
+    $copy = Join-Path $tmp 'stamp.mod'
+    Copy-Item -LiteralPath $shipped -Destination $copy
+    [void](Edit-ModFile -Path $copy -Description ($info.Description -replace 'TokelaCoop v[0-9.]+', 'TokelaCoop v9.99'))
+    $info2 = Get-ModInfo $copy
+    Check 'stamping another version keeps every record and StringId' `
+        (($info2.Records | ForEach-Object { $_.StringId }) -join '|' -eq ($want -join '|') -and $info2.Description -match 'TokelaCoop v9\.99')
 
     Write-Host '== pinned RE_Kenshi download =='
     $rel = Get-KcRelease

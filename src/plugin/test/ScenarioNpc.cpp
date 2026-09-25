@@ -791,7 +791,7 @@ const float NpcCensusScenario::GHOST_DIST = 600.0f;
 // range proxy minting. Host runtime spawns used to reach the join only via
 // the ~200 u stream bubble + the 250 u spawn-REQ proximity gate, so a raid
 // walking in from afar materialized at arm's length. With the census-missing
-// scan + reply-side mint gate (KENSHICOOP_SPAWN_MINT_RADIUS, 600 u default)
+// scan + reply-side mint gate (TOKELACOOP_SPAWN_MINT_RADIUS, 600 u default)
 // the join must mint the proxies while the squad is still FAR out and let
 // them walk in. (spawn_sync's far leg teleports the PLAYERS to the spawn, so
 // it never exercises approach-from-afar.)

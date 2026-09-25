@@ -90,16 +90,16 @@ try {
     # ---- 4. Host (unattended) --------------------------------------------------------
     Write-Host ""
     Write-Host "=== 4. launch host ==="
-    $env:KENSHICOOP_MODE         = "host"
-    $env:KENSHICOOP_IP           = "0.0.0.0"
-    $env:KENSHICOOP_PORT         = "$Port"
-    $env:KENSHICOOP_SAVE         = $Save
-    $env:KENSHICOOP_LOG          = $hostLog
-    $env:KENSHICOOP_SCENARIO     = $Scenario
-    $env:KENSHICOOP_SETUP        = $manifest.Scenarios[$Scenario].Setup
-    $env:KENSHICOOP_TEST_SECONDS = "600"
-    $env:KENSHICOOP_FAKE_CLOCK_SKEW_MS = "0"
-    $env:KENSHICOOP_ARM_TIMEOUT_MS = "240000"
+    $env:TOKELACOOP_MODE         = "host"
+    $env:TOKELACOOP_IP           = "0.0.0.0"
+    $env:TOKELACOOP_PORT         = "$Port"
+    $env:TOKELACOOP_SAVE         = $Save
+    $env:TOKELACOOP_LOG          = $hostLog
+    $env:TOKELACOOP_SCENARIO     = $Scenario
+    $env:TOKELACOOP_SETUP        = $manifest.Scenarios[$Scenario].Setup
+    $env:TOKELACOOP_TEST_SECONDS = "600"
+    $env:TOKELACOOP_FAKE_CLOCK_SKEW_MS = "0"
+    $env:TOKELACOOP_ARM_TIMEOUT_MS = "240000"
     $out = & (Join-Path $scriptDir "start_kenshi.ps1") -ExePath (Join-Path $HostDir "kenshi_x64.exe") -WorkDir $HostDir -TimeoutSec 120 6>&1
     $out | ForEach-Object { Write-Host "    $_" }
     $hostGamePid = 0
@@ -123,7 +123,7 @@ try {
     # ---- 6. Judge the collected logs ------------------------------------------------------
     Write-Host ""
     Write-Host "=== 6. judge collected logs (analyze_run path) ==="
-    $resultsZip = Get-ChildItem (Join-Path $kitDir "KenshiCoop-results-*.zip") -ErrorAction SilentlyContinue |
+    $resultsZip = Get-ChildItem (Join-Path $kitDir "TokelaCoop-results-*.zip") -ErrorAction SilentlyContinue |
                   Sort-Object LastWriteTime | Select-Object -Last 1
     if ($null -eq $resultsZip) { throw "friend_join produced no results zip (exit=$friendExit)" }
     Write-Host "  friend results: $($resultsZip.FullName)"

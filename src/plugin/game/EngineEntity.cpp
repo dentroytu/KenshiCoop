@@ -688,7 +688,7 @@ bool cameraFocusOn(GameWorld* gw, Character* c) {
 // Camera anchor stores (protocol 43, camera-anchored interest). Main-thread
 // only: the sync layer publishes these each tick (syncCamHint), and
 // interestCenters reads them in the same tick.
-static bool  s_camInterest    = true;  // KENSHICOOP_CAM_INTEREST master enable
+static bool  s_camInterest    = true;  // TOKELACOOP_CAM_INTEREST master enable
 static bool  s_localCamValid  = false;
 static float s_localCam[3]    = { 0.0f, 0.0f, 0.0f };
 static bool  s_peerCamValid   = false;
@@ -1050,7 +1050,7 @@ void charName(Character* c, char* out, unsigned int cap) {
 // markerDestroySeh + the public markerCreate/markerUpdate/markerDestroy) moved to
 // EngineUi.cpp (Phase 5e code motion) alongside the co-op panel + status overlay
 // that reuse the same ScreenLabel SEH shims. Their public declarations stay in
-// Engine.h (the Replicator uses them for KENSHICOOP_DEBUG_MARKERS).
+// Engine.h (the Replicator uses them for TOKELACOOP_DEBUG_MARKERS).
 
 // The helpers from here to readObjectHand have EXTERNAL linkage (declared in
 // EngineInternal.h): the inventory, spawn/combat and world TUs share them.

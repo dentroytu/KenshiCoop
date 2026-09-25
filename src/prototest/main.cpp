@@ -1,4 +1,4 @@
-// prototest - the asserting unit layer for the KenshiCoop wire protocol.
+// prototest - the asserting unit layer for the TokelaCoop wire protocol.
 //
 // Runs in milliseconds, before any game launch, as step 0 of every regression
 // tier (scripts/regress.ps1). Locks three things:
@@ -1131,7 +1131,7 @@ static void testOwnRanks() {
         CHECK("env override preserved as HOST", ranksAre(r, 2, 3));
     }
 
-    // CSV parse (KENSHICOOP_OWN_SQUAD/OWN_RANK surface).
+    // CSV parse (TOKELACOOP_OWN_SQUAD/OWN_RANK surface).
     {
         std::set<unsigned int> r;
         CHECK("parse '' -> no ranks",        !parseRankList("", r) && r.empty());
@@ -1263,10 +1263,10 @@ static void testModList() {
     // with identical mods). Same game in two folders = same list.
     const char* hostL = "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Kenshi\\data\\gamedata.base|0\n"
                         "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Kenshi\\data\\rebirth.mod|0\n"
-                        "Dust.mod|3\nKenshiCoop.mod|1\n";
+                        "Dust.mod|3\nTokelaCoop.mod|1\n";
     const char* joinL = "D:\\Games\\Kenshi\\data\\gamedata.base|0\n"
                         "D:/Games/Kenshi/data/rebirth.mod|0\n"
-                        "Dust.mod|3\nKenshiCoop.mod|1\n";
+                        "Dust.mod|3\nTokelaCoop.mod|1\n";
     coop::parseModText(hostL, (unsigned)std::strlen(hostL), va);
     coop::parseModText(joinL, (unsigned)std::strlen(joinL), vb);
     CHECK("path dropped from a built-in file", va[0].file == "gamedata.base" && va[0].builtIn);
@@ -1274,7 +1274,7 @@ static void testModList() {
     CHECK("a mod listed by name is not built-in", va[2].file == "Dust.mod" && !va[2].builtIn);
     CHECK("same game in two folders -> same", coop::diffModLists(va, vb).same());
     CHECK("mods.cfg text leaves the game's own files out",
-          coop::modsCfgText(vb) == "Dust.mod\r\nKenshiCoop.mod\r\n");
+          coop::modsCfgText(vb) == "Dust.mod\r\nTokelaCoop.mod\r\n");
 }
 
 static void testRefusal() {
@@ -2141,7 +2141,7 @@ static void testChangeGate() {
 }
 
 int main() {
-    std::printf("prototest: KenshiCoop wire/hash/interp unit layer (protocol v%u)\n",
+    std::printf("prototest: TokelaCoop wire/hash/interp unit layer (protocol v%u)\n",
                 (unsigned)PROTOCOL_VERSION);
     testSizes();
     testObjectHandLayout();

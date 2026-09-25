@@ -1,11 +1,22 @@
-# CLAUDE.md — KenshiCoop (fork de dentroytu)
+# CLAUDE.md — TokelaCoop (fork de dentroytu; hasta la v0.53 se llamaba KenshiCoop)
 
 Mod cooperativo de Kenshi, fork de `nhoral/KenshiCoop` (base: v0.51, commit `5a761e1`).
-Remotes: `origin` = dentroytu/KenshiCoop, `upstream` = nhoral/KenshiCoop.
+Remotes: `origin` = dentroytu/TokelaCoop (antes dentroytu/KenshiCoop; GitHub redirige), `upstream` = nhoral/KenshiCoop.
+
+**Nombre y versión.** Desde la v0.54 el proyecto se llama **TokelaCoop**: `TokelaCoop.dll` en
+`mods\TokelaCoop`, `TokelaCoop.mod` en `data\mods.cfg`, variables `TOKELACOOP_*`. La versión se escribe
+en un solo sitio, `src/netproto/Version.h` (`TOKELACOOP_VERSION`); el juego la muestra en el banner de arriba
+a la izquierda y en el título del panel F2 ("TokelaCoop v0.54"), y el kit la estampa en `PROVENANCE.json` y en
+la descripción del `.mod`. No hay que cambiar nunca los StringIds `N-KenshiCoop-MultiplayerStart.mod` del
+`.mod`: las partidas guardadas los usan. Si un Kenshi tiene cargada a la vez la DLL antigua `KenshiCoop.dll`,
+TokelaCoop no se activa y avisa.
 
 > **Estado (2026-09-25):**
 > - Compilación verificada en CI (`windows-2022`): `prototest`, `tunneltest`, DLL Harness y Release, y kit con instalador.
->   Releases publicadas: `v0.52` y `v0.53`.
+>   Releases publicadas: `v0.52` y `v0.53` (con el nombre KenshiCoop).
+> - **Sin probar en el juego (v0.54):** cargar como `TokelaCoop.dll` desde `mods\TokelaCoop`, la migración desde
+>   `mods\KenshiCoop` (instalador y `deploy.cmd`), el banner/F2/descripción con "TokelaCoop v0.54", los inicios
+>   renombrados y las partidas de prueba (`fixtures/saves`), que siguen listando el mod "KenshiCoop".
 > - **Verificado en el juego** (PC del autor del fork, Kenshi de Steam con RE_Kenshi):
 >   - el plugin carga;
 >   - el panel F2 abre en el menú principal, detecta el idioma (español) y colorea el estado (v0.53);
@@ -43,7 +54,8 @@ Remotes: `origin` = dentroytu/KenshiCoop, `upstream` = nhoral/KenshiCoop.
 
 Flujo de trabajo:
 - una rama por cambio, PR y fusión cuando el CI está en verde;
-- las releases se publican con una etiqueta `vX.YY` (última: `v0.53`);
+- las releases se publican con una etiqueta `vX.YY` (última: `v0.53`), que tiene que coincidir con
+  `TOKELACOOP_VERSION` de `src/netproto/Version.h` (el CI rechaza la etiqueta si no);
 - el dueño prefiere español y una UX muy sencilla.
 
 ## Objetivo del fork
@@ -90,14 +102,14 @@ Qué hace (y por qué):
 
 - Los parches se aplican desde la raíz del repo. El 0001 hace ENet 1.3.18 compatible con C89 (v100).
 - `third_party/vc10_compat/` es un shim versionado (`ammintrin.h`, `OgreConfig.h`, `OgrePlatformInformation.h`).
-- Las fuentes de ENet se compilan directamente dentro de `KenshiCoop.vcxproj`.
+- Las fuentes de ENet se compilan directamente dentro de `TokelaCoop.vcxproj`.
 
 ## CI (compilar sin Windows)
 
 `.github/workflows/build.yml` compila la DLL (Harness y Release) y ejecuta `prototest` en `windows-2022`
 en cada push. Instala el toolchain v100 igual que `tools/*.ps1`. Los artefactos son las DLLs.
 Si solo tienes el Mac, haz push y descarga la DLL del run:
-`gh run download --repo dentroytu/KenshiCoop -n KenshiCoop-<sha>`.
+`gh run download --repo dentroytu/TokelaCoop -n TokelaCoop-<sha>`.
 
 ## Compilar
 
@@ -108,7 +120,7 @@ scripts\build_plugin.cmd Debug
 scripts\build_prototest.cmd         :: dist\prototest.exe: tests unitarios del wire protocol
 ```
 
-Salida: `src\plugin\x64\<Config>\KenshiCoop.dll`.
+Salida: `src\plugin\x64\<Config>\TokelaCoop.dll`.
 
 ## Desplegar
 
@@ -116,7 +128,10 @@ Salida: `src\plugin\x64\<Config>\KenshiCoop.dll`.
 scripts\deploy.cmd ["C:\ruta\a\Kenshi"] [Harness|Release|Debug]
 ```
 
-Copia la DLL, `RE_Kenshi.json` y `KenshiCoop.mod` a `<Kenshi>\mods\KenshiCoop\`.
+Copia la DLL, `RE_Kenshi.json` y `TokelaCoop.mod` a `<Kenshi>\mods\TokelaCoop\`, en la instalación de Steam y en
+`Kenshi-Join`. Después `scripts\migrate_install.ps1` deja solo TokelaCoop activo en cada una: lleva el
+`coop_config.json` de `mods\KenshiCoop`, cambia en `data\mods.cfg` la línea `KenshiCoop.mod` por `TokelaCoop.mod`
+en su sitio (o la añade) y borra `mods\KenshiCoop`.
 Por defecto usa la ruta de Steam. Requisitos en el juego: Kenshi 1.0.65 (Steam) + RE_Kenshi 0.3.1+.
 
 Compatibilidad comprobada con análisis estático (2026-09-23), no ejecutando el juego:
@@ -130,22 +145,30 @@ Compatibilidad comprobada con análisis estático (2026-09-23), no ejecutando el
 
 - Fuentes del kit en `kit/`:
   - `README.txt`;
-  - `Instalar KenshiCoop.cmd`;
-  - `installer/Install-KenshiCoop.ps1`: el flujo interactivo;
-  - `installer/KenshiCoopInstaller.psm1`: la lógica, testeable.
-- `scripts/make_mod_kit.ps1 [-SkipBuild]` arma `dist/mod-kit/` y `dist/KenshiCoop-kit.zip`.
+  - `Instalar TokelaCoop.cmd`;
+  - `installer/Install-TokelaCoop.ps1`: el flujo interactivo;
+  - `installer/TokelaCoopInstaller.psm1`: la lógica, testeable.
+- `scripts/make_mod_kit.ps1 [-SkipBuild]` arma `dist/mod-kit/` y `dist/TokelaCoop-kit.zip`.
 - El instalador hace esto:
   - busca Kenshi en las librerías de Steam (`libraryfolders.vdf`), en GOG o preguntando;
   - si falta RE_Kenshi, descarga la 0.3.5 de GitHub, verifica su SHA-256 y abre su instalador oficial
     (obligatorio en 1.0.68; no tiene modo silencioso);
-  - copia a `mods\KenshiCoop` sin pisar `coop_config.json`;
-  - añade `KenshiCoop.mod` a `data\mods.cfg`;
-  - avisa si hay una copia en Workshop.
+  - copia a `mods\TokelaCoop` sin pisar `coop_config.json` (si no hay, trae el de `mods\KenshiCoop`);
+  - añade `TokelaCoop.mod` a `data\mods.cfg`, sustituyendo en su sitio una línea `KenshiCoop.mod`;
+  - borra `mods\KenshiCoop` (después de quitarlo de `mods.cfg`, para que nunca estén los dos activos);
+  - avisa si hay una copia en Workshop con cualquiera de los dos nombres.
 - Scripts en PowerShell 5.1, con los `.ps1`/`.psm1` en UTF-8 con BOM (si no, 5.1 rompe las tildes).
-- Tests sin juego: `scripts/tests/Installer.Tests.ps1`, con carpetas falsas; el CI los ejecuta con `powershell` 5.1.
-- CI: cada push sube el artefacto `KenshiCoop-kit-<sha>`.
-- Release: `git tag vX.Y.Z && git push origin vX.Y.Z` publica la Release con el zip y su `.sha256`.
-- Cambiar de versión de RE_Kenshi requiere tocar dos sitios de `KenshiCoopInstaller.psm1`:
+- Tests sin juego, que el CI ejecuta con `powershell` 5.1:
+  - `scripts/tests/Installer.Tests.ps1`, con carpetas falsas (incluye la migración y el `.mod` publicado);
+  - `scripts/tests/Contract.Tests.ps1` (manifiesto, oráculos y que no quede ningún `KENSHICOOP_`).
+- El `.mod` (`dist/mods/TokelaCoop/TokelaCoop.mod`) lo genera `tools/MultiplayerStartGen` (necesita .NET 9 y un
+  Kenshi); para cambiar solo textos (nombres, descripciones) basta `scripts/ModText.psm1`, que recalcula la
+  longitud de cada registro y se niega a tocar un StringId.
+- CI: cada push sube el artefacto `TokelaCoop-kit-<sha>`.
+- Release: sube `TOKELACOOP_VERSION` en `src/netproto/Version.h`, y luego
+  `git tag vX.YY && git push origin vX.YY` publica la Release con el zip y su `.sha256`
+  (el CI falla si la etiqueta no es `v` + esa versión).
+- Cambiar de versión de RE_Kenshi requiere tocar dos sitios de `TokelaCoopInstaller.psm1`:
   `$REKenshiRelease` (URL + SHA-256) y `$KnownKenshiLib` (hash de su `KenshiLib.dll`).
 
 ## Testear (harness de dos clientes en una sola máquina)
@@ -154,7 +177,7 @@ Compatibilidad comprobada con análisis estático (2026-09-23), no ejecutando el
   (fija en `dev_cycle.ps1` y en `deploy.cmd` por defecto).
 - **Join:** una copia independiente en `%USERPROFILE%\Kenshi-Join`, creada con
   `scripts\setup_join_install.cmd`. Es seguro repetirlo: conserva los `save/` y la configuración del join.
-- Los clientes se configuran por variables de entorno `KENSHICOOP_*` (MODE, IP, PORT,
+- Los clientes se configuran por variables de entorno `TOKELACOOP_*` (MODE, IP, PORT,
   SAVE, TEST_SECONDS, SCENARIO, LOG…). Ver `docs/API_REFERENCE.md` §14.
 
 ```powershell
@@ -171,7 +194,7 @@ powershell -ExecutionPolicy Bypass -File scripts\regress.ps1 -Tier full -SkipBui
 - Handshake sin segundo Kenshi: `scripts\build_kcprobe.cmd` y `dist\kcprobe.exe client --version N [--hold MS] [--exit goodbye|crash] [--junk] [--retry MS]`,
   un cliente falso contra un host real (UDP). Solo para pruebas; no va en el kit.
 - `scripts\build_tunneltest.cmd` y `dist\tunneltest.exe`: ENet por el modelo del túnel de Steam (1200 bytes, pérdida), sin juego. Lo ejecuta el CI.
-- En el juego: `<Kenshi>\KenshiCoop_host.log` / `_join.log` y `RE_Kenshi_log.txt`.
+- En el juego: `<Kenshi>\TokelaCoop_host.log` / `_join.log` y `RE_Kenshi_log.txt`.
 
 ## Arquitectura
 
@@ -194,7 +217,7 @@ powershell -ExecutionPolicy Bypass -File scripts\regress.ps1 -Tier full -SkipBui
 - **Autoridad:** el host es autoritativo del mundo (NPCs, facciones, tiempo, dinero, edificios);
   cada cliente lo es de **su propio squad**. Las acciones sobre cosas que no posees viajan como
   *intents* (p. ej. `PKT_INV_XFER`) al dueño.
-- **Escenarios** (`src/plugin/test/`): solo en las configuraciones Harness y Debug (`KENSHICOOP_HARNESS`).
+- **Escenarios** (`src/plugin/test/`): solo en las configuraciones Harness y Debug (`TOKELACOOP_HARNESS`).
 
 ## Reglas al tocar código
 

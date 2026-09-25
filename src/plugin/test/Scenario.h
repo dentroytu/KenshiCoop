@@ -7,8 +7,8 @@
 // "SCENARIO RESULT PASS" from each client. Keep these schema strings stable -
 // run_test.ps1 parses them.
 
-#ifndef KENSHICOOP_SCENARIO_H
-#define KENSHICOOP_SCENARIO_H
+#ifndef TOKELACOOP_SCENARIO_H
+#define TOKELACOOP_SCENARIO_H
 
 #include <string>
 #include "../../netproto/Wire.h"
@@ -66,4 +66,4 @@ Scenario* makeScenario(const std::string& name);
 
 } // namespace coop
 
-#endif // KENSHICOOP_SCENARIO_H
+#endif // TOKELACOOP_SCENARIO_H

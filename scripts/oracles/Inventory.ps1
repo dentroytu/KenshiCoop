@@ -989,7 +989,7 @@ function Test-WorldPickupMirror {
                             claimed = $claimed; applied = $applied })
 }
 
-# world_item_stale: the join's proxy is freed by the ENGINE (KENSHICOOP_WI_TEST_STALE
+# world_item_stale: the join's proxy is freed by the ENGINE (TOKELACOOP_WI_TEST_STALE
 # injects it at the exact moment a zone teardown would) and the cull about to run on
 # it must notice through the proxy's HAND rather than by touching the object.
 #   staleCull>=1   - the injection actually met the cull. Without it the run proves
@@ -1231,7 +1231,7 @@ function Test-NestedBag {
         $grpLines = @(Select-String -Path $JoinFile -Pattern $grpRx -ErrorAction SilentlyContinue)
     }
     if ($grpLines.Count -eq 0) {
-        Write-Host "  NESTED-BAG FAIL - no '[recon] grp' lines in the join log, so the churn check could not run (this scenario's manifest sets KENSHICOOP_INV_DUMP=1; without it the gate is blind to a destroy/recreate loop)"
+        Write-Host "  NESTED-BAG FAIL - no '[recon] grp' lines in the join log, so the churn check could not run (this scenario's manifest sets TOKELACOOP_INV_DUMP=1; without it the gate is blind to a destroy/recreate loop)"
         $ok = $false
         $churn = -1
     } else {

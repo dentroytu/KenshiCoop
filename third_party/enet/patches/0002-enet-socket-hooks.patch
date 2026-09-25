@@ -1,4 +1,4 @@
-Optional datagram-transport hooks for ENet 1.3.18 (KenshiCoop Steam P2P
+Optional datagram-transport hooks for ENet 1.3.18 (TokelaCoop Steam P2P
 transport). Adds an ENetSocketHooks struct + enet_set_socket_hooks(): when
 installed, enet_socket_{create,bind,send,receive,wait,destroy} delegate to the
 hooks instead of Winsock UDP, so the entire ENet protocol can be tunnelled

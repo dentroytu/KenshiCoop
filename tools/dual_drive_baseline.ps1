@@ -8,7 +8,7 @@
   dual_drive is the mutual-drive detector added for the 2026-08-08 cell
   authority bug. Before it is allowed to gate anything it needs a baseline: how
   often does it fire on runs nobody considered broken? Every scenario that
-  opts into KENSHICOOP_CELL_AUTH already has archived host/join log pairs under
+  opts into TOKELACOOP_CELL_AUTH already has archived host/join log pairs under
   tools\test-runs, and the oracle is a pure log reader, so the baseline is a
   replay rather than a re-run.
 

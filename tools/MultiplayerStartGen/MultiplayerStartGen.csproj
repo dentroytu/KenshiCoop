@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- Generator for the KenshiCoop game starts. Build-time tool only: it emits the
-       FCS data mod (dist/mods/KenshiCoop/KenshiCoop.mod) and is not part of the C++ plugin. -->
+  <!-- Generator for the TokelaCoop game starts. Build-time tool only: it emits the
+       FCS data mod (dist/mods/TokelaCoop/TokelaCoop.mod) and is not part of the C++ plugin. -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <!-- OpenConstructionSet 4.1.0 targets net9.0; anything older will not restore. -->

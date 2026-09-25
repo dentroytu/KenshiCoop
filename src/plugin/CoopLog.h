@@ -1,4 +1,4 @@
-// CoopLog - tiny thread-safe file logger for KenshiCoop.
+// CoopLog - tiny thread-safe file logger for TokelaCoop.
 //
 // Why a separate logger when KenshiLib already has DebugLog/ErrorLog?
 //   * Those route into the engine's kenshi.log, which is overwritten each
@@ -10,11 +10,11 @@
 //
 // Output is a dedicated, per-line-flushed file (so it survives a hard kill),
 // with a timestamp + mode tag (HOST/JOIN) on every line. The high-level
-// coopLog()/coopErr() wrappers in KenshiCoop.cpp call BOTH this and the
+// coopLog()/coopErr() wrappers in Plugin.cpp call BOTH this and the
 // KenshiLib helpers, so events still appear in kenshi.log as before.
 
-#ifndef KENSHICOOP_COOPLOG_H
-#define KENSHICOOP_COOPLOG_H
+#ifndef TOKELACOOP_COOPLOG_H
+#define TOKELACOOP_COOPLOG_H
 
 namespace coop {
 
@@ -32,7 +32,7 @@ void logInit(const char* path, const char* modeTag);
 unsigned long wallClockMs();
 
 // Inject a fake wall-clock skew (ms, may be negative). Set once at startup from
-// KENSHICOOP_FAKE_CLOCK_SKEW_MS (join only) BEFORE logInit. 0 = real clock.
+// TOKELACOOP_FAKE_CLOCK_SKEW_MS (join only) BEFORE logInit. 0 = real clock.
 void logSetFakeSkewMs(long skewMs);
 
 // Append one INFO/ERROR line (timestamped, tagged) and flush. Thread-safe.
@@ -44,4 +44,4 @@ void logClose();
 
 } // namespace coop
 
-#endif // KENSHICOOP_COOPLOG_H
+#endif // TOKELACOOP_COOPLOG_H

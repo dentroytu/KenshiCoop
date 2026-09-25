@@ -12,9 +12,9 @@
 // as those decls move into EngineScenario.h, Engine.h shrinks to the pure sync
 // surface and this header stays the Replicator's unchanged include point.
 
-#ifndef KENSHICOOP_ENGINE_SYNC_H
-#define KENSHICOOP_ENGINE_SYNC_H
+#ifndef TOKELACOOP_ENGINE_SYNC_H
+#define TOKELACOOP_ENGINE_SYNC_H
 
 #include "Engine.h"
 
-#endif // KENSHICOOP_ENGINE_SYNC_H
+#endif // TOKELACOOP_ENGINE_SYNC_H

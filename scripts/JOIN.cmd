@@ -1,5 +1,5 @@
 @echo off
-rem Double-click entry point for joining a KenshiCoop session. Prompts for the
+rem Double-click entry point for joining a TokelaCoop session. Prompts for the
 rem one thing the script can't know (how to reach the host) and hands off to
 rem friend_join.ps1 - so players never have to open PowerShell or type a
 rem command line. Ships inside the kit next to friend_join.ps1.
@@ -7,10 +7,10 @@ rem Input with a dot is treated as the host's IP (direct-UDP kits); anything
 rem else as a Steam friend code / SteamID64 (Steam P2P kits).
 setlocal
 cd /d "%~dp0"
-title KenshiCoop - JOIN
+title TokelaCoop - JOIN
 echo.
 echo  =================================
-echo    KenshiCoop  -  JOIN a session
+echo    TokelaCoop  -  JOIN a session
 echo  =================================
 echo.
 rem Show THIS player's friend code first (read from Steam) so both players

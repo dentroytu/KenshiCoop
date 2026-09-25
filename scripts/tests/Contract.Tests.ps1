@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Zero-game contract + drift fixtures for the KenshiCoop harness (Phase 0 safety
+  Zero-game contract + drift fixtures for the TokelaCoop harness (Phase 0 safety
   net). Runs in milliseconds with NO game launch and NO built DLL - it only reads
   the manifest, the oracle library and the C++ scenario factory, so it can gate
   every commit and every later refactor phase.
@@ -87,7 +87,7 @@ $manifestlessCpp = @('world_item_drop')
 
 # The reverse allowlist: manifest scenarios that are RUNNER-ONLY - judged by a
 # gate but driven by a bespoke script (a normal co-op tick, NOT a compiled
-# KENSHICOOP_SCENARIO), so they intentionally have no C++ maker. bootstrap_stream
+# TOKELACOOP_SCENARIO), so they intentionally have no C++ maker. bootstrap_stream
 # is the missing-save streaming proof, run by scripts\stream_test.ps1.
 $manifestRunnerOnly = @('bootstrap_stream')
 
@@ -247,11 +247,11 @@ $joinLog = Join-Path $tmpDir "join.log"
 # Clean logs: reached gameplay, clean scenario exit, >=3 CLOCKSYNC samples, but
 # NO MEMBER/RECV series (so any position oracle legitimately SKIPs = no signal).
 @(
-    "[10:00:00.000] HOST KenshiCoop: gameplay started",
+    "[10:00:00.000] HOST TokelaCoop: gameplay started",
     "[10:00:02.000] HOST SCENARIO RESULT PASS"
 ) | Set-Content -Path $hostLog -Encoding UTF8
 @(
-    "[10:00:00.000] JOIN KenshiCoop: gameplay started",
+    "[10:00:00.000] JOIN TokelaCoop: gameplay started",
     "[10:00:00.100] JOIN CLOCKSYNC offset=5 rtt=10 n=1",
     "[10:00:00.600] JOIN CLOCKSYNC offset=4 rtt=8 n=2",
     "[10:00:01.100] JOIN CLOCKSYNC offset=4 rtt=8 n=3",
@@ -314,8 +314,8 @@ Check "CoopHarness exposes a non-empty DiagEnv keyset" ($diagKeys.Count -gt 0)
 $badDiag = @()
 # Every knob is a 0/1 gate EXCEPT the few that carry a magnitude (a batch cap, say). Those are
 # named here rather than loosening the rule, so a typo in a real gate still fails loudly.
-$numericDiagKeys = @('KENSHICOOP_WI_BATCH_MAX', 'KENSHICOOP_WD_TRANSIENT_DEAD',
-                     'KENSHICOOP_ADOPT_RADIUS')
+$numericDiagKeys = @('TOKELACOOP_WI_BATCH_MAX', 'TOKELACOOP_WD_TRANSIENT_DEAD',
+                     'TOKELACOOP_ADOPT_RADIUS')
 foreach ($name in $scenarios.Keys) {
     $e = $scenarios[$name]
     if (-not $e.ContainsKey('DiagEnv')) { continue }
@@ -334,51 +334,51 @@ Check "every DiagEnv key is known + valued 0/1 (or numeric where declared)" ($ba
 #     drifts from the manifest, a probe would silently run with the wrong channel
 #     state (its baseline invalidated). Kept here on purpose as the second source.
 $diagSpec = @{
-    speed_probe    = @{ KENSHICOOP_SPEED_SYNC = '0' }
-    shop_probe     = @{ KENSHICOOP_MONEY_SYNC = '0' }
-    spawn_probe    = @{ KENSHICOOP_SPAWN_SYNC = '0' }
-    recruit_probe  = @{ KENSHICOOP_RECRUIT_SYNC = '0' }
-    faction_probe  = @{ KENSHICOOP_FACTION_SYNC = '0' }
-    time_probe     = @{ KENSHICOOP_TIME_SYNC = '0'; KENSHICOOP_SPEED_SYNC = '0' }
-    door_probe     = @{ KENSHICOOP_DOOR_SYNC = '0' }
-    build_probe    = @{ KENSHICOOP_BUILD_SYNC = '0' }
-    bdoor_probe    = @{ KENSHICOOP_BDOOR_SYNC = '0' }
-    hunger_probe   = @{ KENSHICOOP_HUNGER_SYNC = '0' }
-    save_probe     = @{ KENSHICOOP_SAVE_SYNC = '0' }
-    load_probe     = @{ KENSHICOOP_LOAD_SYNC = '0' }
-    prod_probe     = @{ KENSHICOOP_PROD_SYNC = '0' }
-    research_probe = @{ KENSHICOOP_RESEARCH_SYNC = '0' }
-    deed_probe     = @{ KENSHICOOP_DEED_SYNC = '0' }
-    store_probe    = @{ KENSHICOOP_STORE_SYNC = '0' }
-    squad_probe    = @{ KENSHICOOP_SQUAD_SYNC = '0' }
-    latejoin_probe = @{ KENSHICOOP_LATEJOIN_SYNC = '0' }
-    speed_sync     = @{ KENSHICOOP_TIME_SYNC = '0' }
-    trade_probe    = @{ KENSHICOOP_XFER_SYNC = '0'; KENSHICOOP_INV_SYNC = '1' }
-    xfer_block     = @{ KENSHICOOP_INV_SYNC = '1'; KENSHICOOP_BLOCK_XFER = '1' }
-    inv_order      = @{ KENSHICOOP_INV_SYNC = '1' }
-    inv_bidir      = @{ KENSHICOOP_INV_SYNC = '1' }
-    inv_equip      = @{ KENSHICOOP_INV_SYNC = '1' }
-    inv_reequip    = @{ KENSHICOOP_INV_SYNC = '1' }
-    vendor_trade   = @{ KENSHICOOP_INV_SYNC = '1' }
-    store_sync     = @{ KENSHICOOP_INV_SYNC = '1' }
-    trade_peer     = @{ KENSHICOOP_INV_SYNC = '1' }
-    weapon_loot    = @{ KENSHICOOP_INV_SYNC = '1' }
-    world_weapon_drop = @{ KENSHICOOP_INV_SYNC = '1'; KENSHICOOP_WORLD_SYNC = '1' }
-    world_armor_drop  = @{ KENSHICOOP_INV_SYNC = '1'; KENSHICOOP_WORLD_SYNC = '1' }
-    inv_backpack_drop = @{ KENSHICOOP_INV_SYNC = '1'; KENSHICOOP_WORLD_SYNC = '1' }
-    world_pickup_mirror = @{ KENSHICOOP_INV_SYNC = '1'; KENSHICOOP_WORLD_SYNC = '1' }
-    inv_regear     = @{ KENSHICOOP_INV_SYNC = '1'; KENSHICOOP_WORLD_SYNC = '1' }
-    inv_regear_refuse = @{ KENSHICOOP_INV_SYNC = '1'; KENSHICOOP_WORLD_SYNC = '1' }
-    inv_regear_refuse_all = @{ KENSHICOOP_INV_SYNC = '1'; KENSHICOOP_WORLD_SYNC = '1' }
-    inv_regear_forget = @{ KENSHICOOP_INV_SYNC = '1'; KENSHICOOP_WORLD_SYNC = '1' }
-    world_item_burst = @{ KENSHICOOP_WORLD_SYNC = '1' }
-    inv_nested_bag  = @{ KENSHICOOP_INV_SYNC = '1'; KENSHICOOP_WORLD_SYNC = '1' }
-    inv_dump_all    = @{ KENSHICOOP_INV_SYNC = '1'; KENSHICOOP_WORLD_SYNC = '1' }
-    inv_dump_all_forget = @{ KENSHICOOP_INV_SYNC = '1'; KENSHICOOP_WORLD_SYNC = '1' }
-    inv_dump_all_transient = @{ KENSHICOOP_INV_SYNC = '1'; KENSHICOOP_WORLD_SYNC = '1' }
-    world_item_sync = @{ KENSHICOOP_WORLD_SYNC = '1' }
-    world_item_join = @{ KENSHICOOP_WORLD_SYNC = '1' }
-    limb_loss       = @{ KENSHICOOP_WORLD_SYNC = '1' }
+    speed_probe    = @{ TOKELACOOP_SPEED_SYNC = '0' }
+    shop_probe     = @{ TOKELACOOP_MONEY_SYNC = '0' }
+    spawn_probe    = @{ TOKELACOOP_SPAWN_SYNC = '0' }
+    recruit_probe  = @{ TOKELACOOP_RECRUIT_SYNC = '0' }
+    faction_probe  = @{ TOKELACOOP_FACTION_SYNC = '0' }
+    time_probe     = @{ TOKELACOOP_TIME_SYNC = '0'; TOKELACOOP_SPEED_SYNC = '0' }
+    door_probe     = @{ TOKELACOOP_DOOR_SYNC = '0' }
+    build_probe    = @{ TOKELACOOP_BUILD_SYNC = '0' }
+    bdoor_probe    = @{ TOKELACOOP_BDOOR_SYNC = '0' }
+    hunger_probe   = @{ TOKELACOOP_HUNGER_SYNC = '0' }
+    save_probe     = @{ TOKELACOOP_SAVE_SYNC = '0' }
+    load_probe     = @{ TOKELACOOP_LOAD_SYNC = '0' }
+    prod_probe     = @{ TOKELACOOP_PROD_SYNC = '0' }
+    research_probe = @{ TOKELACOOP_RESEARCH_SYNC = '0' }
+    deed_probe     = @{ TOKELACOOP_DEED_SYNC = '0' }
+    store_probe    = @{ TOKELACOOP_STORE_SYNC = '0' }
+    squad_probe    = @{ TOKELACOOP_SQUAD_SYNC = '0' }
+    latejoin_probe = @{ TOKELACOOP_LATEJOIN_SYNC = '0' }
+    speed_sync     = @{ TOKELACOOP_TIME_SYNC = '0' }
+    trade_probe    = @{ TOKELACOOP_XFER_SYNC = '0'; TOKELACOOP_INV_SYNC = '1' }
+    xfer_block     = @{ TOKELACOOP_INV_SYNC = '1'; TOKELACOOP_BLOCK_XFER = '1' }
+    inv_order      = @{ TOKELACOOP_INV_SYNC = '1' }
+    inv_bidir      = @{ TOKELACOOP_INV_SYNC = '1' }
+    inv_equip      = @{ TOKELACOOP_INV_SYNC = '1' }
+    inv_reequip    = @{ TOKELACOOP_INV_SYNC = '1' }
+    vendor_trade   = @{ TOKELACOOP_INV_SYNC = '1' }
+    store_sync     = @{ TOKELACOOP_INV_SYNC = '1' }
+    trade_peer     = @{ TOKELACOOP_INV_SYNC = '1' }
+    weapon_loot    = @{ TOKELACOOP_INV_SYNC = '1' }
+    world_weapon_drop = @{ TOKELACOOP_INV_SYNC = '1'; TOKELACOOP_WORLD_SYNC = '1' }
+    world_armor_drop  = @{ TOKELACOOP_INV_SYNC = '1'; TOKELACOOP_WORLD_SYNC = '1' }
+    inv_backpack_drop = @{ TOKELACOOP_INV_SYNC = '1'; TOKELACOOP_WORLD_SYNC = '1' }
+    world_pickup_mirror = @{ TOKELACOOP_INV_SYNC = '1'; TOKELACOOP_WORLD_SYNC = '1' }
+    inv_regear     = @{ TOKELACOOP_INV_SYNC = '1'; TOKELACOOP_WORLD_SYNC = '1' }
+    inv_regear_refuse = @{ TOKELACOOP_INV_SYNC = '1'; TOKELACOOP_WORLD_SYNC = '1' }
+    inv_regear_refuse_all = @{ TOKELACOOP_INV_SYNC = '1'; TOKELACOOP_WORLD_SYNC = '1' }
+    inv_regear_forget = @{ TOKELACOOP_INV_SYNC = '1'; TOKELACOOP_WORLD_SYNC = '1' }
+    world_item_burst = @{ TOKELACOOP_WORLD_SYNC = '1' }
+    inv_nested_bag  = @{ TOKELACOOP_INV_SYNC = '1'; TOKELACOOP_WORLD_SYNC = '1' }
+    inv_dump_all    = @{ TOKELACOOP_INV_SYNC = '1'; TOKELACOOP_WORLD_SYNC = '1' }
+    inv_dump_all_forget = @{ TOKELACOOP_INV_SYNC = '1'; TOKELACOOP_WORLD_SYNC = '1' }
+    inv_dump_all_transient = @{ TOKELACOOP_INV_SYNC = '1'; TOKELACOOP_WORLD_SYNC = '1' }
+    world_item_sync = @{ TOKELACOOP_WORLD_SYNC = '1' }
+    world_item_join = @{ TOKELACOOP_WORLD_SYNC = '1' }
+    limb_loss       = @{ TOKELACOOP_WORLD_SYNC = '1' }
 }
 $specMiss = @()
 foreach ($name in $diagSpec.Keys) {
@@ -442,6 +442,28 @@ $adapter = Join-Path $gameDir "EngineInternal.h"
 $adapterHasInternal = (Test-Path $adapter) -and `
     ((Select-String -Path $adapter -Pattern $internalIncludeRe).Count -gt 0)
 Check "adapter EngineInternal.h carries the game-internal prelude" $adapterHasInternal
+
+# ---- 6. the v0.54 rename (KenshiCoop -> TokelaCoop) ---------------------------
+# The env-var prefix and the build defines are a contract between the scripts and
+# the DLL: a leftover old name on either side makes a knob silently do nothing
+# (the DLL falls back to its default). Everything must use TOKELACOOP_ now.
+Write-Host "== rename contract (TOKELACOOP_ everywhere) =="
+$oldPrefix = "KENSHI" + "COOP"
+$codeFiles = @(Get-ChildItem -Path (Join-Path $repoRoot "src"), $scriptsRoot, (Join-Path $repoRoot "kit"),
+                   (Join-Path $repoRoot "tools"), (Join-Path $repoRoot "third_party\vc10_compat") `
+                   -Recurse -File -Include *.cpp, *.h, *.ps1, *.psm1, *.psd1, *.cmd, *.cs, *.vcxproj -ErrorAction SilentlyContinue)
+$stale = @($codeFiles | Select-String -Pattern $oldPrefix -CaseSensitive -SimpleMatch)
+if ($stale.Count -gt 0) { $stale | Select-Object -First 10 | ForEach-Object { Write-Host "      $($_.Path):$($_.LineNumber)" } }
+Check "no old env-var prefix / build define left in code and scripts" ($stale.Count -eq 0)
+Check "rename check scanned the plugin and the scripts" ($codeFiles.Count -gt 100)
+$keysInCode = @(Get-CoopDiagEnvKeys)
+$srcText = (Get-ChildItem -Path (Join-Path $repoRoot "src") -Recurse -File -Include *.cpp, *.h |
+            ForEach-Object { [IO.File]::ReadAllText($_.FullName) }) -join "`n"
+$unread = @($keysInCode | Where-Object { $srcText.IndexOf('"' + $_ + '"') -lt 0 })
+if ($unread.Count -gt 0) { Write-Host ("      not read by the DLL: " + ($unread -join ", ")) }
+Check "every harness DiagEnv key is a literal the DLL reads" ($unread.Count -eq 0)
+$verLine = Select-String -Path (Join-Path $repoRoot "src\netproto\Version.h") -Pattern '#define\s+TOKELACOOP_VERSION\s+"[0-9]+\.[0-9]+"'
+Check "Version.h defines TOKELACOOP_VERSION as X.YY" ($null -ne $verLine)
 
 # ---- cleanup ------------------------------------------------------------------
 Remove-Item -Path $tmpH, $tmpJ -Force -ErrorAction SilentlyContinue

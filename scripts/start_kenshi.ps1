@@ -13,7 +13,7 @@
 #   4. clicks OK via BM_CLICK (cross-process; no screen coordinates needed),
 #   5. returns the real game's process Id (written to stdout as "GAMEPID=<id>").
 #
-# Env vars (KENSHICOOP_*) must be set by the caller before invoking; they are
+# Env vars (TOKELACOOP_*) must be set by the caller before invoking; they are
 # inherited by the launched process and propagate to the relaunched game.
 
 param(

@@ -2,7 +2,7 @@
 .SYNOPSIS
   Remote-side host launcher for LAN validation runs. Lives in the drop dir on
   the LAN machine (pushed by setup_lan_host.ps1) and is triggered via the
-  KenshiCoopHost scheduled task so the game launches in the INTERACTIVE session
+  TokelaCoopHost scheduled task so the game launches in the INTERACTIVE session
   (a plain SSH-spawned process cannot render on the desktop).
 
 .DESCRIPTION
@@ -11,7 +11,7 @@
     seconds     - hard-kill grace measured from gameplay start
     anchor      - host log line to time the screenshot on ('' = none)
     shotDelaySec- extra wait after the anchor before capturing
-    env         - flat map of every KENSHICOOP_* variable for the host role
+    env         - flat map of every TOKELACOOP_* variable for the host role
                   (built by the dev machine from the scenario manifest, so all
                   role/scenario logic stays in one place)
 
@@ -44,7 +44,7 @@ try {
     foreach ($p in $runArgs.env.PSObject.Properties) {
         Set-Item -Path ("Env:" + $p.Name) -Value ("" + $p.Value)
     }
-    $env:KENSHICOOP_LOG = $hostLog
+    $env:TOKELACOOP_LOG = $hostLog
 
     $kenshiDir = $runArgs.kenshiDir
     $out = & (Join-Path $dropDir "start_kenshi.ps1") -ExePath (Join-Path $kenshiDir "kenshi_x64.exe") -WorkDir $kenshiDir -TimeoutSec 120 6>&1

@@ -1365,7 +1365,7 @@ function Test-DeedProbe {
     $recvH = @(Select-String -Path $HostFile -Pattern $script:DeedRecvRegex -ErrorAction SilentlyContinue)
     $recvJ = @(Select-String -Path $JoinFile -Pattern $script:DeedRecvRegex -ErrorAction SilentlyContinue)
     if ($recvH.Count -gt 0 -or $recvJ.Count -gt 0) {
-        $why += "[deed] RECV seen with KENSHICOOP_DEED_SYNC=0 (host=$($recvH.Count) join=$($recvJ.Count)) - the hatch does not gate the channel"
+        $why += "[deed] RECV seen with TOKELACOOP_DEED_SYNC=0 (host=$($recvH.Count) join=$($recvJ.Count)) - the hatch does not gate the channel"
     }
     foreach ($leg in @(@($hW, $jOwn, 'host', 'join'), @($jW, $hOwn, 'join', 'host'))) {
         $w = $leg[0]; $peerOwn = $leg[1]

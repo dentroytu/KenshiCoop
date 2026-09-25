@@ -232,7 +232,7 @@ void onLobbyCreated(LobbyCreated_t* r, bool ioFailure) {
     pv[sizeof(pv) - 1] = '\0';
     if (g_setData) {
         g_setData(g_mm, g_lobby, "kc_protocol", pv);
-        g_setData(g_mm, g_lobby, "kc_game", "KenshiCoop");
+        g_setData(g_mm, g_lobby, "kc_game", "TokelaCoop");
     }
     char b[96];
     _snprintf(b, sizeof(b) - 1, "lobby created %llu (protocol %s)", g_lobby, pv);

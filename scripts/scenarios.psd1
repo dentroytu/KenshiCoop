@@ -1,6 +1,6 @@
 @{
     # ---------------------------------------------------------------------------
-    # KenshiCoop scenario manifest - the single declarative source of truth for
+    # TokelaCoop scenario manifest - the single declarative source of truth for
     # WHICH oracles judge each scenario, which save/setup it needs, and which
     # regression tier it belongs to. Consumed by CoopOracles.psm1 (oracle
     # dispatch + verdict rule), run_test.ps1 (save/setup defaults, gating),
@@ -8,7 +8,7 @@
     #
     # Per-scenario fields:
     #   Save        - save both clients load (must exist in %LOCALAPPDATA%\kenshi\save)
-    #   Setup       - host-only KENSHICOOP_SETUP scene ('' = none)
+    #   Setup       - host-only TOKELACOOP_SETUP scene ('' = none)
     #   Tolerance   - default cross-check tolerance (world units)
     #   PrimaryGate - the mechanism proof. FAIL **or SKIP** of this gate fails
     #                 the run (the no-signal guard): a green run must prove its
@@ -52,7 +52,7 @@
             JoinAnchorTimeoutSec = 60
             KillGraceSec         = 90
             # Peer-ready fallback: arm the scenario anyway after this much
-            # gameplay if no peer batch ever arrives (KENSHICOOP_ARM_TIMEOUT_MS).
+            # gameplay if no peer batch ever arrives (TOKELACOOP_ARM_TIMEOUT_MS).
             ArmTimeoutMs         = 45000
         }
         remote = @{
@@ -85,7 +85,7 @@
         # TOTAL outage (both directions, below ENet) 30 s after the join's
         # first datagram (mid-scenario for the 24 s windows: connect precedes
         # gameplay by ~15 s), lasting 4 s - past interp staleMs (2 s), inside
-        # the guard hold (KENSHICOOP_STARVE_HOLD_MS, 10 s). Driven bodies must
+        # the guard hold (TOKELACOOP_STARVE_HOLD_MS, 10 s). Driven bodies must
         # starve ([interp] starve>0) WITHOUT local AI/damage resuming. The
         # standard position gates (npc_track etc.) legitimately fail during a
         # real outage - this profile is for the manual guard-hold check, not
@@ -187,7 +187,7 @@
         # mint path (1 proxy bound all run, the rest deferred past mintR=600).
         #
         # Two harness traps this uncovered, both fixed in run_test.ps1: a
-        # stagger longer than KENSHICOOP_ARM_TIMEOUT_MS makes the host arm
+        # stagger longer than TOKELACOOP_ARM_TIMEOUT_MS makes the host arm
         # ALONE and finish before the join starts (use -ArmTimeoutMs), and
         # -Seconds/-KillGraceSec must grow with the stagger or the games die
         # before RESULT.
@@ -233,7 +233,7 @@
         # split_far2: the presence-authority scenario. split_far asks whether
         # the two clients AGREE about a far region; this one asks WHO SHOULD
         # AUTHOR it, which is a question that only exists once authority can
-        # move. It is the only scenario that runs with KENSHICOOP_CELL_AUTH on
+        # move. It is the only scenario that runs with TOKELACOOP_CELL_AUTH on
         # - every other entry runs with it clear, which is what makes the rest
         # of the tier a fail-open proof rather than a co-test.
         #
@@ -269,7 +269,7 @@
             Gating   = @('split_far2', 'clock_sync')
             Advisory = @('existence_parity', 'lifecycle', 'suppress_churn',
                          'anti_zombie', 'mint_dist', 'smoothness')
-            DiagEnv = @{ KENSHICOOP_CELL_AUTH = '1' }
+            DiagEnv = @{ TOKELACOOP_CELL_AUTH = '1' }
             Tier = 'probe'; WanVariant = $false
         }
 
@@ -285,7 +285,7 @@
         # claimed and vacated the whole way.
         #
         # Both routes are a RECORDING of a human driving these two squads to those
-        # two places (KENSHICOOP_TRACK_MOVE at 1 Hz, session 20260804_114911),
+        # two places (TOKELACOOP_TRACK_MOVE at 1 Hz, session 20260804_114911),
         # decimated to ~2000 u legs. That matters more than it sounds: the host's
         # recorded path is 164,532 u long for 88,242 u of displacement, so a
         # straight line between two points a human reached usually passes through
@@ -295,7 +295,7 @@
         # between an earlier session's cell claims (one per 4608 u) and wedged both
         # squads at -48980,-5670 with no path and nothing wrong with them.
         #
-        # KENSHICOOP_SPEED_COMBAT_CAP=0: the arbiter pins the sim to 1x while either
+        # TOKELACOOP_SPEED_COMBAT_CAP=0: the arbiter pins the sim to 1x while either
         # squad fights, which is right for players and wrong here - the squad is
         # running AWAY from the encounter, and the cap stretched the crossing
         # five-fold for nothing. Only this scenario clears it.
@@ -323,8 +323,8 @@
             Gating   = @('run_apart', 'clock_sync')
             Advisory = @('existence_parity', 'lifecycle', 'suppress_churn',
                          'anti_zombie', 'mint_dist', 'smoothness')
-            DiagEnv = @{ KENSHICOOP_CELL_AUTH = '1'
-                         KENSHICOOP_SPEED_COMBAT_CAP = '0' }
+            DiagEnv = @{ TOKELACOOP_CELL_AUTH = '1'
+                         TOKELACOOP_SPEED_COMBAT_CAP = '0' }
             Tier = 'probe'; WanVariant = $false
         }
 
@@ -354,7 +354,7 @@
         # sample, sidestep by growing angles when it stops closing) rather than a
         # recorded route like run_apart. Over 6.7 k u the router copes with short
         # legs, and the scenario then retargets to any town via
-        # KENSHICOOP_TOWN_FROM / KENSHICOOP_TOWN_AT ("x,z") instead of needing a
+        # TOKELACOOP_TOWN_FROM / TOKELACOOP_TOWN_AT ("x,z") instead of needing a
         # new recording. The gates judge population identity, not this town.
         #
         # 5x on both sides, re-voted, with the combat cap cleared for run_apart's
@@ -381,9 +381,9 @@
             # ADOPT_RADIUS is pinned rather than inherited from the DLL default so
             # the run records the reach it measured against, and so the A/B against
             # pre-adoption behaviour ('0') is a one-line edit here, not a rebuild.
-            DiagEnv = @{ KENSHICOOP_CELL_AUTH = '1'
-                         KENSHICOOP_SPEED_COMBAT_CAP = '0'
-                         KENSHICOOP_ADOPT_RADIUS = '250' }
+            DiagEnv = @{ TOKELACOOP_CELL_AUTH = '1'
+                         TOKELACOOP_SPEED_COMBAT_CAP = '0'
+                         TOKELACOOP_ADOPT_RADIUS = '250' }
             # full, not smoke: 430 s is longer than any smoke scenario and smoke is
             # already ~40 minutes, but this is the only scenario that generates a
             # town's population instead of loading it, so nothing else in the matrix
@@ -443,9 +443,9 @@
             Gating   = @('town_arrive', 'town_pop_parity', 'clock_sync')
             Advisory = @('existence_parity', 'lifecycle', 'suppress_churn',
                          'anti_zombie', 'mint_dist', 'smoothness', 'snap_rate')
-            DiagEnv = @{ KENSHICOOP_CELL_AUTH = '1'
-                         KENSHICOOP_SPEED_COMBAT_CAP = '0'
-                         KENSHICOOP_ADOPT_RADIUS = '250' }
+            DiagEnv = @{ TOKELACOOP_CELL_AUTH = '1'
+                         TOKELACOOP_SPEED_COMBAT_CAP = '0'
+                         TOKELACOOP_ADOPT_RADIUS = '250' }
             Tier = 'probe'; WanVariant = $false
         }
 
@@ -470,7 +470,7 @@
         #
         # This is the configuration the suite had no coverage of, and the gap was
         # not accidental - it follows from two defensible decisions that combine
-        # badly. CoopHarness pins KENSHICOOP_CELL_AUTH=0 so the tier proves the
+        # badly. CoopHarness pins TOKELACOOP_CELL_AUTH=0 so the tier proves the
         # feature is additive, and the four scenarios that opt back in via
         # DiagEnv (split_far2, run_apart, town_arrive, town_arrive_far) all exist
         # to test squads FAR APART, because that is where moving authority is
@@ -514,11 +514,11 @@
             Gating   = @('dual_drive', 'clock_sync')
             Advisory = @('cell_probe', 'npc_census', 'existence_parity',
                          'suppress_churn', 'anti_zombie', 'smoothness')
-            DiagEnv = @{ KENSHICOOP_CELL_AUTH = '1'
+            DiagEnv = @{ TOKELACOOP_CELL_AUTH = '1'
                          # Provenance for every authored row. This is the one
                          # scenario built to interrogate the publish filter, so
                          # it is worth the log volume here and nowhere else.
-                         KENSHICOOP_DEBUG_CENSUS = '1' }
+                         TOKELACOOP_DEBUG_CENSUS = '1' }
             Tier = 'probe'; WanVariant = $true
         }
 
@@ -782,7 +782,7 @@
         # self-heal), never reverts, and both sides converge on the severed
         # ground item (host-authoritative world-item channel + join dedupe).
         limb_loss = @{
-            DiagEnv = @{ KENSHICOOP_WORLD_SYNC = '1' }
+            DiagEnv = @{ TOKELACOOP_WORLD_SYNC = '1' }
             Save = 'squad1'; Setup = ''; Tolerance = 3.0
             PrimaryGate = 'limb_loss'
             Gating   = @('limb_loss', 'clock_sync')
@@ -790,11 +790,11 @@
             Tier = 'full'; WanVariant = $true
         }
         # limb_loss_cellauth: the same scene with cell authority ON, which is what a
-        # real session runs (KENSHICOOP_CELL_AUTH defaults on; the harness turns it
+        # real session runs (TOKELACOOP_CELL_AUTH defaults on; the harness turns it
         # off). The join then streamed NPCs too, the severed-item author was chosen
         # by that flag instead of by role, and nobody deduped: two limbs per side.
         limb_loss_cellauth = @{
-            DiagEnv = @{ KENSHICOOP_WORLD_SYNC = '1'; KENSHICOOP_CELL_AUTH = '1' }
+            DiagEnv = @{ TOKELACOOP_WORLD_SYNC = '1'; TOKELACOOP_CELL_AUTH = '1' }
             Save = 'squad1'; Setup = ''; Tolerance = 3.0
             PrimaryGate = 'limb_loss'
             Gating   = @('limb_loss', 'clock_sync')
@@ -1011,7 +1011,7 @@
         # measurement - a finding, not a gate). Save 'sync': a live town gives
         # findNearbyNonPlayerFaction real factions to mint squads in.
         spawn_probe = @{
-            DiagEnv = @{ KENSHICOOP_SPAWN_SYNC = '0' }
+            DiagEnv = @{ TOKELACOOP_SPAWN_SYNC = '0' }
             Save = 'sync'; Setup = ''; Tolerance = 6.0
             PrimaryGate = 'spawn_probe'
             Gating   = @('spawn_probe', 'clock_sync')
@@ -1029,7 +1029,7 @@
         # vendor-mirror design. Save 'sync': the bar town puts real ShopTraders
         # in range.
         shop_probe = @{
-            DiagEnv = @{ KENSHICOOP_MONEY_SYNC = '0' }
+            DiagEnv = @{ TOKELACOOP_MONEY_SYNC = '0' }
             Save = 'sync'; Setup = ''; Tolerance = 6.0
             PrimaryGate = 'shop_probe'
             Gating   = @('shop_probe', 'clock_sync')
@@ -1044,7 +1044,7 @@
         # that the measurement happened + the pool is writable; the identity of
         # the live field is the FINDING protocol 52 rests on.
         wallet_probe = @{
-            DiagEnv = @{ KENSHICOOP_MONEY_SYNC = '0' }
+            DiagEnv = @{ TOKELACOOP_MONEY_SYNC = '0' }
             Save = 'sync'; Setup = ''; Tolerance = 6.0
             PrimaryGate = 'wallet_probe'
             Gating   = @('wallet_probe', 'clock_sync')
@@ -1076,7 +1076,7 @@
         # engine regenerates vendor stock per client; the [shop] BUY-LOCAL detour
         # is collecting field evidence for that mirror).
         vendor_trade = @{
-            DiagEnv = @{ KENSHICOOP_INV_SYNC = '1' }
+            DiagEnv = @{ TOKELACOOP_INV_SYNC = '1' }
             Save = 'sync'; Setup = ''; Tolerance = 6.0
             PrimaryGate = 'vendor_trade'
             Gating   = @('vendor_trade', 'clock_sync')
@@ -1093,7 +1093,7 @@
         # that the script ran; the identity/tab/peer-reaction findings gate
         # the 2b design. Save 'sync': the bar town has world NPCs in range.
         recruit_probe = @{
-            DiagEnv = @{ KENSHICOOP_RECRUIT_SYNC = '0' }
+            DiagEnv = @{ TOKELACOOP_RECRUIT_SYNC = '0' }
             Save = 'sync'; Setup = ''; Tolerance = 6.0
             PrimaryGate = 'recruit_probe'
             Gating   = @('recruit_probe', 'clock_sync')
@@ -1112,7 +1112,7 @@
         # reaction findings gate the 16b design. Save 'squad1': the baked
         # 2-tab squad both ownership ranks partition on.
         squad_probe = @{
-            DiagEnv = @{ KENSHICOOP_SQUAD_SYNC = '0' }
+            DiagEnv = @{ TOKELACOOP_SQUAD_SYNC = '0' }
             Save = 'squad1'; Setup = ''; Tolerance = 3.0
             PrimaryGate = 'squad_probe'
             Gating   = @('squad_probe', 'clock_sync')
@@ -1175,7 +1175,7 @@
         # the sid-stability / crossing / operative-row findings gate the 3b
         # channel design.
         faction_probe = @{
-            DiagEnv = @{ KENSHICOOP_FACTION_SYNC = '0' }
+            DiagEnv = @{ TOKELACOOP_FACTION_SYNC = '0' }
             Save = 'sync'; Setup = ''; Tolerance = 6.0
             PrimaryGate = 'faction_probe'
             Gating   = @('faction_probe', 'clock_sync')
@@ -1202,7 +1202,7 @@
         # that the clocks are readable + monotonic; the absolute-vs-relative /
         # offset / drift / rate-vs-fsm findings gate the 25 channel design.
         time_probe = @{
-            DiagEnv = @{ KENSHICOOP_TIME_SYNC = '0'; KENSHICOOP_SPEED_SYNC = '0' }
+            DiagEnv = @{ TOKELACOOP_TIME_SYNC = '0'; TOKELACOOP_SPEED_SYNC = '0' }
             Save = 'sync'; Setup = ''; Tolerance = 6.0
             PrimaryGate = 'time_probe'
             Gating   = @('time_probe', 'clock_sync')
@@ -1233,7 +1233,7 @@
         # no doors in range the probe FAILS loudly and the entry moves to a
         # save with a town/base before 5b.
         door_probe = @{
-            DiagEnv = @{ KENSHICOOP_DOOR_SYNC = '0' }
+            DiagEnv = @{ TOKELACOOP_DOOR_SYNC = '0' }
             Save = 'sync'; Setup = ''; Tolerance = 6.0
             PrimaryGate = 'door_probe'
             Gating   = @('door_probe', 'clock_sync')
@@ -1266,7 +1266,7 @@
         # if BOTH placements refuse, the probe fails loudly and the entry
         # moves to a wilderness save before 6b.
         build_probe = @{
-            DiagEnv = @{ KENSHICOOP_BUILD_SYNC = '0' }
+            DiagEnv = @{ TOKELACOOP_BUILD_SYNC = '0' }
             Save = 'sync'; Setup = ''; Tolerance = 6.0
             PrimaryGate = 'build_probe'
             Gating   = @('build_probe', 'clock_sync')
@@ -1297,7 +1297,7 @@
         # peer's mint, toggle non-crossing, the post-destroy ghost) gate the
         # protocol-28 channel design.
         bdoor_probe = @{
-            DiagEnv = @{ KENSHICOOP_BDOOR_SYNC = '0' }
+            DiagEnv = @{ TOKELACOOP_BDOOR_SYNC = '0' }
             Save = 'sync'; Setup = ''; Tolerance = 6.0
             PrimaryGate = 'bdoor_probe'
             Gating   = @('bdoor_probe', 'clock_sync')
@@ -1326,7 +1326,7 @@
         # stuck); the findings (scale, per-client decay agreement, sentinel
         # non-crossing, dazedOrAlert range) gate the protocol-29 fold-in.
         hunger_probe = @{
-            DiagEnv = @{ KENSHICOOP_HUNGER_SYNC = '0' }
+            DiagEnv = @{ TOKELACOOP_HUNGER_SYNC = '0' }
             Save = 'sync'; Setup = ''; Tolerance = 6.0
             PrimaryGate = 'hunger_probe'
             Gating   = @('hunger_probe', 'clock_sync')
@@ -1358,7 +1358,7 @@
         # findings (per-channel heal latency via safety resends, the
         # building that NEVER mints) motivate the connect-edge resync.
         latejoin_probe = @{
-            DiagEnv = @{ KENSHICOOP_LATEJOIN_SYNC = '0' }
+            DiagEnv = @{ TOKELACOOP_LATEJOIN_SYNC = '0' }
             Save = 'sync'; Setup = ''; Tolerance = 6.0
             PrimaryGate = 'latejoin_probe'
             Gating   = @('latejoin_probe', 'clock_sync')
@@ -1388,7 +1388,7 @@
         # before) and the folder-quiescence completion edge (latency + file
         # count/bytes + the gameplay hitch while the engine writes).
         save_probe = @{
-            DiagEnv = @{ KENSHICOOP_SAVE_SYNC = '0' }
+            DiagEnv = @{ TOKELACOOP_SAVE_SYNC = '0' }
             Save = 'sync'; Setup = ''; Tolerance = 6.0
             PrimaryGate = 'save_probe'
             Gating   = @('save_probe', 'clock_sync')
@@ -1427,7 +1427,7 @@
 
         # resume_check: resume_test.ps1 stage 2 (not a tier member). Both
         # clients relaunch on the save the stage-1 transfer delivered
-        # (KENSHICOOP_SAVE=coopresume, NO harness save mirroring - the join
+        # (TOKELACOOP_SAVE=coopresume, NO harness save mirroring - the join
         # loads what the TRANSFER wrote) and census construction sites at
         # 1 Hz. Gates that the stage-1 building enumerates on BOTH sides
         # under the SAME save-stable hand - the identity-reset proof.
@@ -1450,7 +1450,7 @@
         # do save-stable hands re-resolve in the fresh world. The JOIN
         # deliberately does NOT load (the 13a divergence baseline).
         load_probe = @{
-            DiagEnv = @{ KENSHICOOP_LOAD_SYNC = '0' }
+            DiagEnv = @{ TOKELACOOP_LOAD_SYNC = '0' }
             Save = 'sync'; Setup = ''; Tolerance = 6.0
             PrimaryGate = 'load_probe'
             Gating   = @('load_probe', 'clock_sync')
@@ -1484,7 +1484,7 @@
         # waits until that delta has actually moved its own (authoritative) pool,
         # latches the total, then coordinated-saves and loads mid-session. Gates
         # that BOTH clients come back at the latched total; coming back at the
-        # pre-spend number IS the bug, which KENSHICOOP_MONEY_SYNC=0 reproduces.
+        # pre-spend number IS the bug, which TOKELACOOP_MONEY_SYNC=0 reproduces.
         # clock_sync is not gated for the same reason as load_sync (the load
         # restarts the in-game clock series the oracle aligns on).
         money_persist = @{
@@ -1501,13 +1501,13 @@
         # streams its live world on connect), which scripts\stream_test.ps1
         # provides. On one machine both installs share %LOCALAPPDATA%\kenshi\save
         # so a join would normally MATCH + load from disk; stream_test sets
-        # KENSHICOOP_FORCE_STREAM=1 on the JOIN so it NACKs the LOAD_GO and the
+        # TOKELACOOP_FORCE_STREAM=1 on the JOIN so it NACKs the LOAD_GO and the
         # real folder transfer runs. The connect_stream gate REQUIRES the transfer
         # edges (NACK -> XFER-SENT -> XFER-COMMIT badCrc=0 -> XFER-ACK ok=1 ->
         # transfer-committed load -> gameplay), so a run that quietly MATCH-loaded
         # FAILS. DiagEnv here is documentation (stream_test sets it join-only).
         bootstrap_stream = @{
-            DiagEnv = @{ KENSHICOOP_FORCE_STREAM = '1' }
+            DiagEnv = @{ TOKELACOOP_FORCE_STREAM = '1' }
             Save = 'sync'; Setup = ''; Tolerance = 6.0
             PrimaryGate = 'connect_stream'
             Gating   = @('connect_stream')
@@ -1528,7 +1528,7 @@
         # owner-vs-idle divergence, write-lever stickiness, power
         # non-crossing, research evidence) gate the protocol-33 design.
         prod_probe = @{
-            DiagEnv = @{ KENSHICOOP_PROD_SYNC = '0' }
+            DiagEnv = @{ TOKELACOOP_PROD_SYNC = '0' }
             Save = 'sync'; Setup = ''; Tolerance = 6.0
             PrimaryGate = 'prod_probe'
             Gating   = @('prod_probe', 'clock_sync')
@@ -1564,7 +1564,7 @@
         # t=10-25s divergence window (the unlock must NOT cross with the
         # hatch off), join self-lever landed AND stuck to run end.
         research_probe = @{
-            DiagEnv = @{ KENSHICOOP_RESEARCH_SYNC = '0' }
+            DiagEnv = @{ TOKELACOOP_RESEARCH_SYNC = '0' }
             Save = 'sync'; Setup = ''; Tolerance = 6.0
             PrimaryGate = 'research_probe'
             Gating   = @('research_probe', 'clock_sync')
@@ -1602,7 +1602,7 @@
         # to run end, the wallet did not move across the state write (the
         # double-charge guard), and NOTHING crossed (the negative control).
         deed_probe = @{
-            DiagEnv = @{ KENSHICOOP_DEED_SYNC = '0' }
+            DiagEnv = @{ TOKELACOOP_DEED_SYNC = '0' }
             Save = 'sync'; Setup = ''; Tolerance = 6.0
             PrimaryGate = 'deed_probe'
             Gating   = @('deed_probe', 'clock_sync')
@@ -1646,7 +1646,7 @@
         # vs INV_ITEMS_MAX, owner-vs-idle container divergence, add
         # non-crossing, post-empty churn) gate the protocol-34 design.
         store_probe = @{
-            DiagEnv = @{ KENSHICOOP_STORE_SYNC = '0' }
+            DiagEnv = @{ TOKELACOOP_STORE_SYNC = '0' }
             Save = 'sync'; Setup = ''; Tolerance = 6.0
             PrimaryGate = 'store_probe'
             Gating   = @('store_probe', 'clock_sync')
@@ -1666,7 +1666,7 @@
         # chest add CROSSED onto the join's minted copy, and the FINAL chest
         # content hashes agree (so the reconcile-removal crossed too).
         store_sync = @{
-            DiagEnv = @{ KENSHICOOP_INV_SYNC = '1' }
+            DiagEnv = @{ TOKELACOOP_INV_SYNC = '1' }
             Save = 'sync'; Setup = ''; Tolerance = 6.0
             PrimaryGate = 'store_sync'
             Gating   = @('store_sync', 'clock_sync')
@@ -1713,7 +1713,7 @@
         # census-range proxy minting. The host spawns a runtime squad ~620 u
         # out and walks it toward the co-located leaders; the join must mint
         # the proxies at census range (census-missing scan + reply-side mint
-        # gate at KENSHICOOP_SPAWN_MINT_RADIUS) - every far hand bound, all
+        # gate at TOKELACOOP_SPAWN_MINT_RADIUS) - every far hand bound, all
         # binds >= 400 u from the join anchor, no duplicate mints, and the
         # SAME proxy body driven into the stream bubble. snap_rate stays
         # advisory: the bubble-entry drive takeover legitimately hard-snaps
@@ -1793,7 +1793,7 @@
         # buttons; a loud simulated click must move them AND register as
         # captured intent (the hook-based vote source).
         speed_probe = @{
-            DiagEnv = @{ KENSHICOOP_SPEED_SYNC = '0'; KENSHICOOP_DEBUG_SPEED = '1' }
+            DiagEnv = @{ TOKELACOOP_SPEED_SYNC = '0'; TOKELACOOP_DEBUG_SPEED = '1' }
             Save = 'sync'; Setup = ''; Tolerance = 6.0
             PrimaryGate = 'speed_probe'
             Gating   = @('speed_probe', 'clock_sync')
@@ -1808,7 +1808,7 @@
         # flags any chained/lock divergence (the reported "peer PC unlocks the
         # shackles" desync). No behavior change ships in 6a.
         shackle_probe = @{
-            DiagEnv = @{ KENSHICOOP_DEBUG_SHACKLE = '1' }
+            DiagEnv = @{ TOKELACOOP_DEBUG_SHACKLE = '1' }
             Save = 'camp'; Setup = ''; Tolerance = 6.0
             PrimaryGate = 'shackle_probe'
             Gating   = @('shackle_probe', 'clock_sync')
@@ -1838,8 +1838,8 @@
         # engine picks the lock on its own schedule and the run has to be long
         # enough to find out what that schedule is.
         lockpick_escape = @{
-            DiagEnv = @{ KENSHICOOP_CELL_AUTH = '1'
-                         KENSHICOOP_DEBUG_SHACKLE = '1' }
+            DiagEnv = @{ TOKELACOOP_CELL_AUTH = '1'
+                         TOKELACOOP_DEBUG_SHACKLE = '1' }
             Save = 'rebirth1'; Setup = ''; Tolerance = 6.0
             Seconds = 210; KillGraceSec = 200
             PrimaryGate = 'lockpick_escape'
@@ -1866,7 +1866,7 @@
         # does mean this measures cohesion under a SHARED spotlight - a variant
         # with independent cameras would be the harder case.
         #
-        # KENSHICOOP_DEBUG_MARKERS puts the authority class on screen over each
+        # TOKELACOOP_DEBUG_MARKERS puts the authority class on screen over each
         # body (green DRV, red CULLED, yellow PARKED) because the screenshots are
         # part of this scenario's evidence, and CELL_AUTH=1 is what makes the
         # host label its side too (it only runs enforceHostAuthority with the
@@ -1877,9 +1877,9 @@
         # would photograph a prisoner sitting in a cage. The host anchors on its
         # own 'freed' observation because the 'walk' line is owner-only.
         escape_cohesion = @{
-            DiagEnv = @{ KENSHICOOP_CELL_AUTH = '1'
-                         KENSHICOOP_DEBUG_MARKERS = '1'
-                         KENSHICOOP_DEBUG_SHACKLE = '1' }
+            DiagEnv = @{ TOKELACOOP_CELL_AUTH = '1'
+                         TOKELACOOP_DEBUG_MARKERS = '1'
+                         TOKELACOOP_DEBUG_SHACKLE = '1' }
             Save = 'rebirth1'; Setup = ''; Tolerance = 6.0
             Seconds = 210; KillGraceSec = 200
             ShotAnchorHost = 'SCENARIO ESCAPE freed side=host'
@@ -1893,7 +1893,7 @@
         }
 
         shackle_sync = @{
-            DiagEnv = @{ KENSHICOOP_DEBUG_SHACKLE = '1' }
+            DiagEnv = @{ TOKELACOOP_DEBUG_SHACKLE = '1' }
             Save = 'camp'; Setup = ''; Tolerance = 6.0
             PrimaryGate = 'shackle_sync'
             Gating   = @('shackle_sync', 'clock_sync')
@@ -1932,7 +1932,7 @@
         # follow latency, and the combat demotion. WanVariant: the SET/REQ
         # channel is reliable and must converge under loss.
         speed_sync = @{
-            DiagEnv = @{ KENSHICOOP_TIME_SYNC = '0'; KENSHICOOP_DEBUG_SPEED = '1' }
+            DiagEnv = @{ TOKELACOOP_TIME_SYNC = '0'; TOKELACOOP_DEBUG_SPEED = '1' }
             Save = 'sync'; Setup = ''; Tolerance = 6.0
             PrimaryGate = 'speed_sync'
             Gating   = @('speed_sync', 'clock_sync')
@@ -1964,7 +1964,7 @@
         }
         # combat_battle: many-NPC combat warp validation (the "NPCs warp on the join
         # when many are fighting" field report). The host runtime-spawns N fighters
-        # (KENSHICOOP_BATTLE_N, default 16; the 10v10/20v20/40v40 ladder) near the
+        # (TOKELACOOP_BATTLE_N, default 16; the 10v10/20v20/40v40 ladder) near the
         # leader and index-pairs them into mutual melee, so the join must DRIVE many
         # simultaneously-active combat copies via the interp + graded-snap path.
         # combat_battle gates that the fight happened + crossed; combat_snap_rate
@@ -1980,7 +1980,7 @@
         }
         # combat_win: the SECOND warp shape (2026-07-16 smoothness pass). Each side
         # buffs its OWN player-squad to 120 in every stat and the host runtime-spawns
-        # N unbuffed enemies (KENSHICOOP_WIN_N, default 8) onto the PC leader; the
+        # N unbuffed enemies (TOKELACOOP_WIN_N, default 8) onto the PC leader; the
         # buffed PCs cut them down, so the join stress shifts to dying/fleeing/KO
         # churn and rapid target loss (distinct from combat_battle's sustained melee).
         # combat_win gates that the PCs were buffed both sides + the fight was won and
@@ -2013,7 +2013,7 @@
 
         # ---- inventory ---------------------------------------------------------------
         inv_order = @{
-            DiagEnv = @{ KENSHICOOP_INV_SYNC = '1' }
+            DiagEnv = @{ TOKELACOOP_INV_SYNC = '1' }
             Save = 'squad1'; Setup = ''; Tolerance = 3.0
             PrimaryGate = 'inv_sync'
             Gating   = @('inv_sync', 'clock_sync')
@@ -2021,7 +2021,7 @@
             Tier = 'full'; WanVariant = $false
         }
         inv_bidir = @{
-            DiagEnv = @{ KENSHICOOP_INV_SYNC = '1' }
+            DiagEnv = @{ TOKELACOOP_INV_SYNC = '1' }
             Save = 'squad1'; Setup = ''; Tolerance = 3.0
             PrimaryGate = 'inv_bidir'
             Gating   = @('inv_bidir', 'clock_sync')
@@ -2035,7 +2035,7 @@
         # ground. Both are smoke tier: they cover the two ways inventory silently lost
         # items, so a regression must not wait for a full run to surface.
         inv_overflow = @{
-            DiagEnv = @{ KENSHICOOP_INV_SYNC = '1' }
+            DiagEnv = @{ TOKELACOOP_INV_SYNC = '1' }
             Save = 'squad1'; Setup = ''; Tolerance = 3.0
             PrimaryGate = 'inv_overflow'
             Gating   = @('inv_overflow', 'clock_sync')
@@ -2043,7 +2043,7 @@
             Tier = 'smoke'; WanVariant = $false
         }
         inv_dropfull = @{
-            DiagEnv = @{ KENSHICOOP_INV_SYNC = '1'; KENSHICOOP_WORLD_SYNC = '1' }
+            DiagEnv = @{ TOKELACOOP_INV_SYNC = '1'; TOKELACOOP_WORLD_SYNC = '1' }
             Save = 'squad1'; Setup = ''; Tolerance = 3.0
             PrimaryGate = 'inv_dropfull'
             Gating   = @('inv_dropfull', 'clock_sync')
@@ -2051,7 +2051,7 @@
             Tier = 'smoke'; WanVariant = $false
         }
         inv_equip = @{
-            DiagEnv = @{ KENSHICOOP_INV_SYNC = '1' }
+            DiagEnv = @{ TOKELACOOP_INV_SYNC = '1' }
             Save = 'squad1'; Setup = ''; Tolerance = 3.0
             PrimaryGate = 'inv_equip'
             Gating   = @('inv_equip', 'clock_sync')
@@ -2059,7 +2059,7 @@
             Tier = 'full'; WanVariant = $false
         }
         inv_reequip = @{
-            DiagEnv = @{ KENSHICOOP_INV_SYNC = '1' }
+            DiagEnv = @{ TOKELACOOP_INV_SYNC = '1' }
             Save = 'squad1'; Setup = ''; Tolerance = 3.0
             PrimaryGate = 'inv_reequip'
             Gating   = @('inv_reequip', 'clock_sync')
@@ -2067,7 +2067,7 @@
             Tier = 'full'; WanVariant = $false
         }
         inv_addequip = @{
-            DiagEnv = @{ KENSHICOOP_INV_DUMP = '1' }
+            DiagEnv = @{ TOKELACOOP_INV_DUMP = '1' }
             Save = 'squad1'; Setup = ''; Tolerance = 3.0
             PrimaryGate = 'add_equip'
             Gating   = @('add_equip')
@@ -2079,7 +2079,7 @@
         # owner engine moves; the oracle REPORTS the conservation outcome as evidence.
         # Not in a tier: it documents the bug the transfer-intent channel then fixes.
         trade_probe = @{
-            DiagEnv = @{ KENSHICOOP_INV_SYNC = '1'; KENSHICOOP_XFER_SYNC = '0'; KENSHICOOP_INV_DUMP = '1' }
+            DiagEnv = @{ TOKELACOOP_INV_SYNC = '1'; TOKELACOOP_XFER_SYNC = '0'; TOKELACOOP_INV_DUMP = '1' }
             Save = 'squad1'; Setup = ''; Tolerance = 3.0
             PrimaryGate = 'trade_probe'
             Gating   = @('trade_probe')
@@ -2092,7 +2092,7 @@
         # (no wipe), the traded WEAPON survives on BOTH clients (real-object
         # relocation) and both clients agree on the final per-rank state.
         trade_peer = @{
-            DiagEnv = @{ KENSHICOOP_INV_SYNC = '1'; KENSHICOOP_INV_DUMP = '1' }
+            DiagEnv = @{ TOKELACOOP_INV_SYNC = '1'; TOKELACOOP_INV_DUMP = '1' }
             Save = 'squad1'; Setup = ''; Tolerance = 3.0
             PrimaryGate = 'trade_peer'
             Gating   = @('trade_peer', 'clock_sync')
@@ -2105,7 +2105,7 @@
         # scan used to fold the rest of such a burst away unannounced: duplicates on a
         # take, lost items on a give. Smoke tier - it is the chest session players have.
         trade_burst = @{
-            DiagEnv = @{ KENSHICOOP_INV_SYNC = '1' }
+            DiagEnv = @{ TOKELACOOP_INV_SYNC = '1' }
             Save = 'squad1'; Setup = ''; Tolerance = 3.0
             PrimaryGate = 'trade_burst'
             Gating   = @('trade_burst', 'clock_sync')
@@ -2121,7 +2121,7 @@
         # with zero dupes on either side (fabrication must not race the W2
         # conservation channel or the snapshot echo).
         weapon_loot = @{
-            DiagEnv = @{ KENSHICOOP_INV_SYNC = '1' }
+            DiagEnv = @{ TOKELACOOP_INV_SYNC = '1' }
             Save = 'squad1'; Setup = ''; Tolerance = 3.0
             PrimaryGate = 'weapon_loot'
             Gating   = @('weapon_loot', 'clock_sync')
@@ -2138,7 +2138,7 @@
             Tier = 'none'; WanVariant = $false   # W0 diagnostic; evidence, not a sync gate
         }
         world_item_sync = @{
-            DiagEnv = @{ KENSHICOOP_WORLD_SYNC = '1'; KENSHICOOP_INV_DUMP = '1' }
+            DiagEnv = @{ TOKELACOOP_WORLD_SYNC = '1'; TOKELACOOP_INV_DUMP = '1' }
             Save = 'squad1'; Setup = ''; Tolerance = 3.0
             PrimaryGate = 'wi_sync'
             Gating   = @('wi_sync', 'clock_sync')
@@ -2150,7 +2150,7 @@
         # (join ground drops never appeared on the host) closed by the
         # bidirectional W1 stream with owner-scoped netIds + the proxy echo guard.
         world_item_join = @{
-            DiagEnv = @{ KENSHICOOP_WORLD_SYNC = '1'; KENSHICOOP_INV_DUMP = '1' }
+            DiagEnv = @{ TOKELACOOP_WORLD_SYNC = '1'; TOKELACOOP_INV_DUMP = '1' }
             Save = 'squad1'; Setup = ''; Tolerance = 3.0
             PrimaryGate = 'wi_join'
             Gating   = @('wi_join', 'clock_sync')
@@ -2168,7 +2168,7 @@
         # WORLD-RELOAD edge. clock_sync is NOT gated (the reload restarts the
         # in-game clock series, same as load_sync).
         rejoin_items = @{
-            DiagEnv = @{ KENSHICOOP_INV_DUMP = '1' }
+            DiagEnv = @{ TOKELACOOP_INV_DUMP = '1' }
             Save = 'sync'; Setup = ''; Tolerance = 6.0
             PrimaryGate = 'rejoin_items'
             Gating   = @('rejoin_items')
@@ -2176,7 +2176,7 @@
             Tier = 'full'; WanVariant = $false
         }
         wpn_relocate = @{
-            DiagEnv = @{ KENSHICOOP_INV_DUMP = '1' }
+            DiagEnv = @{ TOKELACOOP_INV_DUMP = '1' }
             Save = 'squad1'; Setup = ''; Tolerance = 3.0
             PrimaryGate = 'wpn_relocate'
             Gating   = @('wpn_relocate')
@@ -2184,7 +2184,7 @@
             Tier = 'full'; WanVariant = $false
         }
         world_weapon_drop = @{
-            DiagEnv = @{ KENSHICOOP_INV_SYNC = '1'; KENSHICOOP_WORLD_SYNC = '1'; KENSHICOOP_INV_DUMP = '1' }
+            DiagEnv = @{ TOKELACOOP_INV_SYNC = '1'; TOKELACOOP_WORLD_SYNC = '1'; TOKELACOOP_INV_DUMP = '1' }
             Save = 'squad1'; Setup = ''; Tolerance = 3.0
             PrimaryGate = 'weapon_drop'
             Gating   = @('weapon_drop', 'clock_sync')
@@ -2192,7 +2192,7 @@
             Tier = 'smoke'; WanVariant = $true
         }
         world_armor_drop = @{
-            DiagEnv = @{ KENSHICOOP_INV_SYNC = '1'; KENSHICOOP_WORLD_SYNC = '1'; KENSHICOOP_INV_DUMP = '1' }
+            DiagEnv = @{ TOKELACOOP_INV_SYNC = '1'; TOKELACOOP_WORLD_SYNC = '1'; TOKELACOOP_INV_DUMP = '1' }
             Save = 'squad1'; Setup = ''; Tolerance = 3.0
             PrimaryGate = 'armor_drop'
             Gating   = @('armor_drop', 'clock_sync')
@@ -2209,7 +2209,7 @@
         # duplicated. Both smoke tier - they are the two item-LOSS/DUPE classes the manual
         # session surfaced, so a regression must not wait for a full run.
         inv_backpack_drop = @{
-            DiagEnv = @{ KENSHICOOP_INV_SYNC = '1'; KENSHICOOP_WORLD_SYNC = '1'; KENSHICOOP_INV_DUMP = '1' }
+            DiagEnv = @{ TOKELACOOP_INV_SYNC = '1'; TOKELACOOP_WORLD_SYNC = '1'; TOKELACOOP_INV_DUMP = '1' }
             # squad2, NOT squad1: the gate needs a leader who WEARS a container, and squad1
             # has none (it reads back have=0 and the scenario cannot author a drop at all).
             Save = 'squad2'; Setup = ''; Tolerance = 3.0
@@ -2219,7 +2219,7 @@
             Tier = 'smoke'; WanVariant = $false
         }
         world_pickup_mirror = @{
-            DiagEnv = @{ KENSHICOOP_INV_SYNC = '1'; KENSHICOOP_WORLD_SYNC = '1'; KENSHICOOP_INV_DUMP = '1' }
+            DiagEnv = @{ TOKELACOOP_INV_SYNC = '1'; TOKELACOOP_WORLD_SYNC = '1'; TOKELACOOP_INV_DUMP = '1' }
             Save = 'squad1'; Setup = ''; Tolerance = 3.0
             PrimaryGate = 'pickup_mirror'
             Gating   = @('pickup_mirror', 'clock_sync')
@@ -2234,7 +2234,7 @@
         # as a pickup a tick later and fired an identity-less PICKUP intent at connect.
         # Two tabs required (the host drops from tab 0, the join picks up into tab 1).
         inv_regear = @{
-            DiagEnv = @{ KENSHICOOP_INV_SYNC = '1'; KENSHICOOP_WORLD_SYNC = '1'; KENSHICOOP_INV_DUMP = '1' }
+            DiagEnv = @{ TOKELACOOP_INV_SYNC = '1'; TOKELACOOP_WORLD_SYNC = '1'; TOKELACOOP_INV_DUMP = '1' }
             Save = 'squad1'; Setup = ''; Tolerance = 3.0
             PrimaryGate = 'gear_repickup'
             Gating   = @('gear_repickup', 'no_phantom_pickups', 'clock_sync')
@@ -2248,8 +2248,8 @@
         # requires evidence that this recovery ran (retry/dedupe), so a regression that
         # quietly reverts to the single-shot re-home cannot pass by luck.
         inv_regear_refuse = @{
-            DiagEnv = @{ KENSHICOOP_INV_SYNC = '1'; KENSHICOOP_WORLD_SYNC = '1'; KENSHICOOP_INV_DUMP = '1'
-                         KENSHICOOP_WD_REFUSE_REHOME = '1' }
+            DiagEnv = @{ TOKELACOOP_INV_SYNC = '1'; TOKELACOOP_WORLD_SYNC = '1'; TOKELACOOP_INV_DUMP = '1'
+                         TOKELACOOP_WD_REFUSE_REHOME = '1' }
             Save = 'squad1'; Setup = ''; Tolerance = 3.0
             PrimaryGate = 'gear_repickup_retry'
             Gating   = @('gear_repickup_retry', 'no_phantom_pickups', 'clock_sync')
@@ -2262,8 +2262,8 @@
         # destroying anything, so it gets its own gate (full tier - smoke already covers the
         # retry, and this one has to wait out WD_REHOME_MAX_MS).
         inv_regear_refuse_all = @{
-            DiagEnv = @{ KENSHICOOP_INV_SYNC = '1'; KENSHICOOP_WORLD_SYNC = '1'; KENSHICOOP_INV_DUMP = '1'
-                         KENSHICOOP_WD_REFUSE_REHOME_ALL = '1' }
+            DiagEnv = @{ TOKELACOOP_INV_SYNC = '1'; TOKELACOOP_WORLD_SYNC = '1'; TOKELACOOP_INV_DUMP = '1'
+                         TOKELACOOP_WD_REFUSE_REHOME_ALL = '1' }
             Save = 'squad1'; Setup = ''; Tolerance = 3.0
             PrimaryGate = 'gear_repickup_dedupe'
             Gating   = @('gear_repickup_dedupe', 'no_phantom_pickups', 'clock_sync')
@@ -2275,8 +2275,8 @@
         # by no snapshot at all and only ever existed for the author - which is why dropping a
         # bag handed the other side a bag missing its contents. squad2 carries the backpacks.
         inv_nested_bag = @{
-            DiagEnv = @{ KENSHICOOP_INV_SYNC = '1'; KENSHICOOP_WORLD_SYNC = '1'
-                         KENSHICOOP_INV_DUMP = '1' }
+            DiagEnv = @{ TOKELACOOP_INV_SYNC = '1'; TOKELACOOP_WORLD_SYNC = '1'
+                         TOKELACOOP_INV_DUMP = '1' }
             Save = 'squad2'; Setup = ''; Tolerance = 3.0
             PrimaryGate = 'nested_bag'
             Gating   = @('nested_bag', 'clock_sync')
@@ -2290,8 +2290,8 @@
         # stowed in the worn backpack, where the drop mirror's top-level-only search could not
         # reach it and fabricated a duplicate instead.
         inv_dump_all = @{
-            DiagEnv = @{ KENSHICOOP_INV_SYNC = '1'; KENSHICOOP_WORLD_SYNC = '1'
-                         KENSHICOOP_INV_DUMP = '1' }
+            DiagEnv = @{ TOKELACOOP_INV_SYNC = '1'; TOKELACOOP_WORLD_SYNC = '1'
+                         TOKELACOOP_INV_DUMP = '1' }
             Save = 'squad2'; Setup = ''; Tolerance = 3.0
             PrimaryGate = 'dump_all'
             Gating   = @('dump_all', 'clock_sync')
@@ -2303,8 +2303,8 @@
         # the peer's pickup then arrives NAMED but unmatchable, and the author must keep trying
         # instead of answering once and leaving its copy on the ground.
         inv_dump_all_forget = @{
-            DiagEnv = @{ KENSHICOOP_INV_SYNC = '1'; KENSHICOOP_WORLD_SYNC = '1'
-                         KENSHICOOP_INV_DUMP = '1'; KENSHICOOP_WD_FORGET_TRACK = '1' }
+            DiagEnv = @{ TOKELACOOP_INV_SYNC = '1'; TOKELACOOP_WORLD_SYNC = '1'
+                         TOKELACOOP_INV_DUMP = '1'; TOKELACOOP_WD_FORGET_TRACK = '1' }
             Save = 'squad2'; Setup = ''; Tolerance = 3.0
             PrimaryGate = 'dump_all'
             Gating   = @('dump_all', 'clock_sync')
@@ -2318,8 +2318,8 @@
         # on the ground beside the item the peer now holds; the conservation ledger then shows that
         # template summing to two. Parking the intent and retrying it converges instead.
         inv_dump_all_transient = @{
-            DiagEnv = @{ KENSHICOOP_INV_SYNC = '1'; KENSHICOOP_WORLD_SYNC = '1'
-                         KENSHICOOP_INV_DUMP = '1'; KENSHICOOP_WD_TRANSIENT_DEAD = '1' }
+            DiagEnv = @{ TOKELACOOP_INV_SYNC = '1'; TOKELACOOP_WORLD_SYNC = '1'
+                         TOKELACOOP_INV_DUMP = '1'; TOKELACOOP_WD_TRANSIENT_DEAD = '1' }
             Save = 'squad2'; Setup = ''; Tolerance = 3.0
             PrimaryGate = 'dump_all'
             Gating   = @('dump_all', 'clock_sync')
@@ -2337,8 +2337,8 @@
         # that freed object a second time. Gates engine_integrity too, since Kenshi's
         # own "alredy has destroy reason" line is the other half of the same evidence.
         world_item_stale = @{
-            DiagEnv = @{ KENSHICOOP_WORLD_SYNC = '1'; KENSHICOOP_INV_DUMP = '1'
-                         KENSHICOOP_WI_TEST_STALE = '1' }
+            DiagEnv = @{ TOKELACOOP_WORLD_SYNC = '1'; TOKELACOOP_INV_DUMP = '1'
+                         TOKELACOOP_WI_TEST_STALE = '1' }
             Save = 'squad1'; Setup = ''; Tolerance = 3.0
             PrimaryGate = 'world_item_stale'
             Gating   = @('world_item_stale', 'engine_integrity', 'clock_sync')
@@ -2346,21 +2346,21 @@
             Tier = 'smoke'; WanVariant = $false
         }
         world_item_burst = @{
-            DiagEnv = @{ KENSHICOOP_WORLD_SYNC = '1'; KENSHICOOP_INV_DUMP = '1'
-                         KENSHICOOP_WI_BATCH_MAX = '2' }
+            DiagEnv = @{ TOKELACOOP_WORLD_SYNC = '1'; TOKELACOOP_INV_DUMP = '1'
+                         TOKELACOOP_WI_BATCH_MAX = '2' }
             Save = 'squad1'; Setup = ''; Tolerance = 3.0
             PrimaryGate = 'world_item_burst'
             Gating   = @('world_item_burst', 'clock_sync')
             Advisory = @('smoothness', 'anim_truth', 'march')
             Tier = 'smoke'; WanVariant = $false
         }
-        # The author FORGETS its ground track (KENSHICOOP_WD_FORGET_TRACK), so the peer's pickup
+        # The author FORGETS its ground track (TOKELACOOP_WD_FORGET_TRACK), so the peer's pickup
         # names a drop it cannot match. Answering "untracked" and standing still is what left a
         # picked-up item lying on the other side's ground; the run must instead converge through
         # the site-anchored recovery. Smoke tier: this is the duplicate players actually hit.
         inv_regear_forget = @{
-            DiagEnv = @{ KENSHICOOP_INV_SYNC = '1'; KENSHICOOP_WORLD_SYNC = '1'; KENSHICOOP_INV_DUMP = '1'
-                         KENSHICOOP_WD_FORGET_TRACK = '1' }
+            DiagEnv = @{ TOKELACOOP_INV_SYNC = '1'; TOKELACOOP_WORLD_SYNC = '1'; TOKELACOOP_INV_DUMP = '1'
+                         TOKELACOOP_WD_FORGET_TRACK = '1' }
             Save = 'squad1'; Setup = ''; Tolerance = 3.0
             PrimaryGate = 'gear_repickup_recover'
             Gating   = @('gear_repickup_recover', 'no_phantom_pickups', 'clock_sync')
@@ -2370,7 +2370,7 @@
 
         # ---- diagnostics (never in a tier) --------------------------------------------
         inv_wpnseq = @{
-            DiagEnv = @{ KENSHICOOP_INV_DUMP = '1' }
+            DiagEnv = @{ TOKELACOOP_INV_DUMP = '1' }
             Save = 'squad1'; Setup = ''; Tolerance = 3.0
             PrimaryGate = ''
             Gating   = @()
@@ -2382,7 +2382,7 @@
         # the inventory channel live to drag on, and the veto armed. DiagEnv carries
         # both knobs so no launcher (or Config.cpp) has to name the scenario.
         xfer_block = @{
-            DiagEnv = @{ KENSHICOOP_INV_SYNC = '1'; KENSHICOOP_BLOCK_XFER = '1' }
+            DiagEnv = @{ TOKELACOOP_INV_SYNC = '1'; TOKELACOOP_BLOCK_XFER = '1' }
             Save = 'squad1'; Setup = ''; Tolerance = 3.0
             PrimaryGate = ''
             Gating   = @()
@@ -2399,13 +2399,13 @@
         # jail_probe: read-only diagnostic for the "put jailed PC to work" desync
         # (join PC briefly exits its cage then teleports back). Passive soak on
         # the 'jailed' save (join PC caged in the camp); no scenario gate - the
-        # evidence is the KENSHICOOP_JAIL_PROBE [jail] STATE traces (own vs drv),
-        # the [furn] ENTER/EXIT/PEER-ENTER edges, and (with KENSHICOOP_TASK_SPIKE)
+        # evidence is the TOKELACOOP_JAIL_PROBE [jail] STATE traces (own vs drv),
+        # the [furn] ENTER/EXIT/PEER-ENTER edges, and (with TOKELACOOP_TASK_SPIKE)
         # the [spike] SELECT task the join's local AI picks for its own PC.
         # auditRows is armed for this scenario for pos/context. Must run
         # partitioned (-Inhabit / OWN_RANK) so the join actually owns the caged PC.
         jail_probe = @{
-            DiagEnv = @{ KENSHICOOP_JAIL_PROBE = '1'; KENSHICOOP_TASK_SPIKE = '1'; KENSHICOOP_JAIL_OBSERVE = '1' }
+            DiagEnv = @{ TOKELACOOP_JAIL_PROBE = '1'; TOKELACOOP_TASK_SPIKE = '1'; TOKELACOOP_JAIL_OBSERVE = '1' }
             Save = 'jailed'; Setup = ''; Tolerance = 6.0
             Seconds = 220; KillGraceSec = 190
             PrimaryGate = ''
@@ -2416,12 +2416,12 @@
         # jail_soak: LONG-play version of jail_probe (spike 58). 15 min passive
         # soak so the host guard's put-to-work cage<->pole cycle and census-band
         # NPC drift actually accumulate (jail_probe's 220 s is too short to see
-        # them). Same probes (KENSHICOOP_JAIL_PROBE/TASK_SPIKE/JAIL_OBSERVE) +
+        # them). Same probes (TOKELACOOP_JAIL_PROBE/TASK_SPIKE/JAIL_OBSERVE) +
         # auditRows + the new [jail] SNAP re-seat metric. Default Save='jailed';
         # override -Save 'slaves save' / -Save cage2 for the other testbeds. Run
         # partitioned (-Inhabit / OWN_RANK) so each side owns one PC. No gate.
         jail_soak = @{
-            DiagEnv = @{ KENSHICOOP_JAIL_PROBE = '1'; KENSHICOOP_TASK_SPIKE = '1' }
+            DiagEnv = @{ TOKELACOOP_JAIL_PROBE = '1'; TOKELACOOP_TASK_SPIKE = '1' }
             Save = 'jailed'; Setup = ''; Tolerance = 6.0
             # run_test kills at (early screenshot anchor + KillGraceSec), so the
             # kill grace must exceed the whole soak window or the game is cut short

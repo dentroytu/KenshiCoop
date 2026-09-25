@@ -120,7 +120,7 @@ if ($null -ne $upnp -and $upnp.Ok) {
     Write-Host "    Router: forward UDP port $Port to this machine."
 }
 Write-Host " 2. Windows Firewall: allow inbound UDP $Port (or kenshi_x64.exe)."
-Write-Host "    One-time (admin): netsh advfirewall firewall add rule name=KenshiCoop dir=in action=allow protocol=UDP localport=$Port"
+Write-Host "    One-time (admin): netsh advfirewall firewall add rule name=TokelaCoop dir=in action=allow protocol=UDP localport=$Port"
 Write-Host " 3. Tell your friend your public IP: $publicIp"
 Write-Host "    Friend runs: powershell -ExecutionPolicy Bypass -File friend_join.ps1 -HostIp $publicIp"
 Write-Host " 4. Session plan: start with coop_presence, then escalate through the"
@@ -135,26 +135,26 @@ $outDir = Join-Path $repoRoot "tools\test-runs\remote_$stamp"
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 $hostLog = Join-Path $outDir "host.log"
 
-$env:KENSHICOOP_MODE         = "host"
-$env:KENSHICOOP_IP           = "0.0.0.0"
-$env:KENSHICOOP_PORT         = "$Port"
-$env:KENSHICOOP_SAVE         = $Save
-$env:KENSHICOOP_LOG          = $hostLog
-$env:KENSHICOOP_SCENARIO     = $Scenario
-$env:KENSHICOOP_SETUP        = if (-not $isFree -and $manifest.Scenarios.ContainsKey($Scenario)) { $manifest.Scenarios[$Scenario].Setup } else { "" }
-$env:KENSHICOOP_TEST_SECONDS = if (-not $isFree) { "600" }
+$env:TOKELACOOP_MODE         = "host"
+$env:TOKELACOOP_IP           = "0.0.0.0"
+$env:TOKELACOOP_PORT         = "$Port"
+$env:TOKELACOOP_SAVE         = $Save
+$env:TOKELACOOP_LOG          = $hostLog
+$env:TOKELACOOP_SCENARIO     = $Scenario
+$env:TOKELACOOP_SETUP        = if (-not $isFree -and $manifest.Scenarios.ContainsKey($Scenario)) { $manifest.Scenarios[$Scenario].Setup } else { "" }
+$env:TOKELACOOP_TEST_SECONDS = if (-not $isFree) { "600" }
                                elseif ($FreePlayMinutes -gt 0) { "$($FreePlayMinutes * 60)" }
                                else { "0" }
-$env:KENSHICOOP_FAKE_CLOCK_SKEW_MS = "0"
+$env:TOKELACOOP_FAKE_CLOCK_SKEW_MS = "0"
 # Peer-ready arming: the host's scenario clock starts when the friend's stream
 # arrives, so scripted actions never fire before the friend is in-game.
-$env:KENSHICOOP_ARM_TIMEOUT_MS = "240000"
+$env:TOKELACOOP_ARM_TIMEOUT_MS = "240000"
 if ($useSteam) {
-    $env:KENSHICOOP_TRANSPORT  = "steam"
-    $env:KENSHICOOP_STEAM_PEER = "$(ConvertTo-SteamId64 $PeerSteamId)"
+    $env:TOKELACOOP_TRANSPORT  = "steam"
+    $env:TOKELACOOP_STEAM_PEER = "$(ConvertTo-SteamId64 $PeerSteamId)"
 } else {
-    $env:KENSHICOOP_TRANSPORT  = "udp"
-    $env:KENSHICOOP_STEAM_PEER = "0"
+    $env:TOKELACOOP_TRANSPORT  = "udp"
+    $env:TOKELACOOP_STEAM_PEER = "0"
 }
 
 try {

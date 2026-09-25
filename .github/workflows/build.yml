@@ -1,6 +1,6 @@
 name: build
 
-# Builds KenshiCoop.dll with the VC++ 2010 (v100) x64 toolset on a hosted Windows
+# Builds TokelaCoop.dll with the VC++ 2010 (v100) x64 toolset on a hosted Windows
 # runner (Windows SDK 7.1 + KB2519277 + VS2022 MSBuild, same recipe as
 # scripts/build_plugin.cmd) and runs the prototest wire-protocol unit layer.
 
@@ -105,6 +105,10 @@ jobs:
         shell: cmd
         run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\tests\Installer.Tests.ps1
 
+      - name: Harness contract fixtures (manifest, oracles, env-var names; no game)
+        shell: cmd
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\tests\Contract.Tests.ps1
+
       - name: Build prototest and run it
         shell: cmd
         run: |
@@ -131,17 +135,17 @@ jobs:
         run: |
           powershell -NoProfile -ExecutionPolicy Bypass -File scripts\make_mod_kit.ps1 -SkipBuild
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $h = (Get-FileHash -Algorithm SHA256 dist\KenshiCoop-kit.zip).Hash
-          "$h  KenshiCoop-kit.zip" | Set-Content -Encoding ascii dist\KenshiCoop-kit.zip.sha256
-          Get-Content dist\KenshiCoop-kit.zip.sha256
+          $h = (Get-FileHash -Algorithm SHA256 dist\TokelaCoop-kit.zip).Hash
+          "$h  TokelaCoop-kit.zip" | Set-Content -Encoding ascii dist\TokelaCoop-kit.zip.sha256
+          Get-Content dist\TokelaCoop-kit.zip.sha256
 
       - name: Upload player kit
         uses: actions/upload-artifact@v4
         with:
-          name: KenshiCoop-kit-${{ github.sha }}
+          name: TokelaCoop-kit-${{ github.sha }}
           path: |
-            dist/KenshiCoop-kit.zip
-            dist/KenshiCoop-kit.zip.sha256
+            dist/TokelaCoop-kit.zip
+            dist/TokelaCoop-kit.zip.sha256
           if-no-files-found: error
 
       - name: Publish GitHub Release (tags v*)
@@ -150,16 +154,24 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ github.ref_name }}" dist/KenshiCoop-kit.zip dist/KenshiCoop-kit.zip.sha256 `
-            --repo "${{ github.repository }}" --title "KenshiCoop ${{ github.ref_name }}" --generate-notes
+          # The game shows TOKELACOOP_VERSION (src/netproto/Version.h): a tag that
+          # disagrees would publish a kit whose banner names another version.
+          $m = Select-String -Path src\netproto\Version.h -Pattern '#define\s+TOKELACOOP_VERSION\s+"([0-9]+\.[0-9]+)"'
+          if (-not $m) { throw "TOKELACOOP_VERSION not found in src/netproto/Version.h" }
+          $want = "v" + $m.Matches[0].Groups[1].Value
+          if ("${{ github.ref_name }}" -ne $want) {
+            throw "tag ${{ github.ref_name }} != $want from src/netproto/Version.h - bump the version first"
+          }
+          gh release create "${{ github.ref_name }}" dist/TokelaCoop-kit.zip dist/TokelaCoop-kit.zip.sha256 `
+            --repo "${{ github.repository }}" --title "TokelaCoop ${{ github.ref_name }}" --generate-notes
 
       - name: Upload DLLs
         uses: actions/upload-artifact@v4
         with:
-          name: KenshiCoop-${{ github.sha }}
+          name: TokelaCoop-${{ github.sha }}
           path: |
-            src/plugin/x64/Harness/KenshiCoop.dll
-            src/plugin/x64/Release/KenshiCoop.dll
+            src/plugin/x64/Harness/TokelaCoop.dll
+            src/plugin/x64/Release/TokelaCoop.dll
             dist/prototest.exe
           if-no-files-found: error
 
